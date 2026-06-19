@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  login-hub-api:
+    container_name: awlsrv_login_hub_api
+    build: .
+    restart: always
+
+    # Mapeia porta apenas se quiser testar via IP local (ex: http://IP:3005)
+    # O tráfego real virá pelo Cloudflare via rede interna.
+    ports:
+      - "3005:3000"
+
+    # --- INJEÇÃO DE VARIÁVEIS DE AMBIENTE ---
+    # Aqui garantimos que o Node.js receba os valores corretos
+    environment:
+      - NODE_ENV=production
+      - TZ=America/Sao_Paulo
+      - PORT=3000
+      
+      # Conexão de Banco (Forçando a rede interna Docker)
+      - DB_HOST=awlsrvDB_postgres
+      - DB_PORT=5432
+      - DB_NAME=login_hub
+      - DB_USER=admin_root
+      
+      # Segredos (Puxando do arquivo .env carregado abaixo)
+      - DB_PASS=${DB_PASS}
+      - JWT_SECRET=${JWT_SECRET}
+      - MASTER_KEY=${MASTER_KEY}
+
+    # Carrega o arquivo para ler os segredos (${DB_PASS}, etc)
+    env_file:
+      - .env
+
+    networks:
+      - awl_network
+
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:3000/api/auth/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  awl_network:
+    external: true

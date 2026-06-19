@@ -1,0 +1,43 @@
+# --- Dependências ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Build de Produção (TypeScript) ---
+dist/
+build/
+
+# --- Variáveis de Ambiente (SEGURANÇA CRÍTICA) ---
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# --- Logs do Sistema ---
+logs/
+*.log
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# --- Sistema Operacional (Mac/Windows/Linux) ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# --- IDEs e Editores ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Testes e Cobertura (Para o futuro) ---
+coverage/
+.nyc_output/
+
+# --- Docker (Arquivos temporários se houver) ---
+docker-compose.override.yml

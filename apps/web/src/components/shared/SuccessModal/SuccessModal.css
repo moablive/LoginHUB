@@ -1,0 +1,65 @@
+/* Fundo Escuro com Desfoque (Glass Effect) */
+.awl-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px); /* O charme está aqui */
+  z-index: 1050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* O Card do Modal */
+.awl-modal-card {
+  background: white;
+  padding: 2.5rem;
+  border-radius: 20px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  text-align: center;
+  max-width: 400px;
+  width: 90%;
+  transform: scale(0.8);
+  animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+/* Círculo do Ícone */
+.success-icon-container {
+  width: 80px;
+  height: 80px;
+  background-color: #d1e7dd; /* Verde Bootstrap Suave */
+  color: #198754; /* Verde Bootstrap Forte */
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.5rem auto;
+  font-size: 2.5rem;
+  animation: iconPulse 1s infinite alternate;
+}
+
+/* Animações (Keyframes) */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes popIn {
+  from { 
+    opacity: 0; 
+    transform: scale(0.8) translateY(20px); 
+  }
+  to { 
+    opacity: 1; 
+    transform: scale(1) translateY(0); 
+  }
+}
+
+@keyframes iconPulse {
+  from { transform: scale(1); box-shadow: 0 0 0 0 rgba(25, 135, 84, 0.4); }
+  to { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(25, 135, 84, 0); }
+}

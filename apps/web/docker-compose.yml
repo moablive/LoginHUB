@@ -1,0 +1,24 @@
+services:
+  login-hub-ui:
+    container_name: awlsrv_login_hub_ui
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+        VITE_MASTER_KEY: ${VITE_MASTER_KEY}
+    
+    env_file:
+      - .env
+
+    restart: always
+
+    ports:
+      - "3006:80"
+
+    networks:
+      - awl_network
+
+networks:
+  awl_network:
+    external: true

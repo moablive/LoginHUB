@@ -1,0 +1,45 @@
+{
+  "compilerOptions": {
+    // File Layout
+    "rootDir": "./src",
+    "outDir": "./dist",
+
+    // Environment Settings
+    // Mudamos para commonjs para funcionar com o padrão do Node sem a complexidade de .mjs
+    "module": "commonjs",
+    "target": "es2022", 
+    "moduleResolution": "node",
+    
+    // Configurações de Tipos para Node
+    "lib": ["es2022"],
+    "types": ["node"],
+
+    // Interoperabilidade (CRUCIAL PARA EXPRESS/PG)
+    // Permite usar "import express from 'express'" mesmo que a lib use "module.exports"
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+
+    // A CORREÇÃO DO ERRO QUE VOCÊ ESTAVA TENDO
+    // false = permite que o TS converta 'import' para 'require' automaticamente
+    "verbatimModuleSyntax": false,
+
+    // Other Outputs
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
+
+    // Stricter Typechecking Options
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+
+    // Style Options
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    
+    // Removemos "jsx" pois é uma API Backend, não React.
+    "isolatedModules": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

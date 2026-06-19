@@ -1,0 +1,100 @@
+/* src/components/shared/DeleteModal/DeleteModal.css */
+
+/* Fundo Escuro com Blur */
+.awl-delete-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(5px);
+  z-index: 1100; /* Acima de tudo */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease-out;
+}
+
+/* Card Central */
+.awl-delete-card {
+  background: white;
+  padding: 2rem;
+  border-radius: 20px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  text-align: center;
+  max-width: 420px;
+  width: 90%;
+  transform: scale(0.9);
+  animation: popUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  border-top: 5px solid #dc3545; /* Linha vermelha no topo */
+}
+
+/* Ícone de Alerta Pulsante */
+.delete-icon-container {
+  width: 70px;
+  height: 70px;
+  background-color: #fcebeb; /* Vermelho muito claro */
+  color: #dc3545; /* Vermelho Perigo */
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.2rem auto;
+  font-size: 2rem;
+  animation: pulseRed 2s infinite;
+}
+
+/* Botões */
+.delete-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
+.btn-delete-cancel {
+  background-color: white;
+  color: #6c757d;
+  border: 1px solid #dee2e6;
+  font-weight: 600;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+.btn-delete-cancel:hover:not(:disabled) {
+  background-color: #f8f9fa;
+  color: #495057;
+}
+
+.btn-delete-confirm {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  font-weight: 600;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(220, 53, 69, 0.3);
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.btn-delete-confirm:hover:not(:disabled) {
+  background-color: #c82333;
+  transform: translateY(-2px);
+}
+.btn-delete-confirm:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Animações */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes popUp { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+@keyframes pulseRed {
+  0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+}
