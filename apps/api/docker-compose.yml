@@ -3,7 +3,9 @@ version: '3.8'
 services:
   login-hub-api:
     container_name: server_loginhub_api
-    build: .
+    build:
+      context: ../../
+      dockerfile: apps/api/Dockerfile
     restart: always
 
     # Mapeia porta apenas se quiser testar via IP local (ex: http://IP:3005)
@@ -31,7 +33,7 @@ services:
 
     # Carrega o arquivo para ler os segredos (${DB_PASS}, etc)
     env_file:
-      - .env
+      - ../../.env
 
     networks:
       - awl_network

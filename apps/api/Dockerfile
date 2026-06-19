@@ -2,21 +2,24 @@ FROM node:20-alpine
 
 WORKDIR /usr/src/app
 
-# Copia dependências
+# Copia arquivos base do monorepo
 COPY package*.json ./
+COPY packages ./packages
+COPY apps/api ./apps/api
 
-# Instalação limpa (CI)
-RUN npm ci
+# Instala todas as dependências (resolvendo os pacotes locais)
+RUN npm install
 
-# Copia configurações TS e código fonte
-COPY tsconfig.json ./
-COPY src ./src
+# Builda todos os workspaces necessários na ordem correta
+RUN npm run build -w @loginhub/schema
+RUN npm run build -w @loginhub/database
+RUN npm run build -w @loginhub/services
+RUN npm run build -w @loginhub/middlewares
+RUN npm run build -w apps/api
 
-# Compila
-RUN npm run build
+# Define o workdir para a API
+WORKDIR /usr/src/app/apps/api
 
-# Expõe a porta interna
 EXPOSE 3000
 
-# Inicia
 CMD ["npm", "start"]

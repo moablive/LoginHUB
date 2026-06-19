@@ -5,24 +5,27 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copia dependências e instala
+# Copia arquivos base do monorepo
 COPY package*.json ./
-# Usamos 'npm install' pois seu package.json é recente
+COPY packages ./packages
+COPY apps/web ./apps/web
+
+# Instala todas as dependências do monorepo
 RUN npm install
 
-# Copia todo o código fonte
-COPY . .
-
 # --- INJEÇÃO DE VARIÁVEIS (VITE) ---
-# O Vite precisa dessas variáveis NA HORA DO BUILD para substituir no código
 ARG VITE_API_URL
 ARG VITE_MASTER_KEY
 
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_MASTER_KEY=$VITE_MASTER_KEY
 
-# Gera a pasta /dist
-RUN npm run build
+# Builda as dependências locais na ordem correta
+RUN npm run build -w @loginhub/schema
+RUN npm run build -w @loginhub/api-client
+
+# Gera o build da web
+RUN npm run build -w apps/web
 
 # ===================================
 # ESTÁGIO 2: SERVIDOR (Nginx)
@@ -33,7 +36,6 @@ FROM nginx:alpine
 RUN rm -rf /etc/nginx/conf.d/*
 
 # Cria configuração Inline do Nginx para suportar SPA (React Router)
-# Isso redireciona qualquer rota (ex: /login) para o index.html
 RUN echo 'server { \
     listen 80; \
     server_name localhost; \
@@ -51,8 +53,8 @@ RUN echo 'server { \
     } \
 }' > /etc/nginx/conf.d/default.conf
 
-# Copia apenas os arquivos estáticos gerados no estágio anterior
-COPY --from=builder /app/dist /usr/share/nginx/html
+# Copia apenas os arquivos estáticos gerados no app web
+COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
 
 # Expõe porta 80 interna
 EXPOSE 80

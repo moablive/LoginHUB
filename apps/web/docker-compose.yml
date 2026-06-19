@@ -2,14 +2,14 @@ services:
   login-hub-ui:
     container_name: server_loginhub_web
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../../
+      dockerfile: apps/web/Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL}
         VITE_MASTER_KEY: ${VITE_MASTER_KEY}
     
     env_file:
-      - .env
+      - ../../.env
 
     restart: always
 
