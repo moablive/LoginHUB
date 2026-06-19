@@ -25,7 +25,7 @@ app.get('/metrics', metricsEndpoint as any);
 // 3. Rota de Diagnóstico (Health Check)
 // ==========================================
 app.get('/api', (req, res) => {
-    const isDocker = process.env.DB_HOST === 'awlsrvDB_postgres';
+    const isDocker = process.env.DB_HOST === 'server_db_postgres';
     const hasMasterKey = !!(process.env.MASTER_KEY || process.env.MASTER_API_KEY);
 
     res.json({ 

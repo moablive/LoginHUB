@@ -21,7 +21,7 @@ services:
       - PORT=3000
       
       # Conexão de Banco (Forçando a rede interna Docker)
-      - DB_HOST=awlsrvDB_postgres
+      - DB_HOST=server_db_postgres
       - DB_PORT=5432
       - DB_NAME=login_hub
       - DB_USER=admin_root
@@ -39,7 +39,7 @@ services:
       - awl_network
 
     healthcheck:
-      test: ["CMD", "wget", "--spider", "http://localhost:3000/api/auth/login"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api"]
       interval: 30s
       timeout: 10s
       retries: 3

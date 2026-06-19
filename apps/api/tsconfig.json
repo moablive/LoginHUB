@@ -13,6 +13,7 @@
     // Configurações de Tipos para Node
     "lib": ["es2022"],
     "types": ["node"],
+    "typeRoots": ["../../node_modules/@types", "./node_modules/@types"],
 
     // Interoperabilidade (CRUCIAL PARA EXPRESS/PG)
     // Permite usar "import express from 'express'" mesmo que a lib use "module.exports"
