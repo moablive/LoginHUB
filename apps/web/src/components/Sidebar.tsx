@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { authService } from '../services/authService';
+import { authApi } from '@loginhub/api-client';
 import { 
   BuildingOfficeIcon, 
   PlusCircleIcon, 
@@ -52,7 +52,7 @@ export const Sidebar = () => {
       {/* Rodapé / Logout */}
       <div className="p-4 border-t border-gray-800 bg-[#0f1523]">
         <button 
-          onClick={() => authService.logout()} 
+          onClick={() => authApi.logout()} 
           className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-red-900/30 text-red-400 rounded-lg hover:bg-red-600 hover:text-white transition-all text-sm font-semibold"
         >
           <ArrowLeftOnRectangleIcon className="h-5 w-5" />

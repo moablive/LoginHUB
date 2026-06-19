@@ -9,7 +9,7 @@ import {
   ShieldCheckIcon
 } from '@heroicons/react/24/outline';
 
-import { authService } from '../services/authService';
+import { authApi } from '@loginhub/api-client';
 
 // Tipagem local para o formulário (Só pedimos a senha na tela)
 interface LoginFormInputs {
@@ -33,10 +33,10 @@ export function Login() {
 
       // 2. Chamada ao serviço
       // Passamos o email oculto + a senha digitada
-      await authService.login(hiddenMasterEmail, data.password);
+      await authApi.login(hiddenMasterEmail, data.password);
 
       // 3. Sucesso: Redireciona
-      // O authService já salva o token, então apenas navegamos
+      // O authApi já salva o token, então apenas navegamos
       navigate('/dashboard'); 
 
     } catch (error: unknown) {

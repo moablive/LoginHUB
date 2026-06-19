@@ -1,8 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import router from './routes';
-import { monitoringMiddleware, metricsEndpoint } from './middlewares/monitoring';
+import { mainRouter as router } from './routes';
+import { monitoringMiddleware, metricsEndpoint } from '@loginhub/middlewares';
 
 const app = express();
 
@@ -14,12 +14,12 @@ app.use(cors());
 app.use(express.json()); 
 
 // Prometheus medir o tempo de TODAS as rotas abaixo
-app.use(monitoringMiddleware);
+app.use(monitoringMiddleware as any);
 
 // ==========================================
 // 2. Rota de Métricas (Prometheus Scrape)
 // ==========================================
-app.get('/metrics', metricsEndpoint);
+app.get('/metrics', metricsEndpoint as any);
 
 // ==========================================
 // 3. Rota de Diagnóstico (Health Check)

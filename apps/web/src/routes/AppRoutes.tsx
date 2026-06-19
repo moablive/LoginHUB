@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { authApi } from '@loginhub/api-client';
 
 // Layout
 import { AdminLayout } from '../layouts/AdminLayout';
@@ -9,8 +10,17 @@ import { Dashboard } from '../pages/Dashboard';
 import { CreateCompany } from '../pages/CreateCompany'; 
 import { CompanyUsers } from '../pages/CompanyUsers';
 
-// Guardiões
-import { SuperAdminRoute } from './SuperAdminRoute';
+export const SuperAdminRoute = () => {
+  const isAuth = authApi.isAuthenticated();
+  const isMaster = sessionStorage.getItem('is_super_admin') === 'true'; 
+
+  if (!isAuth || !isMaster) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <Outlet />;
+};
+
 
 export function AppRoutes() {
   return (

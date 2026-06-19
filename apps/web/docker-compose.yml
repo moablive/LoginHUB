@@ -1,6 +1,6 @@
 services:
   login-hub-ui:
-    container_name: awlsrv_login_hub_ui
+    container_name: server_loginhub_web
     build:
       context: .
       dockerfile: Dockerfile

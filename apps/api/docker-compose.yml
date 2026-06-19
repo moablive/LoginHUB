@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   login-hub-api:
-    container_name: awlsrv_login_hub_api
+    container_name: server_loginhub_api
     build: .
     restart: always
 

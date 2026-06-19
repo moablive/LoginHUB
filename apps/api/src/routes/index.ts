@@ -1,34 +1,42 @@
-// src/routes/index.ts
-import { Router, Request, Response } from 'express';
-import authRoutes from './auth.routes'; 
-import adminRoutes from './admin.routes';
+import { Router } from 'express';
+import {
+  AuthController,
+  CompanyController,
+  UserController
+} from '../controllers';
+import { adminMiddleware } from '@loginhub/middlewares';
 
-const router = Router();
+export const mainRouter = Router();
 
-// --- Detecção de Ambiente ---
-const isDocker = process.env.IS_DOCKER === 'true';
+// ==========================================
+// 1. Auth Routes
+// ==========================================
+const authRouter = Router();
+authRouter.post('/login', AuthController.login);
+authRouter.post('/logout', AuthController.logout);
 
-// --- Health Check (Para monitoramento) ---
-router.get('/', (req: Request, res: Response) => {
-    res.status(200).json({
-        status: 'online',
-        service: 'AWLSRV LoginHub',
-        version: '1.0.0',
-        environment: isDocker ? '🐳 Docker (Rede Interna)' : '🍎 Mac (Acesso Remoto)', 
-        db_target: process.env.DB_HOST || (isDocker ? 'awlsrvDB_postgres' : 'DuckDNS/Local'),
-        message: '🚀 Sistema operante e protegido.',
-        timestamp: new Date().toISOString()
-    });
-});
+mainRouter.use('/auth', authRouter);
 
-// --- Definição das Rotas ---
+// ==========================================
+// 2. Admin Routes (Protected)
+// ==========================================
+const adminRouter = Router();
+adminRouter.use(adminMiddleware as any);
 
-// 1. Rotas Públicas (Login)
-router.use('/auth', authRoutes);
+// -- Companies
+adminRouter.get('/companies', CompanyController.getAllCompanies as any); 
+adminRouter.get('/companies/:id', CompanyController.getById as any);
+adminRouter.post('/companies', CompanyController.createCompany as any);
+adminRouter.put('/companies/:id', CompanyController.updateCompany as any);
+adminRouter.patch('/companies/:id/status', CompanyController.toggleCompanyStatus as any);
+adminRouter.delete('/companies/:id', CompanyController.deleteCompany as any);
 
-// 2. Rotas Administrativas (Protegidas por Master Key)
-// O 'adminRoutes' já inclui internamente as rotas de companies e users
-// Ex: GET /api/admin/companies, GET /api/admin/users
-router.use('/admin', adminRoutes);
+// -- Users (nested in companies or standalone)
+adminRouter.get('/companies/:id/users', UserController.getUsersByCompany as any);
 
-export default router;
+adminRouter.get('/users', UserController.getAllUsers as any);
+adminRouter.post('/users', UserController.addUser as any);
+adminRouter.put('/users/:id', UserController.updateUser as any);
+adminRouter.delete('/users/:id', UserController.removeUser as any);
+
+mainRouter.use('/admin', adminRouter);

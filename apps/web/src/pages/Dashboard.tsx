@@ -10,16 +10,16 @@ import {
   PencilSquareIcon 
 } from '@heroicons/react/24/outline';
 
-import { companyService } from '../services/companyService';
-import { authService } from '../services/authService';
+import { companyApi } from '@loginhub/api-client';
+import { authApi } from '@loginhub/api-client';
 import { masks } from '../utils/masks';
-import type { Company } from '@loginhub/shared';
+import type { Company } from '@loginhub/schema';
 
 // Componentes Shared
-import { LogoutModal } from '../components/shared/LogoutModal/LogoutModal';
-import { DeleteModal } from '../components/shared/DeleteModal/DeleteModal';
-import { StatusButton } from '../components/shared/StatusButton';
-import { EditCompanyModal } from '../components/shared/EditModals/EditCompanyModal'; 
+import { LogoutModal } from '../components/modals/LogoutModal/LogoutModal';
+import { DeleteModal } from '../components/modals/DeleteModal/DeleteModal';
+import { StatusButton } from '../components/modals/StatusButton';
+import { EditCompanyModal } from '../components/modals/EditModals/EditCompanyModal'; 
 
 export const Dashboard = () => {
   const navigate = useNavigate();
@@ -38,7 +38,7 @@ export const Dashboard = () => {
   // Busca dados iniciais
   const fetchCompanies = async () => {
     try {
-      const data = await companyService.getAll();
+      const data = await companyApi.getAll();
       setCompanies(data);
     } catch (error) {
       console.error('Erro ao buscar empresas', error);
@@ -63,7 +63,7 @@ export const Dashboard = () => {
   // --- AÇÕES ---
 
   const handleLogout = () => {
-    authService.logout();
+    authApi.logout();
   };
 
   // --- Lógica de Exclusão ---
@@ -76,7 +76,7 @@ export const Dashboard = () => {
 
     try {
       setLoadingAction(companyToDelete.id);
-      await companyService.delete(companyToDelete.id);
+      await companyApi.delete(companyToDelete.id);
       
       // Atualiza lista localmente para evitar refetch desnecessário
       setCompanies(prev => prev.filter(c => c.id !== companyToDelete.id));
@@ -95,7 +95,7 @@ export const Dashboard = () => {
     const novoStatus = company.status === 'ativo' ? 'inativo' : 'ativo';
 
     try {
-      await companyService.toggleStatus(company.id, novoStatus);
+      await companyApi.toggleStatus(company.id, novoStatus);
 
       setCompanies(prev => prev.map(c => 
         c.id === company.id ? { ...c, status: novoStatus } : c

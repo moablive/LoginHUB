@@ -1,9 +1,9 @@
 import dotenv from 'dotenv';
 import path from 'path';
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 import app from './app';
-import pool, { testConnection } from './db/db'; 
+import { testConnection, pool } from '@loginhub/database';
 
 const PORT = process.env.PORT || 3000;
 

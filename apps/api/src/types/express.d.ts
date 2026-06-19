@@ -1,5 +1,5 @@
 // src/types/express.d.ts
-import { JWTPayload } from '@loginhub/shared';
+import { JWTPayload } from '@loginhub/schema';
 
 declare global {
     namespace Express {

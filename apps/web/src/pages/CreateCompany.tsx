@@ -12,11 +12,11 @@ import {
   LockClosedIcon,
   RocketLaunchIcon
 } from '@heroicons/react/24/outline';
-import { companyService } from '../services/companyService';
+import { companyApi } from '@loginhub/api-client';
 import { masks } from '../utils/masks';
-import type { CreateCompanyDTO } from '@loginhub/shared';
-import { SuccessModal } from '../components/shared/SuccessModal/SuccessModal';
-import { AlertModal } from '../components/shared/AlertModal/AlertModal';
+import type { CreateCompanyDTO } from '@loginhub/schema';
+import { SuccessModal } from '../components/modals/SuccessModal/SuccessModal';
+import { AlertModal } from '../components/modals/AlertModal/AlertModal';
 
 export const CreateCompany = () => {
   const navigate = useNavigate();
@@ -59,7 +59,7 @@ export const CreateCompany = () => {
 
   const onSubmit = async (data: CreateCompanyDTO) => {
     try {
-      await companyService.create(data);
+      await companyApi.create(data);
       setShowSuccess(true);
     } catch (error: unknown) {
       console.error(error);

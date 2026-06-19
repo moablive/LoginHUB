@@ -11,15 +11,15 @@ import {
   PencilSquareIcon
 } from '@heroicons/react/24/outline';
 
-import { userService } from '../services/userService';
-import { companyService } from '../services/companyService';
-import type { User, Company } from '@loginhub/shared';
+import { userApi } from '@loginhub/api-client';
+import { companyApi } from '@loginhub/api-client';
+import type { User, Company } from '@loginhub/schema';
 
-import { SuccessModal } from '../components/shared/SuccessModal/SuccessModal';
-import { DeleteModal } from '../components/shared/DeleteModal/DeleteModal';
-import { CreateUserModal } from '../components/shared/CreateUserModal/CreateUserModal';
-import { AlertModal } from '../components/shared/AlertModal/AlertModal';
-import { EditUserModal } from '../components/shared/EditModals/EditUserModal';
+import { SuccessModal } from '../components/modals/SuccessModal/SuccessModal';
+import { DeleteModal } from '../components/modals/DeleteModal/DeleteModal';
+import { CreateUserModal } from '../components/modals/CreateUserModal/CreateUserModal';
+import { AlertModal } from '../components/modals/AlertModal/AlertModal';
+import { EditUserModal } from '../components/modals/EditModals/EditUserModal';
 
 export const CompanyUsers = () => {
   const { id: empresaId } = useParams<{ id: string }>(); 
@@ -65,8 +65,8 @@ export const CompanyUsers = () => {
     if (!empresaId) return;
     try {
       const [usersData, companyData] = await Promise.all([
-        userService.getByCompanyId(empresaId),
-        companyService.getById(empresaId)
+        userApi.getByCompanyId(empresaId),
+        companyApi.getById(empresaId)
       ]);
       
       setUsers(usersData);
@@ -93,7 +93,7 @@ export const CompanyUsers = () => {
 
     try {
       setIsDeleting(true);
-      await userService.delete(userToDelete.id);
+      await userApi.delete(userToDelete.id);
       
       setUsers(prev => prev.filter(u => u.id !== userToDelete.id));
       setUserToDelete(null);
