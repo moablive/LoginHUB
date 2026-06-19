@@ -27,10 +27,8 @@ services:
       - DB_USER=admin_root
       
       # Segredos (Puxando do arquivo .env carregado abaixo)
-      - DB_PASS=${DB_PASS}
-      - JWT_SECRET=${JWT_SECRET}
-      - MASTER_KEY=${MASTER_KEY}
-
+      # Removido DB_PASS, JWT_SECRET e MASTER_KEY explícitos para não injetar vazio
+      
     # Carrega o arquivo para ler os segredos (${DB_PASS}, etc)
     env_file:
       - ../../.env

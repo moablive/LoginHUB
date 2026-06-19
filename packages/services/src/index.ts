@@ -139,7 +139,18 @@ export class CompanyService {
     }
 
     public async getAllCompanies() {
-        return await db.select().from(empresas);
+        const rows = await db.select().from(empresas);
+        const allUsers = await db.select({ empresaId: usuarios.empresaId }).from(usuarios);
+
+        return rows.map(row => {
+            const total_usuarios = allUsers.filter(u => u.empresaId === row.id).length;
+            return {
+                ...row,
+                data_cadastro: row.dataCadastro,
+                data_atualizacao: row.dataAtualizacao,
+                total_usuarios
+            };
+        });
     }
 
     public async getCompanyById(id: string) {
@@ -149,7 +160,15 @@ export class CompanyService {
             (error as any).code = 'NOT_FOUND';
             throw error;
         }
-        return rows[0];
+        
+        const allUsers = await db.select({ empresaId: usuarios.empresaId }).from(usuarios).where(eq(usuarios.empresaId, Number(id)));
+        
+        return {
+            ...rows[0],
+            data_cadastro: rows[0].dataCadastro,
+            data_atualizacao: rows[0].dataAtualizacao,
+            total_usuarios: allUsers.length
+        };
     }
 
     public async updateCompany(id: string, data: UpdateCompanyDTO) {
