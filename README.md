@@ -5,9 +5,9 @@
 </div>
 <br />
 
-> **O Sistema Definitivo de Autenticação Multi-Tenant para a infraestrutura Astral Wave Label (AWLSRV).**
+> **O Sistema Definitivo de Autenticação Centralizada de Aplicativos para a infraestrutura Astral Wave Label (AWLSRV).**
 
-O **LoginHUB** é um monorepo Enterprise-grade, criado para gerenciar autenticação, autorização e múltiplas empresas (Multi-Tenant) de forma centralizada. Todo o design da arquitetura segue padrões rigorosos de desacoplamento, inspirado nos projetos mais maduros (como o MoneyAPP).
+O **LoginHUB** é um monorepo Enterprise-grade (gerenciado via NPM Workspaces), criado para centralizar a autenticação e autorização de múltiplos **Aplicativos** (como MoneyAPP, LifeDash, etc). Todo o design da arquitetura segue padrões rigorosos de desacoplamento, garantindo que usuários possam ser alocados a contextos específicos de cada aplicativo.
 
 ---
 
@@ -30,14 +30,18 @@ Tudo está isolado, performático e tipado. O projeto é dividido entre **Aplica
 
 ## 🐳 Infraestrutura & Docker
 
-Para garantir 100% de estabilidade e paridade entre ambientes, o **LoginHUB** é executado de ponta a ponta via **Docker**. Não existe `node_modules` local (tudo é resolvido dentro do container).
+Para garantir 100% de estabilidade e paridade entre ambientes, o **LoginHUB** é executado de ponta a ponta via **Docker**. As dependências e o build são resolvidos com npm workspaces.
 
 Os containers (`server_loginhub_api` e `server_loginhub_web`) são instanciados e mapeados para a rede interna `awl_network`.
 
 ### Como subir a infraestrutura:
 ```bash
-# Na raiz de cada aplicação (ex: apps/api)
-docker-compose up -d --build
+# A partir da raiz do repositório, faça o build de cada serviço passando o .env
+cd apps/api
+docker compose --env-file ../../.env up -d --build
+
+cd ../web
+docker compose --env-file ../../.env up -d --build
 ```
 
 > ⚠️ **Regra Oficial de Deploy (Moab):**

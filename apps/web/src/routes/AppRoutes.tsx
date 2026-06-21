@@ -7,8 +7,8 @@ import { AdminLayout } from '../layouts/AdminLayout';
 // Páginas
 import { Login } from '../pages/Login';
 import { Dashboard } from '../pages/Dashboard';
-import { CreateCompany } from '../pages/CreateCompany'; 
-import { CompanyUsers } from '../pages/CompanyUsers';
+import { CreateApp } from '../pages/CreateApp'; 
+import { AppUsers } from '../pages/AppUsers';
 
 export const SuperAdminRoute = () => {
   const isAuth = authApi.isAuthenticated();
@@ -38,17 +38,17 @@ export function AppRoutes() {
         {/* O Layout contém o Sidebar */}
         <Route element={<AdminLayout />}>
           
-          {/* Listagem de Empresas (Dashboard) */}
+          {/* Listagem de Aplicativos (Dashboard) */}
           <Route path="/dashboard" element={<Dashboard />} />
           
-          {/* Alias: /companies também leva ao dashboard */}
-          <Route path="/companies" element={<Navigate to="/dashboard" replace />} />
+          {/* Alias: /apps também leva ao dashboard */}
+          <Route path="/apps" element={<Navigate to="/dashboard" replace />} />
           
-          {/* Criar Nova Empresa */}
-          <Route path="/companies/new" element={<CreateCompany />} />
+          {/* Criar Novo Aplicativo */}
+          <Route path="/apps/new" element={<CreateApp />} />
           
-          {/* Gerenciar Usuários da Empresa */}
-          <Route path="/companies/:id/users" element={<CompanyUsers />} />
+          {/* Gerenciar Usuários da Aplicativo */}
+          <Route path="/apps/:id/users" element={<AppUsers />} />
 
         </Route>
 

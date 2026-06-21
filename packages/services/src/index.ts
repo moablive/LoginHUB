@@ -1,15 +1,15 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { db } from '@loginhub/database';
-import { empresas, usuarios, niveisAcesso } from '@loginhub/schema';
+import { aplicativos, usuarios, niveisAcesso } from '@loginhub/schema';
 import { eq, and, ne } from 'drizzle-orm';
 import {
     LoginInputDTO,
     LoginResponseDTO,
     JWTPayload,
     UserRole,
-    CreateCompanyDTO,
-    UpdateCompanyDTO,
+    CreateAppDTO,
+    UpdateAppDTO,
     CreateUserDTO,
     UpdateUserDTO,
     User as UserResponse
@@ -25,13 +25,14 @@ export class AuthService {
             nome: usuarios.nome,
             email: usuarios.email,
             senha_hash: usuarios.senhaHash,
-            empresa_id: usuarios.empresaId,
-            empresa_nome: empresas.nome,
-            empresa_status: empresas.status,
+            senha_padrao: usuarios.senhaPadrao,
+            app_id: usuarios.appId,
+            app_nome: aplicativos.nome,
+            app_status: aplicativos.status,
             role_nome: niveisAcesso.nome
         })
         .from(usuarios)
-        .innerJoin(empresas, eq(usuarios.empresaId, empresas.id))
+        .innerJoin(aplicativos, eq(usuarios.appId, aplicativos.id))
         .innerJoin(niveisAcesso, eq(usuarios.nivelAcessoId, niveisAcesso.id))
         .where(eq(usuarios.email, data.email))
         .limit(1);
@@ -39,7 +40,7 @@ export class AuthService {
         const user = result[0];
 
         if (!user) throw new Error('CREDENCIAIS_INVALIDAS');
-        if (user.empresa_status !== 'ativo') throw new Error('EMPRESA_BLOQUEADA');
+        if (user.app_status !== 'ativo') throw new Error('APP_BLOQUEADO');
 
         const senhaValida = await bcrypt.compare(data.password, user.senha_hash);
         if (!senhaValida) throw new Error('CREDENCIAIS_INVALIDAS');
@@ -59,7 +60,7 @@ export class AuthService {
         const payload: JWTPayload = {
             sub: user.id.toString(),
             email: user.email,
-            empresa_id: user.empresa_id ? user.empresa_id.toString() : "0",
+            app_id: user.app_id ? user.app_id.toString() : "0",
             role: user.role_nome || 'user'
         };
 
@@ -68,16 +69,17 @@ export class AuthService {
         return {
             token,
             expiresIn: 86400,
+            requirePasswordChange: user.senha_padrao,
             usuario: {
                 id: user.id.toString(),
                 nome: user.nome,
                 email: user.email,
                 role: user.role_nome as UserRole
             },
-            empresa: {
-                id: user.empresa_id ? user.empresa_id.toString() : "0",
-                nome: user.empresa_nome,
-                status: user.empresa_status || 'ativo'
+            app: {
+                id: user.app_id ? user.app_id.toString() : "0",
+                nome: user.app_nome,
+                status: user.app_status || 'ativo'
             }
         };
     }
@@ -85,23 +87,35 @@ export class AuthService {
     public async logout(token: string | undefined): Promise<void> {
         if (!token) return;
     }
+
+    public async changePassword(userId: string, novaSenha: string): Promise<void> {
+        const userRes = await db.select({ id: usuarios.id }).from(usuarios).where(eq(usuarios.id, Number(userId))).limit(1);
+        if (userRes.length === 0) throw new Error('Usuário não encontrado.');
+        
+        const salt = await bcrypt.genSalt(10);
+        const senhaHash = await bcrypt.hash(novaSenha, salt);
+        
+        await db.update(usuarios)
+            .set({ senhaHash, senhaPadrao: false })
+            .where(eq(usuarios.id, Number(userId)));
+    }
 }
 
 // ==========================================
-// 2. COMPANY SERVICE
+// 2. APP SERVICE
 // ==========================================
-export class CompanyService {
-    public async registerCompany(data: CreateCompanyDTO) {
+export class AppService {
+    public async registerApp(data: CreateAppDTO) {
         try {
             return await db.transaction(async (tx) => {
-                const companyRes = await tx.insert(empresas).values({
+                const appRes = await tx.insert(aplicativos).values({
                     nome: data.nome,
                     documento: data.documento,
                     email: data.email,
                     telefone: data.telefone || null,
-                }).returning({ id: empresas.id });
+                }).returning({ id: aplicativos.id });
 
-                const empresaId = companyRes[0].id;
+                const appId = appRes[0].id;
 
                 const salt = await bcrypt.genSalt(10);
                 const passwordHash = await bcrypt.hash(data.password, salt);
@@ -115,7 +129,7 @@ export class CompanyService {
                 }
 
                 await tx.insert(usuarios).values({
-                    empresaId: empresaId,
+                    appId: appId,
                     nivelAcessoId: roleId,
                     nome: data.admin_nome,
                     email: data.admin_email,
@@ -124,12 +138,12 @@ export class CompanyService {
                 });
 
                 return {
-                    empresaId,
+                    appId,
                     nome: data.nome,
                     documento: data.documento,
                     email: data.email,
                     adminEmail: data.admin_email,
-                    message: 'Empresa e usuário administrador criados com sucesso'
+                    message: 'Aplicativo e usuário administrador criados com sucesso'
                 };
             });
         } catch (error: any) {
@@ -138,12 +152,12 @@ export class CompanyService {
         }
     }
 
-    public async getAllCompanies() {
-        const rows = await db.select().from(empresas);
-        const allUsers = await db.select({ empresaId: usuarios.empresaId }).from(usuarios);
+    public async getAllApps() {
+        const rows = await db.select().from(aplicativos);
+        const allUsers = await db.select({ appId: usuarios.appId }).from(usuarios);
 
         return rows.map(row => {
-            const total_usuarios = allUsers.filter(u => u.empresaId === row.id).length;
+            const total_usuarios = allUsers.filter(u => u.appId === row.id).length;
             return {
                 ...row,
                 data_cadastro: row.dataCadastro,
@@ -153,15 +167,15 @@ export class CompanyService {
         });
     }
 
-    public async getCompanyById(id: string) {
-        const rows = await db.select().from(empresas).where(eq(empresas.id, Number(id))).limit(1);
+    public async getAppById(id: string) {
+        const rows = await db.select().from(aplicativos).where(eq(aplicativos.id, Number(id))).limit(1);
         if (rows.length === 0) {
-            const error = new Error('Empresa não encontrada');
+            const error = new Error('Aplicativo não encontrada');
             (error as any).code = 'NOT_FOUND';
             throw error;
         }
         
-        const allUsers = await db.select({ empresaId: usuarios.empresaId }).from(usuarios).where(eq(usuarios.empresaId, Number(id)));
+        const allUsers = await db.select({ appId: usuarios.appId }).from(usuarios).where(eq(usuarios.appId, Number(id)));
         
         return {
             ...rows[0],
@@ -171,7 +185,7 @@ export class CompanyService {
         };
     }
 
-    public async updateCompany(id: string, data: UpdateCompanyDTO) {
+    public async updateApp(id: string, data: UpdateAppDTO) {
         try {
             const updateData: any = {};
             if (data.nome !== undefined) updateData.nome = data.nome;
@@ -181,13 +195,13 @@ export class CompanyService {
 
             if (Object.keys(updateData).length === 0) return null;
 
-            const rows = await db.update(empresas)
+            const rows = await db.update(aplicativos)
                 .set(updateData)
-                .where(eq(empresas.id, Number(id)))
+                .where(eq(aplicativos.id, Number(id)))
                 .returning();
 
             if (rows.length === 0) {
-                const error = new Error('Empresa não encontrada');
+                const error = new Error('Aplicativo não encontrada');
                 (error as any).code = 'NOT_FOUND';
                 throw error;
             }
@@ -195,7 +209,7 @@ export class CompanyService {
 
         } catch (error: any) {
             if (error.code === '23505') {
-                const newError = new Error('Documento (CNPJ) ou E-mail já estão em uso por outra empresa.');
+                const newError = new Error('Documento (CNPJ) ou E-mail já estão em uso por outra app.');
                 (newError as any).code = 'DUPLICATE_ENTRY';
                 throw newError;
             }
@@ -203,19 +217,19 @@ export class CompanyService {
         }
     }
 
-    public async updateCompanyStatus(id: string, status: 'ativo' | 'inativo') {
-        const rows = await db.update(empresas)
+    public async updateAppStatus(id: string, status: 'ativo' | 'inativo') {
+        const rows = await db.update(aplicativos)
             .set({ status })
-            .where(eq(empresas.id, Number(id)))
+            .where(eq(aplicativos.id, Number(id)))
             .returning();
 
-        if (rows.length === 0) throw Object.assign(new Error('Empresa não encontrada'), { code: 'NOT_FOUND' });
+        if (rows.length === 0) throw Object.assign(new Error('Aplicativo não encontrada'), { code: 'NOT_FOUND' });
         return rows[0];
     }
 
-    public async deleteCompany(id: string) {
-        const rows = await db.delete(empresas).where(eq(empresas.id, Number(id))).returning();
-        if (rows.length === 0) throw Object.assign(new Error('Empresa não encontrada'), { code: 'NOT_FOUND' });
+    public async deleteApp(id: string) {
+        const rows = await db.delete(aplicativos).where(eq(aplicativos.id, Number(id))).returning();
+        if (rows.length === 0) throw Object.assign(new Error('Aplicativo não encontrada'), { code: 'NOT_FOUND' });
     }
 }
 
@@ -224,7 +238,7 @@ export class CompanyService {
 // ==========================================
 export class UserService {
     public async addUser(data: CreateUserDTO): Promise<void> {
-        if (!data.empresa_id) throw Object.assign(new Error('Empresa é obrigatória'), { code: 'VALIDATION' });
+        if (!data.app_id) throw Object.assign(new Error('Aplicativo é obrigatória'), { code: 'VALIDATION' });
         if (!data.email) throw Object.assign(new Error('E-mail é obrigatório'), { code: 'VALIDATION' });
         if (!data.password) throw Object.assign(new Error('Senha é obrigatória'), { code: 'VALIDATION' });
 
@@ -239,7 +253,7 @@ export class UserService {
 
         try {
             await db.insert(usuarios).values({
-                empresaId: Number(data.empresa_id),
+                appId: Number(data.app_id),
                 nivelAcessoId: roleId,
                 nome: data.nome || '',
                 email: data.email,
@@ -248,7 +262,7 @@ export class UserService {
             });
         } catch (error: any) {
             if (error.code === '23505') throw Object.assign(new Error('E-mail já está em uso.'), { code: 'DUPLICATE_ENTRY' });
-            if (error.code === '23503') throw Object.assign(new Error('A empresa informada não existe.'), { code: 'RELATION_ERROR' });
+            if (error.code === '23503') throw Object.assign(new Error('A app informada não existe.'), { code: 'RELATION_ERROR' });
             throw error;
         }
     }
@@ -256,7 +270,7 @@ export class UserService {
     public async getAllUsersGlobal(): Promise<UserResponse[]> {
         const rows = await db.select({
             id: usuarios.id,
-            empresa_id: usuarios.empresaId,
+            app_id: usuarios.appId,
             nome: usuarios.nome,
             email: usuarios.email,
             telefone: usuarios.telefone,
@@ -269,10 +283,10 @@ export class UserService {
         return rows as any as UserResponse[];
     }
 
-    public async getUsersByCompany(empresaId: string): Promise<UserResponse[]> {
+    public async getUsersByApp(appId: string): Promise<UserResponse[]> {
         const rows = await db.select({
             id: usuarios.id,
-            empresa_id: usuarios.empresaId,
+            app_id: usuarios.appId,
             nome: usuarios.nome,
             email: usuarios.email,
             telefone: usuarios.telefone,
@@ -281,7 +295,7 @@ export class UserService {
         })
         .from(usuarios)
         .leftJoin(niveisAcesso, eq(usuarios.nivelAcessoId, niveisAcesso.id))
-        .where(eq(usuarios.empresaId, Number(empresaId)));
+        .where(eq(usuarios.appId, Number(appId)));
 
         return rows as any as UserResponse[];
     }
@@ -341,5 +355,24 @@ export class UserService {
             }
             throw error;
         }
+    }
+
+    public async resetUserPassword(id: string) {
+        const userRes = await db.select({ id: usuarios.id }).from(usuarios).where(eq(usuarios.id, Number(id))).limit(1);
+        if (userRes.length === 0) {
+            const error = new Error('Usuário não encontrado.');
+            (error as any).code = 'NOT_FOUND';
+            throw error;
+        }
+        
+        const randomPassword = Math.random().toString(36).slice(-8);
+        const salt = await bcrypt.genSalt(10);
+        const senhaHash = await bcrypt.hash(randomPassword, salt);
+        
+        await db.update(usuarios)
+            .set({ senhaHash, senhaPadrao: true })
+            .where(eq(usuarios.id, Number(id)));
+            
+        return { tempPassword: randomPassword };
     }
 }

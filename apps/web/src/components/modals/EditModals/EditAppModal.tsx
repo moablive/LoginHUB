@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
-import { companyApi } from '@loginhub/api-client';
+import { appApi } from '@loginhub/api-client';
 import { masks } from '../../../utils/masks';
-import type { Company } from '@loginhub/schema';
+import type { App } from '@loginhub/schema';
 
-interface EditCompanyModalProps {
+interface EditAppModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  company: Company | null;
+  app: App | null;
 }
 
-export const EditCompanyModal = ({ isOpen, onClose, onSuccess, company }: EditCompanyModalProps) => {
+export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalProps) => {
   const [formData, setFormData] = useState({
     nome: '',
     email: '',
@@ -21,17 +21,17 @@ export const EditCompanyModal = ({ isOpen, onClose, onSuccess, company }: EditCo
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (company) {
+    if (app) {
       setFormData({
-        nome: company.nome,
-        email: company.email,
-        documento: company.documento, 
-        telefone: company.telefone || ''
+        nome: app.nome,
+        email: app.email,
+        documento: app.documento, 
+        telefone: app.telefone || ''
       });
     }
-  }, [company]);
+  }, [app]);
 
-  if (!isOpen || !company) return null;
+  if (!isOpen || !app) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,7 +41,7 @@ export const EditCompanyModal = ({ isOpen, onClose, onSuccess, company }: EditCo
       const cleanDocumento = formData.documento.replace(/\D/g, '');
       const cleanTelefone = formData.telefone.replace(/\D/g, '');
 
-      await companyApi.update(company.id, {
+      await appApi.update(app.id, {
         nome: formData.nome,
         email: formData.email,
         documento: cleanDocumento,
@@ -53,7 +53,7 @@ export const EditCompanyModal = ({ isOpen, onClose, onSuccess, company }: EditCo
       onClose();
     } catch (error) {
       console.error(error);
-      alert('Erro ao atualizar empresa. Verifique se o CNPJ ou E-mail já existem.');
+      alert('Erro ao atualizar aplicativo. Verifique se o CNPJ ou E-mail já existem.');
     } finally {
       setLoading(false);
     }
@@ -63,7 +63,7 @@ export const EditCompanyModal = ({ isOpen, onClose, onSuccess, company }: EditCo
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm animate-fade-in">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-          <h3 className="text-lg font-bold text-gray-900">Editar Empresa</h3>
+          <h3 className="text-lg font-bold text-gray-900">Editar Aplicativo</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition">
             <XMarkIcon className="h-6 w-6" />
           </button>
@@ -71,7 +71,7 @@ export const EditCompanyModal = ({ isOpen, onClose, onSuccess, company }: EditCo
         
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Empresa</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Aplicativo</label>
             <input
               type="text"
               required

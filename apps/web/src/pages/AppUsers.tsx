@@ -12,8 +12,8 @@ import {
 } from '@heroicons/react/24/outline';
 
 import { userApi } from '@loginhub/api-client';
-import { companyApi } from '@loginhub/api-client';
-import type { User, Company } from '@loginhub/schema';
+import { appApi } from '@loginhub/api-client';
+import type { User, App } from '@loginhub/schema';
 
 import { SuccessModal } from '../components/modals/SuccessModal/SuccessModal';
 import { DeleteModal } from '../components/modals/DeleteModal/DeleteModal';
@@ -21,13 +21,13 @@ import { CreateUserModal } from '../components/modals/CreateUserModal/CreateUser
 import { AlertModal } from '../components/modals/AlertModal/AlertModal';
 import { EditUserModal } from '../components/modals/EditModals/EditUserModal';
 
-export const CompanyUsers = () => {
-  const { id: empresaId } = useParams<{ id: string }>(); 
+export const AppUsers = () => {
+  const { id: appId } = useParams<{ id: string }>(); 
   const navigate = useNavigate();
   
   // Estados de Dados
   const [users, setUsers] = useState<User[]>([]);
-  const [company, setCompany] = useState<Company | null>(null);
+  const [app, setApp] = useState<App | null>(null);
   const [loading, setLoading] = useState(true);
   
   // Estados de Modais
@@ -62,22 +62,22 @@ export const CompanyUsers = () => {
 
   // --- CARREGAMENTO ---
   const fetchData = useCallback(async () => {
-    if (!empresaId) return;
+    if (!appId) return;
     try {
-      const [usersData, companyData] = await Promise.all([
-        userApi.getByCompanyId(empresaId),
-        companyApi.getById(empresaId)
+      const [usersData, appData] = await Promise.all([
+        userApi.getByAppId(appId),
+        appApi.getById(appId)
       ]);
       
       setUsers(usersData);
-      setCompany(companyData);
+      setApp(appData);
     } catch (error) {
       console.error(error);
-      showAlert('Erro de Conexão', 'Não foi possível carregar os dados da empresa.', 'error');
+      showAlert('Erro de Conexão', 'Não foi possível carregar os dados da aplicativo.', 'error');
     } finally {
       setLoading(false);
     }
-  }, [empresaId]);
+  }, [appId]);
 
   useEffect(() => {
     fetchData();
@@ -125,7 +125,7 @@ export const CompanyUsers = () => {
             className="flex items-center text-sm text-gray-500 hover:text-blue-600 mb-2 transition"
           >
             <ArrowLeftIcon className="h-4 w-4 mr-1" />
-            Voltar para Empresas
+            Voltar para Aplicativos
           </button>
           
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -135,7 +135,7 @@ export const CompanyUsers = () => {
             Gestão de Usuários
           </h1>
           <p className="text-gray-500 mt-1 ml-1">
-            Empresa: <span className="font-semibold text-gray-800">{company?.nome || 'Carregando...'}</span>
+            Aplicativo: <span className="font-semibold text-gray-800">{app?.nome || 'Carregando...'}</span>
           </p>
         </div>
         
@@ -173,7 +173,7 @@ export const CompanyUsers = () => {
                       <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
                         <div className="flex flex-col items-center justify-center">
                           <UserIcon className="h-10 w-10 text-gray-300 mb-2" />
-                          <span>Nenhum usuário vinculado a esta empresa.</span>
+                          <span>Nenhum usuário vinculado a esta aplicativo.</span>
                         </div>
                       </td>
                     </tr>
@@ -243,7 +243,7 @@ export const CompanyUsers = () => {
           fetchData();
           setShowSuccessModal(true);
         }}
-        companyId={empresaId || ''}
+        appId={appId || ''}
       />
 
       {/* MODAL DE EDIÇÃO */}

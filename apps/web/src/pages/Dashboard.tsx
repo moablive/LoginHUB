@@ -10,55 +10,55 @@ import {
   PencilSquareIcon 
 } from '@heroicons/react/24/outline';
 
-import { companyApi } from '@loginhub/api-client';
+import { appApi } from '@loginhub/api-client';
 import { authApi } from '@loginhub/api-client';
 import { masks } from '../utils/masks';
-import type { Company } from '@loginhub/schema';
+import type { App } from '@loginhub/schema';
 
 // Componentes Shared
 import { LogoutModal } from '../components/modals/LogoutModal/LogoutModal';
 import { DeleteModal } from '../components/modals/DeleteModal/DeleteModal';
 import { StatusButton } from '../components/modals/StatusButton';
-import { EditCompanyModal } from '../components/modals/EditModals/EditCompanyModal'; 
+import { EditAppModal } from '../components/modals/EditModals/EditAppModal'; 
 
 export const Dashboard = () => {
   const navigate = useNavigate();
   
   // Estados
-  const [companies, setCompanies] = useState<Company[]>([]);
+  const [apps, setApps] = useState<App[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Estados de Modais e Ações
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   
-  const [companyToDelete, setCompanyToDelete] = useState<{ id: string, nome: string } | null>(null);
-  const [companyToEdit, setCompanyToEdit] = useState<Company | null>(null);
+  const [appToDelete, setAppToDelete] = useState<{ id: string, nome: string } | null>(null);
+  const [appToEdit, setAppToEdit] = useState<App | null>(null);
 
   // Busca dados iniciais
-  const fetchCompanies = async () => {
+  const fetchApps = async () => {
     try {
-      const data = await companyApi.getAll();
-      setCompanies(data);
+      const data = await appApi.getAll();
+      setApps(data);
     } catch (error) {
-      console.error('Erro ao buscar empresas', error);
+      console.error('Erro ao buscar aplicativos', error);
       // Aqui você poderia adicionar um Toast de erro
     }
   };
 
   useEffect(() => {
-    fetchCompanies();
+    fetchApps();
   }, []);
 
   // Filtro (Memoizado para performance)
-  const filteredCompanies = useMemo(() => {
+  const filteredApps = useMemo(() => {
     const term = searchTerm.toLowerCase();
-    return companies.filter(c => 
+    return apps.filter(c => 
       c.nome.toLowerCase().includes(term) || 
       c.email.toLowerCase().includes(term) ||
       c.documento.includes(term)
     );
-  }, [companies, searchTerm]);
+  }, [apps, searchTerm]);
 
   // --- AÇÕES ---
 
@@ -67,38 +67,38 @@ export const Dashboard = () => {
   };
 
   // --- Lógica de Exclusão ---
-  const handleDeleteClick = (company: Company) => {
-    setCompanyToDelete({ id: company.id, nome: company.nome });
+  const handleDeleteClick = (app: App) => {
+    setAppToDelete({ id: app.id, nome: app.nome });
   };
 
   const confirmDelete = async () => {
-    if (!companyToDelete) return;
+    if (!appToDelete) return;
 
     try {
-      setLoadingAction(companyToDelete.id);
-      await companyApi.delete(companyToDelete.id);
+      setLoadingAction(appToDelete.id);
+      await appApi.delete(appToDelete.id);
       
       // Atualiza lista localmente para evitar refetch desnecessário
-      setCompanies(prev => prev.filter(c => c.id !== companyToDelete.id));
-      setCompanyToDelete(null);
+      setApps(prev => prev.filter(c => c.id !== appToDelete.id));
+      setAppToDelete(null);
     } catch (error) {
       console.error(error);
-      alert('Erro ao excluir empresa.');
+      alert('Erro ao excluir aplicativo.');
     } finally {
       setLoadingAction(null);
     }
   };
 
   // --- Lógica de Status ---
-  const handleStatusChange = async (company: Company) => {
+  const handleStatusChange = async (app: App) => {
     // Optimistic UI: Calcula o novo status antes de enviar
-    const novoStatus = company.status === 'ativo' ? 'inativo' : 'ativo';
+    const novoStatus = app.status === 'ativo' ? 'inativo' : 'ativo';
 
     try {
-      await companyApi.toggleStatus(company.id, novoStatus);
+      await appApi.toggleStatus(app.id, novoStatus);
 
-      setCompanies(prev => prev.map(c => 
-        c.id === company.id ? { ...c, status: novoStatus } : c
+      setApps(prev => prev.map(c => 
+        c.id === app.id ? { ...c, status: novoStatus } : c
       ));
 
     } catch (error) {
@@ -107,7 +107,7 @@ export const Dashboard = () => {
     }
   };
 
-  const activeCompanies = companies.filter(c => c.status === 'ativo').length;
+  const activeApps = apps.filter(c => c.status === 'ativo').length;
 
   return (
     <div className="space-y-8 animate-fade-in pb-20">
@@ -116,7 +116,7 @@ export const Dashboard = () => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 tracking-tight">LoginHub <span className="text-blue-600">Manager</span></h1>
-          <p className="text-lg text-gray-500 mt-1">Gestão Centralizada de Tenants e Infraestrutura</p>
+          <p className="text-lg text-gray-500 mt-1">Gestão Centralizada de Aplicativos e Infraestrutura</p>
         </div>
         <div className="flex gap-3">
           <button 
@@ -127,11 +127,11 @@ export const Dashboard = () => {
             Sair
           </button>
           <button 
-            onClick={() => navigate('/companies/new')}
+            onClick={() => navigate('/apps/new')}
             className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition font-medium shadow-lg shadow-blue-500/30"
           >
             <PlusIcon className="h-5 w-5" />
-            Nova Empresa
+            Novo Aplicativo
           </button>
         </div>
       </div>
@@ -143,8 +143,8 @@ export const Dashboard = () => {
             <BuildingOfficeIcon className="h-8 w-8 text-blue-600" />
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Empresas Ativas</p>
-            <p className="text-3xl font-bold text-gray-900">{activeCompanies}</p>
+            <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Aplicativos Ativos</p>
+            <p className="text-3xl font-bold text-gray-900">{activeApps}</p>
           </div>
         </div>
 
@@ -154,7 +154,7 @@ export const Dashboard = () => {
           </div>
           <div>
             <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Cadastrado</p>
-            <p className="text-3xl font-bold text-gray-900">{companies.length}</p> 
+            <p className="text-3xl font-bold text-gray-900">{apps.length}</p> 
           </div>
         </div>
       </div>
@@ -165,8 +165,8 @@ export const Dashboard = () => {
         {/* Toolbar */}
         <div className="p-6 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-50/50">
           <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-            Tenants Cadastrados
-            <span className="bg-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full">{filteredCompanies.length}</span>
+            Aplicativos Cadastrados
+            <span className="bg-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full">{filteredApps.length}</span>
           </h2>
           
           <div className="relative w-full sm:w-80">
@@ -187,7 +187,7 @@ export const Dashboard = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Empresa</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Aplicativo</th>
                 <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Documento</th>
                 <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Usuários</th>
                 <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
@@ -196,7 +196,7 @@ export const Dashboard = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredCompanies.length === 0 ? (
+              {filteredApps.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
                     <div className="flex flex-col items-center justify-center">
@@ -206,47 +206,47 @@ export const Dashboard = () => {
                   </td>
                 </tr>
               ) : (
-                filteredCompanies.map((company) => (
-                  <tr key={company.id} className="hover:bg-gray-50 transition duration-150 group">
+                filteredApps.map((app) => (
+                  <tr key={app.id} className="hover:bg-gray-50 transition duration-150 group">
                     <td className="px-6 py-5 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
-                          {company.nome.substring(0, 2).toUpperCase()}
+                          {app.nome.substring(0, 2).toUpperCase()}
                         </div>
                         <div className="ml-4">
                           <div className="text-base font-semibold text-gray-900 group-hover:text-blue-700 transition-colors">
-                            {company.nome}
+                            {app.nome}
                           </div>
-                          <div className="text-sm text-gray-500">{company.email}</div>
+                          <div className="text-sm text-gray-500">{app.email}</div>
                         </div>
                       </div>
                     </td>
                     <td className="px-6 py-5 whitespace-nowrap text-sm text-gray-600 font-mono">
-                      {masks.cnpj(company.documento)}
+                      {masks.cnpj(app.documento)}
                     </td>
 
                     <td className="px-6 py-5 whitespace-nowrap text-center">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        (company.total_usuarios || 0) > 0 
+                        (app.total_usuarios || 0) > 0 
                           ? 'bg-blue-100 text-blue-800' 
                           : 'bg-gray-100 text-gray-800'
                       }`}>
                         <UsersIcon className="h-3 w-3 mr-1" />
-                        {company.total_usuarios || 0}
+                        {app.total_usuarios || 0}
                       </span>
                     </td>
                     
                     <td className="px-6 py-5 whitespace-nowrap text-center flex justify-center">
                       <StatusButton 
-                        currentStatus={company.status as 'ativo' | 'inativo'}
-                        entityName={company.nome}
-                        onStatusChange={() => handleStatusChange(company)}
+                        currentStatus={app.status as 'ativo' | 'inativo'}
+                        entityName={app.nome}
+                        onStatusChange={() => handleStatusChange(app)}
                       />
                     </td>
 
                     <td className="px-6 py-5 whitespace-nowrap text-sm text-gray-500">
-                      {company.data_cadastro ? (
-                        new Date(company.data_cadastro).toLocaleDateString('pt-BR', {
+                      {app.data_cadastro ? (
+                        new Date(app.data_cadastro).toLocaleDateString('pt-BR', {
                           day: '2-digit',
                           month: '2-digit',
                           year: 'numeric'
@@ -260,24 +260,24 @@ export const Dashboard = () => {
                       <div className="flex items-center justify-end gap-2">
                         {/* Botão Usuários: Ajustada a rota para o padrão sem /admin */}
                         <button 
-                          onClick={() => navigate(`/companies/${company.id}/users`)}
+                          onClick={() => navigate(`/apps/${app.id}/users`)}
                           className="px-3 py-1.5 text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition font-semibold text-xs border border-blue-100"
                         >
                           Usuários
                         </button>
 
                         <button 
-                          onClick={() => setCompanyToEdit(company)}
+                          onClick={() => setAppToEdit(app)}
                           className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition border border-transparent hover:border-blue-100"
-                          title="Editar Dados da Empresa"
+                          title="Editar Dados da Aplicativo"
                         >
                           <PencilSquareIcon className="h-5 w-5" />
                         </button>
 
                         <button 
-                          onClick={() => handleDeleteClick(company)}
+                          onClick={() => handleDeleteClick(app)}
                           className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition border border-transparent hover:border-red-100"
-                          title="Excluir Empresa"
+                          title="Excluir Aplicativo"
                         >
                           <TrashIcon className="h-5 w-5" />
                         </button>
@@ -299,21 +299,21 @@ export const Dashboard = () => {
       />
 
       <DeleteModal
-        isOpen={!!companyToDelete}
-        onClose={() => setCompanyToDelete(null)}
+        isOpen={!!appToDelete}
+        onClose={() => setAppToDelete(null)}
         onConfirm={confirmDelete}
-        title="Excluir Empresa"
-        itemName={companyToDelete?.nome}
-        isLoading={loadingAction === companyToDelete?.id}
+        title="Excluir Aplicativo"
+        itemName={appToDelete?.nome}
+        isLoading={loadingAction === appToDelete?.id}
       />
 
-      <EditCompanyModal
-        isOpen={!!companyToEdit}
-        onClose={() => setCompanyToEdit(null)}
-        company={companyToEdit}
+      <EditAppModal
+        isOpen={!!appToEdit}
+        onClose={() => setAppToEdit(null)}
+        app={appToEdit}
         onSuccess={() => {
-          setCompanyToEdit(null); // Fecha o modal
-          fetchCompanies(); // Recarrega os dados
+          setAppToEdit(null); // Fecha o modal
+          fetchApps(); // Recarrega os dados
         }}
       />
 

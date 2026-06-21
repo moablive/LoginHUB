@@ -12,13 +12,13 @@ import {
   LockClosedIcon,
   RocketLaunchIcon
 } from '@heroicons/react/24/outline';
-import { companyApi } from '@loginhub/api-client';
+import { appApi } from '@loginhub/api-client';
 import { masks } from '../utils/masks';
-import type { CreateCompanyDTO } from '@loginhub/schema';
+import type { CreateAppDTO } from '@loginhub/schema';
 import { SuccessModal } from '../components/modals/SuccessModal/SuccessModal';
 import { AlertModal } from '../components/modals/AlertModal/AlertModal';
 
-export const CreateCompany = () => {
+export const CreateApp = () => {
   const navigate = useNavigate();
   const [showSuccess, setShowSuccess] = useState(false);
   
@@ -39,7 +39,7 @@ export const CreateCompany = () => {
     handleSubmit, 
     setValue, 
     formState: { errors, isSubmitting } 
-  } = useForm<CreateCompanyDTO>();
+  } = useForm<CreateAppDTO>();
 
   const showAlert = (title: string, message: string, variant: 'error' | 'warning' = 'error') => {
     setAlertState({ isOpen: true, title, message, variant });
@@ -57,15 +57,15 @@ export const CreateCompany = () => {
     setValue(field, masks.phone(e.target.value));
   };
 
-  const onSubmit = async (data: CreateCompanyDTO) => {
+  const onSubmit = async (data: CreateAppDTO) => {
     try {
-      await companyApi.create(data);
+      await appApi.create(data);
       setShowSuccess(true);
     } catch (error: unknown) {
       console.error(error);
       
       if (axios.isAxiosError(error)) {
-        const msg = error.response?.data?.message || 'Falha ao criar empresa';
+        const msg = error.response?.data?.message || 'Falha ao criar aplicativo';
         showAlert('Erro no Provisionamento', msg, 'error');
       } else {
         showAlert('Erro Inesperado', 'Ocorreu um erro interno. Tente novamente.', 'error');
@@ -75,7 +75,7 @@ export const CreateCompany = () => {
 
   const handleCloseSuccess = () => {
     setShowSuccess(false);
-    navigate('/companies');
+    navigate('/apps');
   };
 
   const inputClass = "block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-colors";
@@ -90,7 +90,7 @@ export const CreateCompany = () => {
             <BuildingOfficeIcon className="h-6 w-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Nova Empresa</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Novo Aplicativo</h1>
             <p className="text-sm text-gray-500">Provisionamento de novo Tenant</p>
           </div>
         </div>
@@ -115,7 +115,7 @@ export const CreateCompany = () => {
               </h3>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Empresa</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Aplicativo</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <BuildingOfficeIcon className="h-5 w-5 text-gray-400" />
@@ -155,7 +155,7 @@ export const CreateCompany = () => {
                     type="email"
                     {...register('email', { required: true })} 
                     className={inputClass}
-                    placeholder="contato@empresa.com" 
+                    placeholder="contato@aplicativo.com" 
                   />
                 </div>
               </div>
@@ -207,7 +207,7 @@ export const CreateCompany = () => {
                     type="email"
                     {...register('admin_email', { required: true })} 
                     className={inputClass}
-                    placeholder="admin@empresa.com" 
+                    placeholder="admin@aplicativo.com" 
                   />
                 </div>
               </div>
@@ -274,7 +274,7 @@ export const CreateCompany = () => {
         isOpen={showSuccess}
         onClose={handleCloseSuccess}
         title="Tenant Provisionado!"
-        message="A empresa e o usuário administrador foram criados com sucesso."
+        message="A aplicativo e o usuário administrador foram criados com sucesso."
         buttonText="Voltar para Lista"
       />
 

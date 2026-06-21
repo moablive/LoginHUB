@@ -2,10 +2,10 @@ import axios, { type InternalAxiosRequestConfig, type AxiosRequestHeaders } from
 import type { 
   User, 
   LoginResponse,
-  Company, 
-  CreateCompanyDTO, 
-  CreateCompanyResponse, 
-  UpdateCompanyDTO,
+  App, 
+  CreateAppDTO, 
+  CreateAppResponse, 
+  UpdateAppDTO,
   CreateUserDTO, 
   UpdateUserDTO as UpdateUserPayload,
   AuthResult
@@ -78,7 +78,7 @@ export const authApi = {
   login: async (email: string, password: string): Promise<AuthResult> => {
     localStorage.removeItem('awl_token');
     localStorage.removeItem('awl_user');
-    localStorage.removeItem('awl_empresa');
+    localStorage.removeItem('awl_app');
     sessionStorage.removeItem('is_super_admin');
 
     const masterKey = (import.meta as any).env.VITE_MASTER_KEY;
@@ -91,12 +91,12 @@ export const authApi = {
         nome: 'Super Administrator', 
         email: email || 'root@infrastructure.local', 
         role: 'master', 
-        empresa_id: null,
+        app_id: null,
         status: 'ativo'
       };
       
       localStorage.setItem('awl_user', JSON.stringify(adminUser));
-      return { redirect: '/companies' }; 
+      return { redirect: '/apps' }; 
     }
 
     const reservedEmails = ['master@infra.local', 'root@system.local', 'admin@local'];
@@ -109,8 +109,8 @@ export const authApi = {
     localStorage.setItem('awl_token', data.token);
     localStorage.setItem('awl_user', JSON.stringify(data.usuario));
     
-    if (data.empresa) {
-        localStorage.setItem('awl_empresa', JSON.stringify(data.empresa));
+    if (data.app) {
+        localStorage.setItem('awl_app', JSON.stringify(data.app));
     }
     
     return { redirect: '/dashboard' }; 
@@ -119,7 +119,7 @@ export const authApi = {
   logout: () => {
     localStorage.removeItem('awl_token');
     localStorage.removeItem('awl_user');
-    localStorage.removeItem('awl_empresa');
+    localStorage.removeItem('awl_app');
     sessionStorage.removeItem('is_super_admin');
     window.location.href = '/login';
   },
@@ -147,36 +147,36 @@ export const authApi = {
 };
 
 // ==========================================
-// COMPANY API
+// APP API
 // ==========================================
-const COMPANIES_BASE_URL = '/admin/companies';
+const APPS_BASE_URL = '/admin/apps';
 
-export const companyApi = {
-  getAll: async (): Promise<Company[]> => {
-    const { data } = await api.get<Company[]>(COMPANIES_BASE_URL);
+export const appApi = {
+  getAll: async (): Promise<App[]> => {
+    const { data } = await api.get<App[]>(APPS_BASE_URL);
     return data;
   },
-  getById: async (id: string): Promise<Company> => {
-    const { data } = await api.get<Company>(`${COMPANIES_BASE_URL}/${id}`);
+  getById: async (id: string): Promise<App> => {
+    const { data } = await api.get<App>(`${APPS_BASE_URL}/${id}`);
     return data;
   },
-  create: async (payload: CreateCompanyDTO): Promise<CreateCompanyResponse> => {
-    const { data } = await api.post<CreateCompanyResponse>(COMPANIES_BASE_URL, payload);
+  create: async (payload: CreateAppDTO): Promise<CreateAppResponse> => {
+    const { data } = await api.post<CreateAppResponse>(APPS_BASE_URL, payload);
     return data;
   },
-  update: async (id: string, payload: UpdateCompanyDTO): Promise<Company> => {
-    const { data } = await api.put<Company>(`${COMPANIES_BASE_URL}/${id}`, payload);
+  update: async (id: string, payload: UpdateAppDTO): Promise<App> => {
+    const { data } = await api.put<App>(`${APPS_BASE_URL}/${id}`, payload);
     return data;
   },
-  toggleStatus: async (id: string, status: 'ativo' | 'inativo'): Promise<Company> => {
-    const { data } = await api.patch<{ message: string; empresa: Company }>(
-      `${COMPANIES_BASE_URL}/${id}/status`,
+  toggleStatus: async (id: string, status: 'ativo' | 'inativo'): Promise<App> => {
+    const { data } = await api.patch<{ message: string; aplicativo: App }>(
+      `${APPS_BASE_URL}/${id}/status`,
       { status }
     );
-    return data.empresa;
+    return data.aplicativo;
   },
   delete: async (id: string): Promise<void> => {
-    await api.delete(`${COMPANIES_BASE_URL}/${id}`);
+    await api.delete(`${APPS_BASE_URL}/${id}`);
   }
 };
 
@@ -190,8 +190,8 @@ export const userApi = {
     const { data } = await api.get<User[]>(USERS_BASE_URL);
     return data;
   },
-  getByCompanyId: async (companyId: string): Promise<User[]> => {
-    const { data } = await api.get<User[]>(`/admin/companies/${companyId}/users`);
+  getByAppId: async (appId: string): Promise<User[]> => {
+    const { data } = await api.get<User[]>(`/admin/apps/${appId}/users`);
     return data;
   },
   create: async (payload: CreateUserDTO): Promise<User> => {

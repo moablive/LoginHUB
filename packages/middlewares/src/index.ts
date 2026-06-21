@@ -1,7 +1,7 @@
 import { RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
 import { db } from '@loginhub/database';
-import { empresas, JWTPayload } from '@loginhub/schema';
+import { aplicativos, JWTPayload } from '@loginhub/schema';
 import { eq } from 'drizzle-orm';
 import cors, { CorsOptions } from 'cors';
 import client from 'prom-client';
@@ -66,15 +66,15 @@ export const authMiddleware: RequestHandler = async (req, res, next) => {
         // Agora ambos são strings garantidas
         const decoded = jwt.verify(token, secretKey) as unknown as JWTPayload;
 
-        const result = await db.select({ status: empresas.status }).from(empresas).where(eq(empresas.id, Number(decoded.empresa_id)));
+        const result = await db.select({ status: aplicativos.status }).from(aplicativos).where(eq(aplicativos.id, Number(decoded.app_id)));
 
-        const company = result[0];
+        const app = result[0];
 
-        if (!company) {
-            return res.status(401).json({ error: 'Empresa vinculada não encontrada.' });
+        if (!app) {
+            return res.status(401).json({ error: 'Aplicativo vinculada não encontrada.' });
         }
 
-        if (company.status !== 'ativo') {
+        if (app.status !== 'ativo') {
             return res.status(403).json({ 
                 error: 'Acesso Bloqueado',
                 message: 'O acesso da sua organização foi suspenso.' 
@@ -82,8 +82,7 @@ export const authMiddleware: RequestHandler = async (req, res, next) => {
         }
 
         (req as any).user = {
-            ...decoded,
-            empresaId: decoded.empresa_id
+            ...decoded
         };
         
         return next();

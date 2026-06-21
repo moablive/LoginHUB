@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
-import { AuthService, CompanyService, UserService } from '@loginhub/services';
-import { LoginInputDTO, CreateCompanyDTO, UpdateCompanyDTO, CreateUserDTO, UpdateUserDTO, DbError } from '@loginhub/schema';
+import { AuthService, AppService, UserService } from '@loginhub/services';
+import { LoginInputDTO, CreateAppDTO, UpdateAppDTO, CreateUserDTO, UpdateUserDTO, DbError } from '@loginhub/schema';
 
 const authService = new AuthService();
-const companyService = new CompanyService();
+const appService = new AppService();
 const userService = new UserService();
 
 // ==========================================
@@ -34,8 +34,8 @@ export class AuthController {
             switch (err.message) {
                 case 'CREDENCIAIS_INVALIDAS':
                     return res.status(401).json({ error: 'Acesso Negado', message: 'E-mail ou senha incorretos.' });
-                case 'EMPRESA_BLOQUEADA':
-                    return res.status(403).json({ error: 'Acesso Suspenso', message: 'Sua empresa está inativa. Contate o suporte.' });
+                case 'APP_BLOQUEADO':
+                    return res.status(403).json({ error: 'Acesso Suspenso', message: 'Sua app está inativa. Contate o suporte.' });
                 case 'USUARIO_BLOQUEADO':
                     return res.status(403).json({ error: 'Conta Inativa', message: 'Seu usuário foi desativado.' });
                 default:
@@ -47,19 +47,40 @@ export class AuthController {
     static async logout(req: Request, res: Response) {
         return res.status(200).json({ message: 'Logout realizado.', action: 'CLEAR_LOCAL_STORAGE' });
     }
+
+    static async changePassword(req: Request, res: Response) {
+        try {
+            const { novaSenha } = req.body;
+            const userId = (req as any).user?.sub;
+            
+            if (!novaSenha) {
+                return res.status(400).json({ error: 'Dados incompletos', message: 'A nova senha é obrigatória.' });
+            }
+            if (!userId) {
+                return res.status(401).json({ error: 'Acesso Negado', message: 'Usuário não autenticado.' });
+            }
+
+            await authService.changePassword(userId, novaSenha);
+            return res.status(200).json({ message: 'Senha atualizada com sucesso.' });
+        } catch (err: unknown) {
+            const error = err as Error;
+            console.error('[AuthController] changePassword:', error.message);
+            return res.status(500).json({ error: 'Erro Interno', message: 'Erro ao atualizar a senha.' });
+        }
+    }
 }
 
 // ==========================================
-// COMPANY CONTROLLER
+// APP CONTROLLER
 // ==========================================
-export class CompanyController {
-    static async createCompany(req: Request<{}, {}, CreateCompanyDTO>, res: Response) {
+export class AppController {
+    static async createApp(req: Request<{}, {}, CreateAppDTO>, res: Response) {
         try {
-            const result = await companyService.registerCompany(req.body);
+            const result = await appService.registerApp(req.body);
             return res.status(201).json(result);
         } catch (err: unknown) {
             const error = err as DbError;
-            console.error('[CompanyController] createCompany:', error);
+            console.error('[AppController] createApp:', error);
 
             if (error.code === 'DUPLICATE_ENTRY') {
                 return res.status(409).json({ error: 'Conflito de Dados', message: error.message || 'Documento ou E-mail já registrados.' });
@@ -68,12 +89,12 @@ export class CompanyController {
         }
     }
 
-    static async getAllCompanies(req: Request, res: Response) {
+    static async getAllApps(req: Request, res: Response) {
         try {
-            const companies = await companyService.getAllCompanies();
-            return res.status(200).json(companies);
+            const apps = await appService.getAllApps();
+            return res.status(200).json(apps);
         } catch (err: unknown) {
-            console.error('[CompanyController] getAllCompanies:', err);
+            console.error('[AppController] getAllApps:', err);
             return res.status(500).json({ error: 'Erro Interno' });
         }
     }
@@ -81,19 +102,19 @@ export class CompanyController {
     static async getById(req: Request<{ id: string }>, res: Response) {
         const { id } = req.params;
         try {
-            const company = await companyService.getCompanyById(id);
-            return res.status(200).json(company);
+            const app = await appService.getAppById(id);
+            return res.status(200).json(app);
         } catch (err: unknown) {
             const error = err as { code?: string, message?: string };
             if (error.code === 'NOT_FOUND') {
-                return res.status(404).json({ error: 'Empresa não encontrada' });
+                return res.status(404).json({ error: 'Aplicativo não encontrada' });
             }
-            console.error('[CompanyController] getById:', err);
+            console.error('[AppController] getById:', err);
             return res.status(500).json({ error: 'Erro Interno' });
         }
     }
 
-    static async toggleCompanyStatus(req: Request<{ id: string }, {}, { status: string }>, res: Response) {
+    static async toggleAppStatus(req: Request<{ id: string }, {}, { status: string }>, res: Response) {
         const { id } = req.params;
         const { status } = req.body;
 
@@ -102,50 +123,50 @@ export class CompanyController {
         }
 
         try {
-            const empresa = await companyService.updateCompanyStatus(id, status as 'ativo' | 'inativo');
-            return res.status(200).json({ message: `Status atualizado para ${status}.`, empresa });
+            const app = await appService.updateAppStatus(id, status as 'ativo' | 'inativo');
+            return res.status(200).json({ message: `Status atualizado para ${status}.`, app });
         } catch (err: unknown) {
             const error = err as { code?: string };
             if (error.code === 'NOT_FOUND') {
-                return res.status(404).json({ error: 'Empresa não encontrada' });
+                return res.status(404).json({ error: 'Aplicativo não encontrada' });
             }
-            console.error(`[CompanyController] toggleCompanyStatus:`, err);
+            console.error(`[AppController] toggleAppStatus:`, err);
             return res.status(500).json({ error: "Erro Interno" });
         }
     }
 
-    static async deleteCompany(req: Request<{ id: string }>, res: Response) {
+    static async deleteApp(req: Request<{ id: string }>, res: Response) {
         const { id } = req.params;
         try {
-            await companyService.deleteCompany(id);
-            return res.status(200).json({ message: 'Empresa removida com sucesso.' });
+            await appService.deleteApp(id);
+            return res.status(200).json({ message: 'Aplicativo removida com sucesso.' });
         } catch (err: unknown) {
             const error = err as { code?: string };
             if (error.code === 'NOT_FOUND') {
-                return res.status(404).json({ error: 'Empresa não encontrada' });
+                return res.status(404).json({ error: 'Aplicativo não encontrada' });
             }
-            console.error('[CompanyController] deleteCompany:', err);
+            console.error('[AppController] deleteApp:', err);
             return res.status(500).json({ error: 'Erro Interno' });
         }
     }
 
-    static async updateCompany(req: Request<{ id: string }, {}, UpdateCompanyDTO>, res: Response) {
+    static async updateApp(req: Request<{ id: string }, {}, UpdateAppDTO>, res: Response) {
         const { id } = req.params;
         const { nome, email, documento, telefone } = req.body;
 
         try {
-            const updatedCompany = await companyService.updateCompany(id, { nome, email, documento, telefone: telefone || undefined });
-            return res.status(200).json(updatedCompany);
+            const updatedApp = await appService.updateApp(id, { nome, email, documento, telefone: telefone || undefined });
+            return res.status(200).json(updatedApp);
         } catch (err: unknown) {
             const error = err as DbError;
             if (error.code === 'NOT_FOUND') {
-                return res.status(404).json({ message: 'Empresa não encontrada.' });
+                return res.status(404).json({ message: 'Aplicativo não encontrada.' });
             }
             if (error.code === 'DUPLICATE_ENTRY') {
                 return res.status(409).json({ error: 'Conflito de Dados', message: error.message || 'Documento ou E-mail já em uso.' });
             }
-            console.error('[CompanyController] updateCompany:', error);
-            return res.status(500).json({ message: 'Erro interno ao atualizar empresa.' });
+            console.error('[AppController] updateApp:', error);
+            return res.status(500).json({ message: 'Erro interno ao atualizar app.' });
         }
     }
 }
@@ -165,7 +186,7 @@ export class UserController {
                 return res.status(409).json({ error: 'Conflito de Dados', message: error.message || 'E-mail já está em uso.' });
             }
             if (error.code === 'RELATION_ERROR') {
-                return res.status(400).json({ error: 'Dados Inválidos', message: error.message || 'A empresa informada não existe.' });
+                return res.status(400).json({ error: 'Dados Inválidos', message: error.message || 'A app informada não existe.' });
             }
             return res.status(500).json({ error: 'Erro Interno' });
         }
@@ -181,16 +202,16 @@ export class UserController {
         }
     }
 
-    static async getUsersByCompany(req: Request<{ id: string }>, res: Response) {
+    static async getUsersByApp(req: Request<{ id: string }>, res: Response) {
         try {
             const { id } = req.params;
             if (!id) {
                 return res.status(400).json({ error: 'ID inválido.' });
             }
-            const users = await userService.getUsersByCompany(id);
+            const users = await userService.getUsersByApp(id);
             return res.status(200).json(users);
         } catch (err) {
-            console.error(`[UserController] getUsersByCompany (ID: ${req.params.id}):`, err);
+            console.error(`[UserController] getUsersByApp (ID: ${req.params.id}):`, err);
             return res.status(500).json({ error: 'Erro Interno' });
         }
     }
@@ -226,6 +247,24 @@ export class UserController {
             }
             console.error('[UserController] updateUser:', err);
             return res.status(500).json({ message: 'Erro interno ao atualizar usuário.' });
+        }
+    }
+
+    static async resetPassword(req: Request<{ id: string }>, res: Response) {
+        const { id } = req.params;
+        try {
+            const result = await userService.resetUserPassword(id);
+            return res.status(200).json({ 
+                message: 'Senha redefinida com sucesso.', 
+                tempPassword: result.tempPassword 
+            });
+        } catch (err: unknown) {
+            const error = err as { code?: string, message?: string };
+            if (error.code === 'NOT_FOUND') {
+                return res.status(404).json({ message: 'Usuário não encontrado.' });
+            }
+            console.error(`[UserController] resetPassword (ID: ${id}):`, err);
+            return res.status(500).json({ error: 'Erro Interno', message: 'Falha ao redefinir a senha do usuário.' });
         }
     }
 }

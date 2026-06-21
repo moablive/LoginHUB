@@ -27,7 +27,7 @@ export const Sidebar = () => {
       
       <nav className="flex-1 px-3 py-6 space-y-1">
         <p className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-          Gestão de Tenants
+          Gestão de Aplicativos
         </p>
 
         {/* Link para Listagem */}
@@ -36,16 +36,16 @@ export const Sidebar = () => {
           className={({ isActive }) => `${baseClass} ${isActive ? activeClass : inactiveClass}`}
         >
           <BuildingOfficeIcon className="h-5 w-5" />
-          Empresas
+          Aplicativos
         </NavLink>
 
         {/* Link para Criação */}
         <NavLink 
-          to="/companies/new" 
+          to="/apps/new" 
           className={({ isActive }) => `${baseClass} ${isActive ? activeClass : inactiveClass}`}
         >
           <PlusCircleIcon className="h-5 w-5" />
-          Nova Empresa
+          Novo Aplicativo
         </NavLink>
       </nav>
 

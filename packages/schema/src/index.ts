@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, integer, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, integer, timestamp, boolean } from 'drizzle-orm/pg-core';
 
 // ==========================================
 // USER MODELS
@@ -10,8 +10,8 @@ export interface User {
     nome: string;
     email: string;
     role: UserRole | string;
-    empresa_id?: string | null; 
-    empresa_nome?: string;
+    app_id?: string | null; 
+    app_nome?: string;
     status?: 'ativo' | 'inativo' | 'bloqueado' | string;
     telefone?: string | null;   
     ultimo_login?: Date | string | null;
@@ -19,10 +19,11 @@ export interface User {
     created_at?: Date;
     senha_hash?: string;
     nivel_acesso_id?: string;
+    senha_padrao?: boolean;
 }
 
 export interface CreateUserDTO {
-    empresa_id: string; 
+    app_id: string; 
     nome: string;
     email: string;
     password?: string; 
@@ -51,7 +52,7 @@ export interface LoginResponse {
     token: string;
     expiresIn?: number;
     usuario: User;
-    empresa?: {
+    app?: {
         id: string;
         nome: string;
         status: string;
@@ -61,13 +62,14 @@ export interface LoginResponse {
 export interface LoginResponseDTO {
     token: string;
     expiresIn: number;
+    requirePasswordChange: boolean;
     usuario: {
         id: string;
         nome: string;
         email: string;
         role: string;
     };
-    empresa: {
+    app: {
         id: string;
         nome: string;
         status: string;
@@ -79,25 +81,26 @@ export interface UserLoginQueryResult {
     nome: string;
     email: string;
     senha_hash: string;
-    empresa_id: string;
-    empresa_nome: string;
-    empresa_status: string; 
+    app_id: string;
+    app_nome: string;
+    app_status: string; 
     role_nome: string;
+    senha_padrao: boolean;
 }
 
 export interface JWTPayload {
     sub: string;
     email: string;
-    empresa_id: string; 
+    app_id: string; 
     role: string;       
     iat?: number;
     exp?: number;
 }
 
 // ==========================================
-// COMPANY MODELS
+// APP MODELS
 // ==========================================
-export interface Company {
+export interface App {
     id: string;
     nome: string;
     documento: string;
@@ -111,7 +114,7 @@ export interface Company {
     total_usuarios?: number;
 }
 
-export interface CreateCompanyDTO {
+export interface CreateAppDTO {
     nome: string;
     documento: string;
     email: string;
@@ -122,15 +125,15 @@ export interface CreateCompanyDTO {
     admin_telefone?: string;
 }
 
-export interface UpdateCompanyDTO {
+export interface UpdateAppDTO {
     nome: string;
     email: string;
     documento: string;
     telefone?: string | undefined;
 }
 
-export interface CreateCompanyResponse {
-    empresaId: string;
+export interface CreateAppResponse {
+    appId: string;
     nome?: string;
     documento?: string;
     email?: string;
@@ -138,7 +141,7 @@ export interface CreateCompanyResponse {
     message: string;
 }
 
-export interface EmpresaSummaryDTO {
+export interface AppSummaryDTO {
     id: string;
     nome: string;
     documento: string;
@@ -197,7 +200,7 @@ export const niveisAcesso = pgTable('niveis_acesso', {
     nome: varchar('nome', { length: 50 }).notNull().unique(),
 });
 
-export const empresas = pgTable('empresas', {
+export const aplicativos = pgTable('aplicativos', {
     id: serial('id').primaryKey(),
     nome: varchar('nome', { length: 255 }).notNull(),
     documento: varchar('documento', { length: 20 }),
@@ -210,11 +213,12 @@ export const empresas = pgTable('empresas', {
 
 export const usuarios = pgTable('usuarios', {
     id: serial('id').primaryKey(),
-    empresaId: integer('empresa_id').references(() => empresas.id, { onDelete: 'cascade' }),
+    appId: integer('app_id').references(() => aplicativos.id, { onDelete: 'cascade' }),
     nivelAcessoId: integer('nivel_acesso_id').references(() => niveisAcesso.id),
     nome: varchar('nome', { length: 255 }).notNull(),
     email: varchar('email', { length: 255 }).notNull().unique(),
     senhaHash: varchar('senha_hash', { length: 255 }).notNull(),
+    senhaPadrao: boolean('senha_padrao').default(true).notNull(),
     telefone: varchar('telefone', { length: 20 }),
     ultimoAcesso: timestamp('ultimo_acesso'),
     dataCadastro: timestamp('data_cadastro').defaultNow(),

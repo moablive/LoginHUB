@@ -6,7 +6,7 @@ interface DeleteModalProps {
   onClose: () => void;
   onConfirm: () => void;
   title?: string;
-  itemName?: string; // Nome do item sendo deletado (ex: nome da empresa)
+  itemName?: string; // Nome do item sendo deletado (ex: nome da aplicativo)
   isLoading?: boolean;
 }
 

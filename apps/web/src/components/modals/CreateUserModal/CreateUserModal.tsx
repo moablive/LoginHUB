@@ -5,14 +5,14 @@ export interface CreateUserModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  companyId: string;
+  appId: string;
 }
 
 export const CreateUserModal = ({
   isOpen,
   onClose,
   onSuccess,
-  companyId,
+  appId,
 }: CreateUserModalProps) => {
   const [formData, setFormData] = useState({
     nome: "",
@@ -48,7 +48,7 @@ export const CreateUserModal = ({
     try {
       await userApi.create({
         ...formData,
-        empresa_id: companyId,
+        app_id: appId,
         role: formData.role as "usuario" | "admin",
         telefone: undefined,
       });
@@ -145,7 +145,7 @@ export const CreateUserModal = ({
                   value={formData.email}
                   onChange={handleChange}
                   className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
-                  placeholder="usuario@empresa.com"
+                  placeholder="usuario@aplicativo.com"
                 />
               </div>
 
@@ -181,7 +181,7 @@ export const CreateUserModal = ({
                   <option value="admin">Administrador</option>
                 </select>
                 <p className="mt-1 text-xs text-gray-500">
-                  Admins podem gerenciar outros usuários desta empresa.
+                  Admins podem gerenciar outros usuários desta aplicativo.
                 </p>
               </div>
             </div>

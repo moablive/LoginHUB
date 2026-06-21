@@ -17,21 +17,21 @@ export const StatusButton = ({ currentStatus, entityName, onStatusChange }: Stat
       <button
         onClick={() => setIsModalOpen(true)}
         className={`
-          group relative w-24 h-8 flex items-center justify-center rounded-full text-xs font-bold transition-all duration-300 overflow-hidden
+          group w-24 h-8 flex items-center justify-center rounded-full text-xs font-semibold transition-colors duration-300 border
           ${isActive 
-            ? 'bg-green-500/10 text-green-500 hover:bg-red-500 hover:text-white hover:shadow-lg hover:shadow-red-500/30' 
-            : 'bg-red-500/10 text-red-500 hover:bg-green-500 hover:text-white hover:shadow-lg hover:shadow-green-500/30'
+            ? 'bg-green-50 text-green-700 border-green-200 hover:bg-red-50 hover:text-red-700 hover:border-red-200' 
+            : 'bg-red-50 text-red-700 border-red-200 hover:bg-green-50 hover:text-green-700 hover:border-green-200'
           }
         `}
       >
         {/* Texto Normal (Ex: Ativo) - Some no hover */}
-        <span className="absolute transition-transform duration-300 group-hover:-translate-y-8 group-hover:opacity-0 flex items-center gap-1">
+        <span className="flex items-center gap-1.5 group-hover:hidden">
           <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-green-500' : 'bg-red-500'}`}></span>
           {isActive ? 'ATIVO' : 'INATIVO'}
         </span>
 
         {/* Texto Hover (Ex: Bloquear) - Aparece no hover */}
-        <span className="absolute translate-y-8 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
+        <span className="hidden items-center group-hover:flex">
           {isActive ? 'BLOQUEAR' : 'ATIVAR'}
         </span>
       </button>
