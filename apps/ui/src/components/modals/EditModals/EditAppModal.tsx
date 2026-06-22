@@ -3,6 +3,7 @@ import { XMarkIcon } from '@heroicons/react/24/outline';
 import { appApi } from '@loginhub/api-client';
 import { masks } from '../../../utils/masks';
 import type { App } from '@loginhub/schema';
+import { LogoUpload } from '../../LogoUpload/LogoUpload';
 
 interface EditAppModalProps {
   isOpen: boolean;
@@ -16,18 +17,24 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
     nome: '',
     email: '',
     documento: '',
-    telefone: ''
+    telefone: '',
+    bot_url: ''
   });
+  const [logo, setLogo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (app) {
       setFormData({
         nome: app.nome,
         email: app.email,
-        documento: app.documento, 
-        telefone: app.telefone || ''
+        documento: app.documento,
+        telefone: app.telefone || '',
+        bot_url: app.bot_url || ''
       });
+      setLogo(app.logo ?? null);
+      setError(null);
     }
   }, [app]);
 
@@ -36,8 +43,9 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
+
     try {
-      // Limpa caracteres especiais antes de enviar (apenas números)
       const cleanDocumento = formData.documento.replace(/\D/g, '');
       const cleanTelefone = formData.telefone.replace(/\D/g, '');
 
@@ -45,15 +53,16 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
         nome: formData.nome,
         email: formData.email,
         documento: cleanDocumento,
-        // Envia undefined se estiver vazio, ou o número limpo
-        telefone: cleanTelefone || undefined
+        telefone: cleanTelefone || undefined,
+        logo: logo ?? null,
+        bot_url: formData.bot_url.trim() || null,
       });
-      
+
       onSuccess();
       onClose();
-    } catch (error) {
-      console.error(error);
-      alert('Erro ao atualizar aplicativo. Verifique se o CNPJ ou E-mail já existem.');
+    } catch (err) {
+      console.error(err);
+      setError('Não foi possível atualizar o aplicativo. Verifique se o CNPJ ou e-mail já estão em uso.');
     } finally {
       setLoading(false);
     }
@@ -70,6 +79,12 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
         </div>
         
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && (
+            <div className="bg-red-50 border-l-4 border-red-500 p-3 rounded-md">
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Aplicativo</label>
             <input
@@ -80,6 +95,8 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
             />
           </div>
+
+          <LogoUpload value={logo} onChange={setLogo} />
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Documento (CNPJ)</label>
@@ -113,6 +130,20 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
               maxLength={15}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              URL do Bot <span className="text-gray-400 font-normal">(opcional)</span>
+            </label>
+            <input
+              type="url"
+              value={formData.bot_url}
+              onChange={e => setFormData({...formData, bot_url: e.target.value})}
+              placeholder="https://t.me/seu_bot"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+            />
+            <p className="mt-1 text-xs text-gray-500">Enviada no e-mail de convite para o usuário acessar o bot.</p>
           </div>
 
           <div className="pt-2 flex gap-3 justify-end">

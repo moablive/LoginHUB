@@ -1,13 +1,13 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  BuildingOfficeIcon, 
-  UsersIcon, 
+import {
+  BuildingOfficeIcon,
+  UsersIcon,
   PlusIcon,
   ArrowRightOnRectangleIcon,
   TrashIcon,
   MagnifyingGlassIcon,
-  PencilSquareIcon 
+  PencilSquareIcon
 } from '@heroicons/react/24/outline';
 
 import { appApi } from '@loginhub/api-client';
@@ -19,7 +19,8 @@ import type { App } from '@loginhub/schema';
 import { LogoutModal } from '../components/modals/LogoutModal/LogoutModal';
 import { DeleteModal } from '../components/modals/DeleteModal/DeleteModal';
 import { StatusButton } from '../components/modals/StatusButton';
-import { EditAppModal } from '../components/modals/EditModals/EditAppModal'; 
+import { EditAppModal } from '../components/modals/EditModals/EditAppModal';
+import { AlertModal } from '../components/modals/AlertModal/AlertModal';
 
 export const Dashboard = () => {
   const navigate = useNavigate();
@@ -34,6 +35,13 @@ export const Dashboard = () => {
   
   const [appToDelete, setAppToDelete] = useState<{ id: string, nome: string } | null>(null);
   const [appToEdit, setAppToEdit] = useState<App | null>(null);
+  const [alertState, setAlertState] = useState<{ isOpen: boolean; title: string; message: string }>({
+    isOpen: false,
+    title: '',
+    message: '',
+  });
+
+  const showError = (title: string, message: string) => setAlertState({ isOpen: true, title, message });
 
   // Busca dados iniciais
   const fetchApps = async () => {
@@ -83,7 +91,7 @@ export const Dashboard = () => {
       setAppToDelete(null);
     } catch (error) {
       console.error(error);
-      alert('Erro ao excluir aplicativo.');
+      showError('Erro', 'Não foi possível excluir o aplicativo.');
     } finally {
       setLoadingAction(null);
     }
@@ -103,14 +111,14 @@ export const Dashboard = () => {
 
     } catch (error) {
       console.error(error);
-      alert('Erro ao atualizar status.');
+      showError('Erro', 'Não foi possível atualizar o status do aplicativo.');
     }
   };
 
   const activeApps = apps.filter(c => c.status === 'ativo').length;
 
   return (
-    <div className="space-y-8 animate-fade-in pb-20">
+    <div className="space-y-8 animate-fade-in">
       
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
@@ -210,9 +218,17 @@ export const Dashboard = () => {
                   <tr key={app.id} className="hover:bg-gray-50 transition duration-150 group">
                     <td className="px-6 py-5 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
-                          {app.nome.substring(0, 2).toUpperCase()}
-                        </div>
+                        {app.logo ? (
+                          <img
+                            src={app.logo}
+                            alt={app.nome}
+                            className="h-12 w-12 rounded-xl object-contain bg-white border border-gray-200 shadow-sm p-1"
+                          />
+                        ) : (
+                          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
+                            {app.nome.substring(0, 2).toUpperCase()}
+                          </div>
+                        )}
                         <div className="ml-4">
                           <div className="text-base font-semibold text-gray-900 group-hover:text-blue-700 transition-colors">
                             {app.nome}
@@ -258,8 +274,7 @@ export const Dashboard = () => {
 
                     <td className="px-6 py-5 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end gap-2">
-                        {/* Botão Usuários: Ajustada a rota para o padrão sem /admin */}
-                        <button 
+                        <button
                           onClick={() => navigate(`/apps/${app.id}/users`)}
                           className="px-3 py-1.5 text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition font-semibold text-xs border border-blue-100"
                         >
@@ -315,6 +330,14 @@ export const Dashboard = () => {
           setAppToEdit(null); // Fecha o modal
           fetchApps(); // Recarrega os dados
         }}
+      />
+
+      <AlertModal
+        isOpen={alertState.isOpen}
+        onClose={() => setAlertState(prev => ({ ...prev, isOpen: false }))}
+        title={alertState.title}
+        message={alertState.message}
+        variant="error"
       />
 
     </div>

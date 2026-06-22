@@ -7,8 +7,9 @@ WORKDIR /app
 
 # Copia arquivos base do monorepo
 COPY package*.json ./
+COPY .env ./
 COPY packages ./packages
-COPY apps/web ./apps/web
+COPY apps/ui ./apps/ui
 
 # Instala todas as dependências do monorepo
 RUN npm install
@@ -25,7 +26,7 @@ RUN npm run build -w @loginhub/schema
 RUN npm run build -w @loginhub/api-client
 
 # Gera o build da web
-RUN npm run build -w apps/web
+RUN npm run build -w ui
 
 # ===================================
 # ESTÁGIO 2: SERVIDOR (Nginx)
@@ -54,7 +55,7 @@ RUN echo 'server { \
 }' > /etc/nginx/conf.d/default.conf
 
 # Copia apenas os arquivos estáticos gerados no app web
-COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
+COPY --from=builder /app/apps/ui/dist /usr/share/nginx/html
 
 # Expõe porta 80 interna
 EXPOSE 80

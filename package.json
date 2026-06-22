@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspaces",
-    "build": "npm run build --workspaces",
+    "build": "npm run build -w @loginhub/schema && npm run build -w @loginhub/database && npm run build -w @loginhub/api-client && npm run build -w @loginhub/middlewares && npm run build -w @loginhub/services && npm run build -w api && npm run build -w ui",
     "lint": "npm run lint --workspaces"
   }
 }

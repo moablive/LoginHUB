@@ -48,6 +48,37 @@ export class AuthController {
         return res.status(200).json({ message: 'Logout realizado.', action: 'CLEAR_LOCAL_STORAGE' });
     }
 
+    static async refresh(req: Request, res: Response) {
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+            return res.status(401).json({ error: 'TOKEN_AUSENTE', message: 'Token não fornecido.' });
+        }
+        const parts = authHeader.split(' ');
+        if (parts.length !== 2 || !parts[1]) {
+            return res.status(401).json({ error: 'FORMATO_INVALIDO', message: 'Formato de token inválido.' });
+        }
+
+        try {
+            const result = await authService.refreshToken(parts[1]);
+            return res.status(200).json(result);
+        } catch (err: unknown) {
+            const error = err as Error;
+            switch (error.message) {
+                case 'TOKEN_INVALIDO':
+                    return res.status(401).json({ error: 'TOKEN_INVALIDO', message: 'Token inválido. Faça login novamente.' });
+                case 'TOKEN_EXPIRADO':
+                    return res.status(401).json({ error: 'TOKEN_EXPIRADO', message: 'Sessão expirada. Faça login novamente.' });
+                case 'USUARIO_INVALIDO':
+                    return res.status(401).json({ error: 'USUARIO_INVALIDO', message: 'Usuário não encontrado.' });
+                case 'APP_BLOQUEADO':
+                    return res.status(403).json({ error: 'APP_BLOQUEADO', message: 'Acesso da organização foi suspenso.' });
+                default:
+                    console.error('[AuthController] refresh:', error);
+                    return res.status(500).json({ error: 'ERRO_INTERNO', message: 'Falha ao renovar token.' });
+            }
+        }
+    }
+
     static async changePassword(req: Request, res: Response) {
         try {
             const { novaSenha } = req.body;
@@ -150,12 +181,12 @@ export class AppController {
         }
     }
 
-    static async updateApp(req: Request<{ id: string }, {}, UpdateAppDTO>, res: Response) {
+    static async updateApp(req: Request<{ id: string }, {}, UpdateAppDTO & { logo?: string | null; bot_url?: string | null }>, res: Response) {
         const { id } = req.params;
-        const { nome, email, documento, telefone } = req.body;
+        const { nome, email, documento, telefone, logo, bot_url } = req.body;
 
         try {
-            const updatedApp = await appService.updateApp(id, { nome, email, documento, telefone: telefone || undefined });
+            const updatedApp = await appService.updateApp(id, { nome, email, documento, telefone: telefone || undefined, logo, bot_url });
             return res.status(200).json(updatedApp);
         } catch (err: unknown) {
             const error = err as DbError;
@@ -177,8 +208,14 @@ export class AppController {
 export class UserController {
     static async addUser(req: Request<Record<string, never>, Record<string, never>, CreateUserDTO>, res: Response) {
         try {
-            await userService.addUser(req.body);
-            return res.status(201).json({ message: 'Usuário criado com sucesso.' });
+            const result = await userService.addUser(req.body);
+            return res.status(201).json({
+                message: result.emailSent
+                    ? 'Convite enviado por e-mail com sucesso.'
+                    : 'Usuário criado, mas o e-mail de convite não pôde ser enviado.',
+                emailSent: result.emailSent,
+                tempPassword: result.tempPassword,
+            });
         } catch (err) {
             const error = err as DbError;
             console.error('[UserController] addUser:', error);
@@ -250,13 +287,17 @@ export class UserController {
         }
     }
 
-    static async resetPassword(req: Request<{ id: string }>, res: Response) {
+    static async resetPassword(req: Request<{ id: string }, {}, { emailHtml?: string }>, res: Response) {
         const { id } = req.params;
+        const { emailHtml } = req.body || {};
         try {
-            const result = await userService.resetUserPassword(id);
-            return res.status(200).json({ 
-                message: 'Senha redefinida com sucesso.', 
-                tempPassword: result.tempPassword 
+            const result = await userService.resetUserPassword(id, emailHtml);
+            return res.status(200).json({
+                message: result.emailSent
+                    ? 'Nova senha enviada por e-mail com sucesso.'
+                    : 'Senha redefinida, mas o e-mail não pôde ser enviado.',
+                emailSent: result.emailSent,
+                tempPassword: result.tempPassword,
             });
         } catch (err: unknown) {
             const error = err as { code?: string, message?: string };

@@ -8,18 +8,23 @@ import {
   TrashIcon,
   ShieldCheckIcon,
   UserIcon,
-  PencilSquareIcon
+  PencilSquareIcon,
+  KeyIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline';
 
 import { userApi } from '@loginhub/api-client';
 import { appApi } from '@loginhub/api-client';
 import type { User, App } from '@loginhub/schema';
+import ReactDOMServer from 'react-dom/server';
+import { ResetPasswordEmail } from '../templates/emails';
 
 import { SuccessModal } from '../components/modals/SuccessModal/SuccessModal';
 import { DeleteModal } from '../components/modals/DeleteModal/DeleteModal';
 import { CreateUserModal } from '../components/modals/CreateUserModal/CreateUserModal';
 import { AlertModal } from '../components/modals/AlertModal/AlertModal';
 import { EditUserModal } from '../components/modals/EditModals/EditUserModal';
+import { ConfirmModal } from '../components/modals/ConfirmModal/ConfirmModal';
 
 export const AppUsers = () => {
   const { id: appId } = useParams<{ id: string }>(); 
@@ -37,7 +42,16 @@ export const AppUsers = () => {
   // Estados de Ação
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [userToEdit, setUserToEdit] = useState<User | null>(null);
+  const [userToReset, setUserToReset] = useState<User | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isResetting, setIsResetting] = useState<string | null>(null);
+
+  // Modal de Credenciais
+  const [credentialsAlert, setCredentialsAlert] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+  }>({ isOpen: false, title: '', message: '' });
 
   // Estado de Alerta
   const [alertState, setAlertState] = useState<{
@@ -114,10 +128,59 @@ export const AppUsers = () => {
     }
   };
 
+  // --- RESET PASSWORD ---
+  const handleResetPasswordClick = (user: User) => {
+    setUserToReset(user);
+  };
+
+  const handleConfirmResetPassword = async () => {
+    if (!userToReset) return;
+    const user = userToReset;
+
+    try {
+      setIsResetting(user.id);
+
+      const emailHtml = ReactDOMServer.renderToStaticMarkup(
+        <ResetPasswordEmail
+          email={user.email}
+          appName={app?.nome || 'nossa plataforma'}
+          loginUrl={window.location.origin}
+          tempPassword={'__TEMP_PASSWORD__'}
+        />
+      );
+
+      const res = await userApi.resetPassword(user.id, emailHtml);
+
+      setUserToReset(null);
+
+      if (res.emailSent) {
+        showAlert(
+          'Senha Redefinida',
+          `Uma nova senha temporária foi enviada por e-mail para ${user.email}. No próximo login, o sistema exigirá a criação de uma senha definitiva.`,
+          'info',
+        );
+      } else if (res.tempPassword) {
+        setCredentialsAlert({
+          isOpen: true,
+          title: 'Senha Redefinida (envio falhou)',
+          message: `O e-mail não pôde ser enviado. Repasse manualmente:\n\nAcesse: ${window.location.origin}\nLogin: ${user.email}\nNova Senha Temporária: ${res.tempPassword}\n\nNo primeiro acesso, o sistema exigirá a criação de uma senha definitiva.`,
+        });
+      } else {
+        showAlert('Senha Redefinida', 'Senha redefinida com sucesso.', 'info');
+      }
+    } catch (error: unknown) {
+      console.error(error);
+      setUserToReset(null);
+      showAlert('Erro', 'Não foi possível resetar a senha deste usuário.', 'error');
+    } finally {
+      setIsResetting(null);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 p-6 animate-fade-in pb-20">
+    <div className="space-y-6 animate-fade-in">
       
-      {/* HEADER */}
+      {/* HEADER DA PÁGINA */}
       <div className="max-w-7xl mx-auto mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <button 
@@ -144,7 +207,7 @@ export const AppUsers = () => {
           className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition shadow-md text-sm font-medium"
         >
           <UserPlusIcon className="h-5 w-5" />
-          Novo Usuário
+          Convidar Usuário
         </button>
       </div>
 
@@ -208,6 +271,15 @@ export const AppUsers = () => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => handleResetPasswordClick(user)}
+                              disabled={isResetting === user.id}
+                              className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition disabled:opacity-50"
+                              title="Resetar Senha"
+                            >
+                              <KeyIcon className="h-5 w-5" />
+                            </button>
+
                             <button 
                               onClick={() => setUserToEdit(user)}
                               className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
@@ -239,11 +311,24 @@ export const AppUsers = () => {
       <CreateUserModal
         isOpen={showFormModal}
         onClose={() => setShowFormModal(false)}
-        onSuccess={() => {
+        appId={appId!}
+        appName={app?.nome}
+        appBotUrl={app?.bot_url}
+        onSuccess={({ email, emailSent, tempPassword }) => {
           fetchData();
-          setShowSuccessModal(true);
+          setShowFormModal(false);
+          if (emailSent) {
+            showAlert('Convite Enviado', `O convite foi enviado por e-mail para ${email}.`, 'info');
+          } else if (tempPassword) {
+            setCredentialsAlert({
+              isOpen: true,
+              title: 'Convite Gerado (envio falhou)',
+              message: `O e-mail não pôde ser enviado. Repasse manualmente:\n\nAcesse: ${window.location.origin}\nLogin: ${email}\nSenha temporária: ${tempPassword}\n\nNo primeiro acesso, o sistema exigirá a criação de uma senha definitiva.`,
+            });
+          } else {
+            setShowSuccessModal(true);
+          }
         }}
-        appId={appId || ''}
       />
 
       {/* MODAL DE EDIÇÃO */}
@@ -267,13 +352,33 @@ export const AppUsers = () => {
       />
 
       {/* MODAL DE DELETE */}
-      <DeleteModal 
+      <DeleteModal
         isOpen={!!userToDelete}
         onClose={() => setUserToDelete(null)}
         onConfirm={handleConfirmDelete}
         title="Remover Usuário"
         itemName={userToDelete?.nome}
         isLoading={isDeleting}
+      />
+
+      {/* MODAL DE RESET DE SENHA */}
+      <ConfirmModal
+        isOpen={!!userToReset}
+        onClose={() => setUserToReset(null)}
+        onConfirm={handleConfirmResetPassword}
+        title="Resetar senha do usuário"
+        variant="warning"
+        icon={<KeyIcon className="h-6 w-6" />}
+        message={
+          <>
+            Uma nova senha temporária será gerada e enviada por e-mail para o usuário.
+            No próximo login, ele será obrigado a definir uma nova senha definitiva.
+          </>
+        }
+        highlight={userToReset ? `${userToReset.nome} — ${userToReset.email}` : undefined}
+        confirmText="Gerar nova senha"
+        loadingText="Gerando..."
+        isLoading={isResetting === userToReset?.id}
       />
 
       {/* MODAL DE ALERTAS GERAIS */}
@@ -284,6 +389,58 @@ export const AppUsers = () => {
         message={alertState.message}
         variant={alertState.variant}
       />
+
+      {/* ALERT DE CREDENCIAIS (Como no MoneyApp) */}
+      {credentialsAlert.isOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
+          <div className="flex min-h-screen items-center justify-center p-4 text-center sm:p-0">
+            <div className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity" onClick={() => setCredentialsAlert({ ...credentialsAlert, isOpen: false })} aria-hidden="true" />
+            <div className="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg border border-gray-200">
+              <div className="bg-gray-50 px-4 py-3 sm:px-6 border-b border-gray-100 flex justify-between items-center">
+                <h3 className="text-lg font-semibold leading-6 text-gray-900 flex items-center gap-2">
+                  <KeyIcon className="h-5 w-5 text-amber-500" />
+                  {credentialsAlert.title}
+                </h3>
+                <button
+                  type="button"
+                  className="rounded-md bg-transparent text-gray-400 hover:text-gray-500"
+                  onClick={() => setCredentialsAlert({ ...credentialsAlert, isOpen: false })}
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+              <div className="px-4 py-5 sm:p-6">
+                <div className="mt-2 relative">
+                  <textarea
+                    readOnly
+                    value={credentialsAlert.message}
+                    rows={7}
+                    className="w-full text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-3 font-mono resize-none focus:outline-none"
+                  />
+                  <button 
+                    onClick={() => navigator.clipboard.writeText(credentialsAlert.message)}
+                    className="absolute top-2 right-2 bg-white border border-gray-200 shadow-sm p-1.5 rounded-md text-xs font-medium text-gray-600 hover:bg-gray-50"
+                  >
+                    Copiar
+                  </button>
+                </div>
+                <p className="mt-3 text-sm text-gray-500 flex items-center gap-1.5 bg-blue-50 text-blue-700 p-2 rounded-md border border-blue-100">
+                  ⚠️ Guarde esta senha. Ela não poderá ser visualizada novamente.
+                </p>
+              </div>
+              <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                <button
+                  type="button"
+                  className="inline-flex w-full justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 sm:w-auto"
+                  onClick={() => setCredentialsAlert({ ...credentialsAlert, isOpen: false })}
+                >
+                  Entendi
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

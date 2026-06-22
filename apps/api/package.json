@@ -1,5 +1,5 @@
 {
-  "name": "awlsrv_loginhub",
+  "name": "api",
   "version": "1.0.0",
   "description": "Sistema de banco de dados para gerenciamento de autenticação multi-tenant.",
   "main": "dist/server.js",

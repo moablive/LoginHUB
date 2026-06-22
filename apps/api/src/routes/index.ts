@@ -14,6 +14,7 @@ export const mainRouter = Router();
 const authRouter = Router();
 authRouter.post('/login', AuthController.login);
 authRouter.post('/logout', AuthController.logout);
+authRouter.post('/refresh', AuthController.refresh);
 authRouter.post('/change-password', authMiddleware as any, AuthController.changePassword as any);
 
 mainRouter.use('/auth', authRouter);

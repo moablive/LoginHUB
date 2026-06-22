@@ -18,6 +18,14 @@ export const masks = {
       .replace(/(-\d{2})\d+?$/, '$1');
   },
 
+  cpfCnpj: (value: string) => {
+    const numericValue = value.replace(/\D/g, '');
+    if (numericValue.length <= 11) {
+      return masks.cpf(numericValue);
+    }
+    return masks.cnpj(numericValue);
+  },
+
   phone: (value: string) => {
     return value
       .replace(/\D/g, '')

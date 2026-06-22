@@ -11,12 +11,14 @@
     "@loginhub/database": "*",
     "@loginhub/schema": "*",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^9.0.1"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.6",
     "@types/node": "^22.13.1",
+    "@types/nodemailer": "^8.0.1",
     "typescript": "^5.7.3"
   }
 }

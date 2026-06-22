@@ -98,8 +98,7 @@ export const authMiddleware: RequestHandler = async (req, res, next) => {
 const ALLOWED_ORIGINS = [
     'https://astralwavelabel.com',
     'https://www.astralwavelabel.com',
-    'https://loginhub.astralwavelabel.com',
-    'https://login.astralwavelabel.com'
+    'https://loginhub.astralwavelabel.com'
 ];
 
 const corsOptions: CorsOptions = {

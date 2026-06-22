@@ -3,7 +3,7 @@ services:
     container_name: server_loginhub_web
     build:
       context: ../../
-      dockerfile: apps/web/Dockerfile
+      dockerfile: apps/ui/Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL}
         VITE_MASTER_KEY: ${VITE_MASTER_KEY}

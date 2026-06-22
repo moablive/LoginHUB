@@ -2,26 +2,27 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { 
-  BuildingOfficeIcon, 
-  UserIcon, 
-  ArrowLeftIcon, 
-  EnvelopeIcon, 
+import {
+  BuildingOfficeIcon,
+  ArrowLeftIcon,
+  EnvelopeIcon,
   PhoneIcon,
   IdentificationIcon,
-  LockClosedIcon,
-  RocketLaunchIcon
+  RocketLaunchIcon,
+  LinkIcon
 } from '@heroicons/react/24/outline';
 import { appApi } from '@loginhub/api-client';
 import { masks } from '../utils/masks';
 import type { CreateAppDTO } from '@loginhub/schema';
 import { SuccessModal } from '../components/modals/SuccessModal/SuccessModal';
 import { AlertModal } from '../components/modals/AlertModal/AlertModal';
+import { LogoUpload } from '../components/LogoUpload/LogoUpload';
 
 export const CreateApp = () => {
   const navigate = useNavigate();
   const [showSuccess, setShowSuccess] = useState(false);
-  
+  const [logo, setLogo] = useState<string | null>(null);
+
   const [alertState, setAlertState] = useState<{
     isOpen: boolean;
     title: string;
@@ -34,11 +35,11 @@ export const CreateApp = () => {
     variant: 'error'
   });
 
-  const { 
-    register, 
-    handleSubmit, 
-    setValue, 
-    formState: { errors, isSubmitting } 
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    formState: { errors, isSubmitting }
   } = useForm<CreateAppDTO>();
 
   const showAlert = (title: string, message: string, variant: 'error' | 'warning' = 'error') => {
@@ -49,17 +50,13 @@ export const CreateApp = () => {
     setAlertState(prev => ({ ...prev, isOpen: false }));
   };
 
-  const handleDocumentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setValue('documento', masks.cnpj(e.target.value));
-  };
-
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>, field: 'telefone' | 'admin_telefone') => {
     setValue(field, masks.phone(e.target.value));
   };
 
   const onSubmit = async (data: CreateAppDTO) => {
     try {
-      await appApi.create(data);
+      await appApi.create({ ...data, logo: logo || undefined });
       setShowSuccess(true);
     } catch (error: unknown) {
       console.error(error);
@@ -82,7 +79,7 @@ export const CreateApp = () => {
   const errorClass = "border-red-500 focus:ring-red-500 focus:border-red-500";
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in">
       
       <div className="max-w-5xl mx-auto mb-8 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -106,7 +103,7 @@ export const CreateApp = () => {
       <div className="max-w-5xl mx-auto">
         <form onSubmit={handleSubmit(onSubmit)} className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
           
-          <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-10">
+          <div className="p-8 max-w-2xl mx-auto">
             
             <div className="space-y-6">
               <h3 className="text-lg font-semibold text-gray-800 border-b pb-2 flex items-center gap-2">
@@ -115,34 +112,39 @@ export const CreateApp = () => {
               </h3>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Aplicativo</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nome do Aplicativo</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <BuildingOfficeIcon className="h-5 w-5 text-gray-400" />
                   </div>
-                  <input 
-                    {...register('nome', { required: 'Nome é obrigatório' })} 
+                  <input
+                    {...register('nome', { required: 'Nome é obrigatório' })}
                     className={`${inputClass} ${errors.nome ? errorClass : ''}`}
-                    placeholder="Ex: Tech Solutions Ltda" 
+                    placeholder="Ex: Tech Solutions Ltda"
                   />
                 </div>
                 {errors.nome && <p className="mt-1 text-xs text-red-500">{errors.nome.message}</p>}
               </div>
 
+              <LogoUpload value={logo} onChange={setLogo} />
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Documento (CNPJ)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Documento (CPF/CNPJ)</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <IdentificationIcon className="h-5 w-5 text-gray-400" />
                   </div>
                   <input 
                     {...register('documento', { required: 'Documento é obrigatório' })}
-                    onChange={handleDocumentChange}
+                    onChange={(e) => {
+                      setValue('documento', masks.cpfCnpj(e.target.value));
+                    }}
                     className={`${inputClass} ${errors.documento ? errorClass : ''}`}
-                    placeholder="00.000.000/0001-00"
+                    placeholder="000.000.000-00 ou 00.000.000/0001-00"
                     maxLength={18}
                   />
                 </div>
+                {errors.documento && <p className="mt-1 text-xs text-red-500">{errors.documento.message}</p>}
               </div>
 
               <div>
@@ -166,82 +168,36 @@ export const CreateApp = () => {
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <PhoneIcon className="h-5 w-5 text-gray-400" />
                   </div>
-                  <input 
+                  <input
                     {...register('telefone', { required: true })}
                     onChange={(e) => handlePhoneChange(e, 'telefone')}
                     className={inputClass}
-                    placeholder="(00) 0000-0000" 
+                    placeholder="(00) 0000-0000"
                     maxLength={15}
                   />
                 </div>
               </div>
-            </div>
-
-            <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2 flex items-center gap-2">
-                <UserIcon className="h-5 w-5 text-gray-400" />
-                Administrador Inicial
-              </h3>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nome do Responsável</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">URL do Bot <span className="text-gray-400 font-normal">(opcional)</span></label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <UserIcon className="h-5 w-5 text-gray-400" />
+                    <LinkIcon className="h-5 w-5 text-gray-400" />
                   </div>
-                  <input 
-                    {...register('admin_nome', { required: true })} 
-                    className={inputClass}
-                    placeholder="Nome completo" 
+                  <input
+                    type="url"
+                    {...register('bot_url', {
+                      pattern: {
+                        value: /^https?:\/\/.+/i,
+                        message: 'URL deve começar com http:// ou https://'
+                      }
+                    })}
+                    className={`${inputClass} ${errors.bot_url ? errorClass : ''}`}
+                    placeholder="https://t.me/seu_bot"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">E-mail de Login</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <EnvelopeIcon className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <input 
-                    type="email"
-                    {...register('admin_email', { required: true })} 
-                    className={inputClass}
-                    placeholder="admin@aplicativo.com" 
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Senha Inicial</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <LockClosedIcon className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <input 
-                    type="password"
-                    {...register('password', { required: true, minLength: 6 })} 
-                    className={inputClass}
-                    placeholder="******" 
-                  />
-                </div>
-                <p className="mt-1 text-xs text-gray-500">Mínimo de 6 caracteres.</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Telefone (Celular)</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <PhoneIcon className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <input 
-                    {...register('admin_telefone', { required: true })}
-                    onChange={(e) => handlePhoneChange(e, 'admin_telefone')}
-                    className={inputClass}
-                    placeholder="(00) 00000-0000"
-                    maxLength={15}
-                  />
-                </div>
+                <p className="mt-1 text-xs text-gray-500">Link enviado no e-mail de convite para os usuários acessarem o bot (Telegram, WhatsApp, etc).</p>
+                {errors.bot_url && <p className="mt-1 text-xs text-red-500">{errors.bot_url.message}</p>}
               </div>
             </div>
 

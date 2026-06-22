@@ -15,19 +15,21 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
   const [formData, setFormData] = useState({
     nome: '',
     email: '',
-    telefone: '', // ✅ Novo campo
+    telefone: '',
     password: ''
   });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
       setFormData({
         nome: user.nome,
         email: user.email,
-        telefone: user.telefone || '', // ✅ Carrega telefone existente ou vazio
+        telefone: user.telefone || '',
         password: ''
       });
+      setError(null);
     }
   }, [user]);
 
@@ -36,20 +38,17 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    
+    setError(null);
+
     try {
-      // ✅ 1. Limpa a máscara do telefone (apenas números)
       const cleanPhone = formData.telefone.replace(/\D/g, '');
 
-      // ✅ 2. Constrói o payload
       const payload: UpdateUserPayload = {
         nome: formData.nome,
         email: formData.email,
-        // Só envia telefone se tiver números, senão envia undefined
-        telefone: cleanPhone || undefined 
+        telefone: cleanPhone || undefined
       };
 
-      // ✅ 3. Só adiciona a senha se ela não estiver vazia
       if (formData.password.trim()) {
         payload.password = formData.password;
       }
@@ -57,9 +56,9 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
       await userApi.update(user.id, payload);
       onSuccess();
       onClose();
-    } catch (error) {
-      console.error(error);
-      alert('Erro ao atualizar usuário.');
+    } catch (err) {
+      console.error(err);
+      setError('Não foi possível atualizar o usuário. Verifique os dados e tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -77,7 +76,13 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
         </div>
         
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          
+
+          {error && (
+            <div className="bg-red-50 border-l-4 border-red-500 p-3 rounded-md">
+              <p className="text-sm text-red-700">{error}</p>
+            </div>
+          )}
+
           {/* Nome */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Nome Completo</label>

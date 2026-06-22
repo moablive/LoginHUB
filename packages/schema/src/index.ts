@@ -1,9 +1,9 @@
-import { pgTable, serial, varchar, integer, timestamp, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, integer, timestamp, boolean, text } from 'drizzle-orm/pg-core';
 
 // ==========================================
 // USER MODELS
 // ==========================================
-export type UserRole = 'master' | 'admin' | 'usuario';
+export type UserRole = 'master' | 'admin' | 'user' | 'suporte';
 
 export interface User {
     id: string;
@@ -29,6 +29,7 @@ export interface CreateUserDTO {
     password?: string; 
     role?: UserRole | string;    
     telefone?: string | null; 
+    emailHtml?: string;
 }
 
 export interface UpdateUserDTO {
@@ -51,6 +52,7 @@ export interface LoginInputDTO {
 export interface LoginResponse {
     token: string;
     expiresIn?: number;
+    requirePasswordChange?: boolean;
     usuario: User;
     app?: {
         id: string;
@@ -106,9 +108,11 @@ export interface App {
     documento: string;
     email: string;
     telefone?: string;
+    logo?: string | null;
+    bot_url?: string | null;
     dominio?: string;
     status: 'ativo' | 'inativo' | 'bloqueado' | 'ativa' | 'inativa' | 'bloqueada';
-    data_cadastro?: string | Date; 
+    data_cadastro?: string | Date;
     created_at?: Date;
     updated_at?: Date;
     total_usuarios?: number;
@@ -119,10 +123,13 @@ export interface CreateAppDTO {
     documento: string;
     email: string;
     telefone?: string;
-    password: string;
-    admin_nome: string;
-    admin_email: string;
+    logo?: string;
+    bot_url?: string;
+    password?: string;
+    admin_nome?: string;
+    admin_email?: string;
     admin_telefone?: string;
+    emailHtml?: string;
 }
 
 export interface UpdateAppDTO {
@@ -130,6 +137,8 @@ export interface UpdateAppDTO {
     email: string;
     documento: string;
     telefone?: string | undefined;
+    logo?: string | null | undefined;
+    bot_url?: string | null | undefined;
 }
 
 export interface CreateAppResponse {
@@ -206,6 +215,8 @@ export const aplicativos = pgTable('aplicativos', {
     documento: varchar('documento', { length: 20 }),
     email: varchar('email', { length: 255 }),
     telefone: varchar('telefone', { length: 20 }),
+    logo: text('logo'),
+    botUrl: varchar('bot_url', { length: 500 }),
     status: varchar('status', { length: 20 }).default('ativo'),
     dataCadastro: timestamp('data_cadastro').defaultNow(),
     dataAtualizacao: timestamp('data_atualizacao'),
