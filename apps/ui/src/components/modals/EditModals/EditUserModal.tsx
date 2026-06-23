@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { XMarkIcon, KeyIcon, PhoneIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PhoneIcon } from '@heroicons/react/24/outline';
 import { userApi } from '@loginhub/api-client';
 import { masks } from '../../../utils/masks';
 import type { User, UpdateUserDTO as UpdateUserPayload } from '@loginhub/schema';
