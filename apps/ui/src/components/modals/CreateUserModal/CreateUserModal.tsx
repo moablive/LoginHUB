@@ -161,7 +161,11 @@ export const CreateUserModal = ({
             <h3 className="text-lg font-semibold leading-6 text-gray-900 flex items-center gap-2">
               {step === "form" ? (
                 <>
-                  <UserPlusIcon className="h-5 w-5 text-blue-600" />
+                  {appLogo ? (
+                    <img src={appLogo} alt={appName || "Logo"} className="h-6 w-6 rounded-sm object-contain" />
+                  ) : (
+                    <UserPlusIcon className="h-5 w-5 text-blue-600" />
+                  )}
                   Convidar Usuário
                 </>
               ) : (
