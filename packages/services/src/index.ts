@@ -30,6 +30,7 @@ export class AuthService {
             app_id: usuarios.appId,
             app_nome: aplicativos.nome,
             app_status: aplicativos.status,
+            status: usuarios.status,
             role_nome: niveisAcesso.nome
         })
         .from(usuarios)
@@ -42,8 +43,13 @@ export class AuthService {
 
         if (!user) throw new Error('CREDENCIAIS_INVALIDAS');
         if (user.app_status !== 'ativo') throw new Error('APP_BLOQUEADO');
+        if (user.status !== 'ativo') throw new Error('USUARIO_BLOQUEADO');
 
-        const senhaValida = await bcrypt.compare(data.password, user.senha_hash);
+        const senhaValida = await db.transaction(async () => await bcrypt.compare(data.password, user.senha_hash)).catch(() => false);
+        if (!senhaValida) {
+            const isValid = await bcrypt.compare(data.password, user.senha_hash);
+            if(!isValid) throw new Error('CREDENCIAIS_INVALIDAS');
+        }
         if (!senhaValida) throw new Error('CREDENCIAIS_INVALIDAS');
 
         db.update(usuarios)
@@ -119,6 +125,7 @@ export class AuthService {
             app_id: usuarios.appId,
             app_nome: aplicativos.nome,
             app_status: aplicativos.status,
+            status: usuarios.status,
             role_nome: niveisAcesso.nome
         })
         .from(usuarios)
@@ -130,6 +137,7 @@ export class AuthService {
         const user = result[0];
         if (!user) throw new Error('USUARIO_INVALIDO');
         if (user.app_status !== 'ativo') throw new Error('APP_BLOQUEADO');
+        if (user.status !== 'ativo') throw new Error('USUARIO_BLOQUEADO');
 
         const payload: JWTPayload = {
             sub: user.id.toString(),
@@ -388,7 +396,7 @@ export class UserService {
             email: usuarios.email,
             telefone: usuarios.telefone,
             role: niveisAcesso.nome,
-            status: niveisAcesso.nome
+            status: usuarios.status
         })
         .from(usuarios)
         .leftJoin(niveisAcesso, eq(usuarios.nivelAcessoId, niveisAcesso.id));
@@ -404,7 +412,7 @@ export class UserService {
             email: usuarios.email,
             telefone: usuarios.telefone,
             role: niveisAcesso.nome,
-            status: niveisAcesso.nome 
+            status: usuarios.status
         })
         .from(usuarios)
         .leftJoin(niveisAcesso, eq(usuarios.nivelAcessoId, niveisAcesso.id))
@@ -462,6 +470,20 @@ export class UserService {
             return result[0];
         }
         return null;
+    }
+
+    public async toggleUserStatus(id: string, status: 'ativo' | 'bloqueado' | 'inativo') {
+        const result = await db.update(usuarios)
+            .set({ status })
+            .where(eq(usuarios.id, Number(id)))
+            .returning();
+
+        if (result.length === 0) {
+            const error = new Error('Usuário não encontrado.');
+            (error as any).code = 'NOT_FOUND';
+            throw error;
+        }
+        return result[0];
     }
 
     public async removeUser(id: string): Promise<void> {

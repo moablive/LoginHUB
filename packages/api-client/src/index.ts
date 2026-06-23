@@ -272,6 +272,13 @@ export const userApi = {
     const { data } = await api.put<User>(`${USERS_BASE_URL}/${id}`, payload);
     return data;
   },
+  toggleStatus: async (id: string, status: 'ativo' | 'inativo' | 'bloqueado'): Promise<User> => {
+    const { data } = await api.patch<{ message: string; user: User }>(
+      `${USERS_BASE_URL}/${id}/status`,
+      { status }
+    );
+    return data.user;
+  },
   delete: async (id: string): Promise<void> => {
     await api.delete(`${USERS_BASE_URL}/${id}`);
   },

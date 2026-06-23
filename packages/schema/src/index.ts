@@ -231,6 +231,7 @@ export const usuarios = pgTable('usuarios', {
     senhaHash: varchar('senha_hash', { length: 255 }).notNull(),
     senhaPadrao: boolean('senha_padrao').default(true).notNull(),
     telefone: varchar('telefone', { length: 20 }),
+    status: varchar('status', { length: 20 }).default('ativo'),
     ultimoAcesso: timestamp('ultimo_acesso'),
     dataCadastro: timestamp('data_cadastro').defaultNow(),
     dataAtualizacao: timestamp('data_atualizacao'),

@@ -10,7 +10,9 @@ import {
   UserIcon,
   PencilSquareIcon,
   KeyIcon,
-  XMarkIcon
+  XMarkIcon,
+  LockClosedIcon,
+  LockOpenIcon
 } from '@heroicons/react/24/outline';
 
 import { userApi } from '@loginhub/api-client';
@@ -128,6 +130,25 @@ export const AppUsers = () => {
     }
   };
 
+  // --- TOGGLE STATUS ---
+  const handleToggleStatus = async (user: User) => {
+    try {
+      const newStatus = user.status === 'ativo' ? 'bloqueado' : 'ativo';
+      await userApi.toggleStatus(user.id, newStatus);
+      
+      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, status: newStatus } : u));
+      
+      showAlert(
+        'Status Atualizado',
+        `O usuário ${user.nome} foi ${newStatus === 'ativo' ? 'desbloqueado' : 'bloqueado'} com sucesso.`,
+        'info'
+      );
+    } catch (error) {
+      console.error('Erro ao alterar status:', error);
+      showAlert('Erro', 'Não foi possível alterar o status do usuário.', 'error');
+    }
+  };
+
   // --- RESET PASSWORD ---
   const handleResetPasswordClick = (user: User) => {
     setUserToReset(user);
@@ -228,13 +249,14 @@ export const AppUsers = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acesso</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contato</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {users.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
+                      <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
                         <div className="flex flex-col items-center justify-center">
                           <UserIcon className="h-10 w-10 text-gray-300 mb-2" />
                           <span>Nenhum usuário vinculado a esta aplicativo.</span>
@@ -270,6 +292,17 @@ export const AppUsers = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {user.telefone || '-'}
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {user.status === 'ativo' ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+                              Ativo
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                              Bloqueado
+                            </span>
+                          )}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="flex justify-end gap-2">
                             <button
@@ -279,6 +312,22 @@ export const AppUsers = () => {
                               title="Resetar Senha"
                             >
                               <KeyIcon className="h-5 w-5" />
+                            </button>
+
+                            <button
+                              onClick={() => handleToggleStatus(user)}
+                              className={`p-2 rounded-lg transition ${
+                                user.status === 'ativo' 
+                                  ? 'text-gray-400 hover:text-red-600 hover:bg-red-50' 
+                                  : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
+                              }`}
+                              title={user.status === 'ativo' ? 'Bloquear Usuário' : 'Desbloquear Usuário'}
+                            >
+                              {user.status === 'ativo' ? (
+                                <LockOpenIcon className="h-5 w-5" />
+                              ) : (
+                                <LockClosedIcon className="h-5 w-5" />
+                              )}
                             </button>
 
                             <button 

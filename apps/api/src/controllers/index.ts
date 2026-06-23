@@ -291,6 +291,27 @@ export class UserController {
         }
     }
 
+    static async toggleUserStatus(req: Request<{ id: string }, {}, { status: string }>, res: Response) {
+        const { id } = req.params;
+        const { status } = req.body;
+
+        if (!status || !['ativo', 'inativo', 'bloqueado'].includes(status)) {
+            return res.status(400).json({ error: "Status deve ser 'ativo', 'inativo' ou 'bloqueado'." });
+        }
+
+        try {
+            const user = await userService.toggleUserStatus(id, status as 'ativo' | 'inativo' | 'bloqueado');
+            return res.status(200).json({ message: `Status atualizado para ${status}.`, user });
+        } catch (err: unknown) {
+            const error = err as { code?: string };
+            if (error.code === 'NOT_FOUND') {
+                return res.status(404).json({ error: 'Usuário não encontrado' });
+            }
+            console.error(`[UserController] toggleUserStatus:`, err);
+            return res.status(500).json({ error: "Erro Interno" });
+        }
+    }
+
     static async resetPassword(req: Request<{ id: string }, {}, { emailHtml?: string }>, res: Response) {
         const { id } = req.params;
         const { emailHtml } = req.body || {};

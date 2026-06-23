@@ -39,6 +39,7 @@ adminRouter.get('/apps/:id/users', UserController.getUsersByApp as any);
 adminRouter.get('/users', UserController.getAllUsers as any);
 adminRouter.post('/users', UserController.addUser as any);
 adminRouter.put('/users/:id', UserController.updateUser as any);
+adminRouter.patch('/users/:id/status', UserController.toggleUserStatus as any);
 adminRouter.post('/users/:id/reset-password', UserController.resetPassword as any);
 adminRouter.delete('/users/:id', UserController.removeUser as any);
 
