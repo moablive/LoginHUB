@@ -6,12 +6,18 @@ interface InviteEmailProps {
   appName: string;
   loginUrl: string;
   botUrl?: string | null;
+  appLogo?: string | null;
 }
 
-export const InviteEmailTemplate: React.FC<InviteEmailProps> = ({ email, tempPassword, appName, loginUrl, botUrl }) => {
+export const InviteEmailTemplate: React.FC<InviteEmailProps> = ({ email, tempPassword, appName, loginUrl, botUrl, appLogo }) => {
   return (
     <div style={{ fontFamily: 'sans-serif', padding: '20px', color: '#333' }}>
       <div style={{ maxWidth: '600px', margin: '0 auto', border: '1px solid #eee', borderRadius: '8px', padding: '20px', backgroundColor: '#fff' }}>
+        {appLogo && (
+          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+            <img src={appLogo} alt={`Logo ${appName}`} style={{ maxWidth: '120px', maxHeight: '120px', borderRadius: '8px' }} />
+          </div>
+        )}
         <h2 style={{ color: '#0f172a', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>Bem-vindo(a) ao {appName}!</h2>
         <p style={{ fontSize: '16px', lineHeight: '1.5' }}>
           Seu acesso foi liberado com sucesso. Abaixo estão suas credenciais para o primeiro acesso:

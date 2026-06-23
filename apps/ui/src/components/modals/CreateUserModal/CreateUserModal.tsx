@@ -18,6 +18,7 @@ export interface CreateUserModalProps {
   appId: string;
   appName?: string;
   appBotUrl?: string | null;
+  appLogo?: string | null;
 }
 
 type Step = "form" | "preview";
@@ -32,6 +33,7 @@ export const CreateUserModal = ({
   appId,
   appName,
   appBotUrl,
+  appLogo,
 }: CreateUserModalProps) => {
   const [step, setStep] = useState<Step>("form");
   const [formData, setFormData] = useState({
@@ -63,6 +65,7 @@ export const CreateUserModal = ({
           tempPassword={PREVIEW_FAKE_PASSWORD}
           loginUrl={loginUrl}
           botUrl={appBotUrl}
+          appLogo={appLogo}
         />
       ) : (
         <InviteEmailTemplate
@@ -71,6 +74,7 @@ export const CreateUserModal = ({
           tempPassword={PREVIEW_FAKE_PASSWORD}
           loginUrl={loginUrl}
           botUrl={appBotUrl}
+          appLogo={appLogo}
         />
       ),
     );
@@ -107,6 +111,7 @@ export const CreateUserModal = ({
             tempPassword={TEMP_PASSWORD_PLACEHOLDER}
             loginUrl={loginUrl}
             botUrl={appBotUrl}
+            appLogo={appLogo}
           />
         ) : (
           <InviteEmailTemplate
@@ -115,6 +120,7 @@ export const CreateUserModal = ({
             tempPassword={TEMP_PASSWORD_PLACEHOLDER}
             loginUrl={loginUrl}
             botUrl={appBotUrl}
+            appLogo={appLogo}
           />
         ),
       );

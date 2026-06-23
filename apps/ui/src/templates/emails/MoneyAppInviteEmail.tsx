@@ -5,12 +5,18 @@ interface MoneyAppInviteEmailProps {
   tempPassword?: string;
   loginUrl: string;
   botUrl?: string | null;
+  appLogo?: string | null;
 }
 
-export const MoneyAppInviteEmail: React.FC<MoneyAppInviteEmailProps> = ({ email, tempPassword, loginUrl, botUrl }) => {
+export const MoneyAppInviteEmail: React.FC<MoneyAppInviteEmailProps> = ({ email, tempPassword, loginUrl, botUrl, appLogo }) => {
   return (
     <div style={{ fontFamily: '"Inter", sans-serif', padding: '20px', color: '#e2e8f0', backgroundColor: '#0f172a' }}>
       <div style={{ maxWidth: '600px', margin: '0 auto', border: '1px solid #334155', borderRadius: '12px', padding: '30px', backgroundColor: '#1e293b' }}>
+        {appLogo && (
+          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+            <img src={appLogo} alt="Logo MoneyAPP" style={{ maxWidth: '120px', maxHeight: '120px', borderRadius: '8px' }} />
+          </div>
+        )}
         <h2 style={{ color: '#10b981', borderBottom: '1px solid #334155', paddingBottom: '15px', marginTop: 0 }}>
           Seu acesso ao MoneyAPP foi liberado!
         </h2>

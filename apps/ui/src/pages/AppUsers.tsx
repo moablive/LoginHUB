@@ -146,6 +146,7 @@ export const AppUsers = () => {
           appName={app?.nome || 'nossa plataforma'}
           loginUrl={window.location.origin}
           tempPassword={'__TEMP_PASSWORD__'}
+          appLogo={app?.logo}
         />
       );
 
@@ -314,6 +315,7 @@ export const AppUsers = () => {
         appId={appId!}
         appName={app?.nome}
         appBotUrl={app?.bot_url}
+        appLogo={app?.logo}
         onSuccess={({ email, emailSent, tempPassword }) => {
           fetchData();
           setShowFormModal(false);
