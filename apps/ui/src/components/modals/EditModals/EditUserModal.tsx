@@ -16,7 +16,6 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
     nome: '',
     email: '',
     telefone: '',
-    password: '',
     role: 'user'
   });
   const [loading, setLoading] = useState(false);
@@ -28,7 +27,6 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
         nome: user.nome,
         email: user.email,
         telefone: user.telefone || '',
-        password: '',
         role: user.role || 'user'
       });
       setError(null);
@@ -51,10 +49,6 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
         telefone: cleanPhone || undefined,
         role: formData.role
       };
-
-      if (formData.password.trim()) {
-        payload.password = formData.password;
-      }
 
       await userApi.update(user.id, payload);
       onSuccess();
@@ -141,22 +135,6 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
             />
           </div>
 
-          {/* Senha */}
-          <div className="pt-2 border-t border-gray-100 mt-2">
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
-              <KeyIcon className="h-4 w-4 text-gray-400" />
-              Nova Senha (Opcional)
-            </label>
-            <input
-              type="password"
-              autoComplete="new-password"
-              placeholder="Deixe em branco para manter a atual"
-              value={formData.password}
-              onChange={e => setFormData({...formData, password: e.target.value})}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition placeholder:text-gray-400 text-sm"
-            />
-            <p className="text-xs text-gray-500 mt-1">Preencha apenas se desejar redefinir a senha deste usuário.</p>
-          </div>
 
           {/* Footer */}
           <div className="pt-4 flex gap-3 justify-end">
