@@ -437,6 +437,17 @@ export class UserService {
             updateData.senhaHash = await bcrypt.hash(data.password, salt);
         }
 
+        if (data.role) {
+            const roleRes = await db.select({ id: niveisAcesso.id }).from(niveisAcesso).where(eq(niveisAcesso.nome, data.role)).limit(1);
+            if (roleRes.length > 0) {
+                updateData.nivelAcessoId = roleRes[0].id;
+            } else {
+                const error = new Error(`Nível de acesso '${data.role}' inválido.`);
+                (error as any).code = 'VALIDATION';
+                throw error;
+            }
+        }
+
         if (Object.keys(updateData).length > 0) {
             const result = await db.update(usuarios)
                 .set(updateData)

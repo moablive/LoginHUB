@@ -16,7 +16,8 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
     nome: '',
     email: '',
     telefone: '',
-    password: ''
+    password: '',
+    role: 'user'
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +28,8 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
         nome: user.nome,
         email: user.email,
         telefone: user.telefone || '',
-        password: ''
+        password: '',
+        role: user.role || 'user'
       });
       setError(null);
     }
@@ -46,7 +48,8 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
       const payload: UpdateUserPayload = {
         nome: formData.nome,
         email: formData.email,
-        telefone: cleanPhone || undefined
+        telefone: cleanPhone || undefined,
+        role: formData.role
       };
 
       if (formData.password.trim()) {
@@ -105,6 +108,21 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
               onChange={e => setFormData({...formData, email: e.target.value})}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
             />
+          </div>
+
+          {/* Nível de Acesso */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Nível de Acesso</label>
+            <select
+              value={formData.role}
+              onChange={e => setFormData({...formData, role: e.target.value})}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white"
+            >
+              <option value="user">Usuário</option>
+              <option value="admin">Administrador</option>
+              <option value="suporte">Suporte</option>
+              {formData.role === 'master' && <option value="master">Master</option>}
+            </select>
           </div>
 
           {/* ✅ Campo Telefone Adicionado */}

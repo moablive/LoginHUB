@@ -270,9 +270,13 @@ export class UserController {
 
     static async updateUser(req: Request<{ id: string }, {}, UpdateUserDTO>, res: Response) {
         const { id } = req.params;
-        const { nome, email, password, telefone } = req.body;
+        const { nome, email, password, telefone, role } = req.body;
+        const payload: UpdateUserDTO = { nome, email, password, telefone };
+        if (role !== undefined) {
+            payload.role = role;
+        }
         try {
-            const updatedUser = await userService.updateUser(id, { nome, email, password, telefone });
+            const updatedUser = await userService.updateUser(id, payload);
             return res.status(200).json(updatedUser);
         } catch (err: unknown) {
             const error = err as DbError;
