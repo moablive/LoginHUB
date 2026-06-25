@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { XMarkIcon, UserPlusIcon, EnvelopeIcon, ArrowLeftIcon, PaperAirplaneIcon } from "@heroicons/react/24/outline";
+import { XMarkIcon, UserPlusIcon, EnvelopeIcon, ArrowLeftIcon, PaperAirplaneIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
 import { userApi } from "@loginhub/api-client";
 import ReactDOMServer from "react-dom/server";
 import { InviteEmailTemplate, MoneyAppInviteEmail } from "../../../templates/emails";
@@ -137,8 +137,16 @@ export const CreateUserModal = ({
       onClose();
     } catch (err: unknown) {
       console.error(err);
-      if (err instanceof Error) setError(err.message);
-      else setError("Ocorreu um erro ao convidar o usuário.");
+      if (err instanceof Error) {
+        // 409 = e-mail já cadastrado em outro aplicativo
+        if (err.message.includes("409") || err.message.toLowerCase().includes("conflito") || err.message.toLowerCase().includes("já está em uso") || err.message.toLowerCase().includes("duplicate")) {
+          setError(`O e-mail "${formData.email}" já está cadastrado em outro aplicativo do sistema. Cada e-mail só pode ser usado uma vez. Use um e-mail diferente.`);
+        } else {
+          setError(err.message);
+        }
+      } else {
+        setError("Ocorreu um erro ao convidar o usuário.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -219,6 +227,12 @@ export const CreateUserModal = ({
                     className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
                     placeholder="usuario@aplicativo.com"
                   />
+                  <div className="mt-2 flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2">
+                    <ExclamationTriangleIcon className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-700 leading-snug">
+                      <strong>E-mail único no sistema:</strong> cada endereço de e-mail só pode ser cadastrado uma vez em toda a plataforma, independente do aplicativo. Se o e-mail já foi usado em outro app, utilize um endereço diferente.
+                    </p>
+                  </div>
                 </div>
 
                 <div>
