@@ -46,7 +46,7 @@ export const CreateUserModal = ({
 
   useEffect(() => {
     if (isOpen) {
-      setFormData({ nome: "", email: "", role: "usuario" });
+      setFormData({ nome: "", email: "", role: "user" });
       setStep("form");
       setError(null);
     }
