@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, integer, timestamp, boolean, text } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, integer, timestamp, boolean, text, unique } from 'drizzle-orm/pg-core';
 
 // ==========================================
 // USER MODELS
@@ -46,7 +46,27 @@ export interface UpdateUserDTO {
 // ==========================================
 export interface LoginInputDTO {
     email: string;
-    password: string; 
+    password: string;
+    /**
+     * ID do aplicativo (tenant) ao qual o usuário pertence. Opcional.
+     * - Se informado: o login busca apenas usuários daquele app específico.
+     * - Se omitido E o e-mail existir em mais de um app: o backend responde
+     *   com erro `AMBIGUOUS_EMAIL` + lista `availableApps` para o cliente
+     *   escolher qual app está tentando logar.
+     */
+    app_id?: string | undefined;
+}
+
+export interface AvailableAppSummary {
+    id: string;
+    nome: string;
+    logo?: string | null;
+}
+
+export interface AmbiguousLoginResponse {
+    error: 'AMBIGUOUS_EMAIL';
+    message: string;
+    availableApps: AvailableAppSummary[];
 }
 
 export interface LoginResponse {
@@ -227,7 +247,8 @@ export const usuarios = pgTable('usuarios', {
     appId: integer('app_id').references(() => aplicativos.id, { onDelete: 'cascade' }),
     nivelAcessoId: integer('nivel_acesso_id').references(() => niveisAcesso.id),
     nome: varchar('nome', { length: 255 }).notNull(),
-    email: varchar('email', { length: 255 }).notNull().unique(),
+    // E-mail é único por aplicativo, não global. O mesmo e-mail pode existir em apps diferentes.
+    email: varchar('email', { length: 255 }).notNull(),
     senhaHash: varchar('senha_hash', { length: 255 }).notNull(),
     senhaPadrao: boolean('senha_padrao').default(true).notNull(),
     telefone: varchar('telefone', { length: 20 }),
@@ -235,4 +256,6 @@ export const usuarios = pgTable('usuarios', {
     ultimoAcesso: timestamp('ultimo_acesso'),
     dataCadastro: timestamp('data_cadastro').defaultNow(),
     dataAtualizacao: timestamp('data_atualizacao'),
-});
+}, (table) => ({
+    emailAppIdUnique: unique('usuarios_email_app_id_unique').on(table.email, table.appId),
+}));

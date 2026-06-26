@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { db } from '@loginhub/database';
 import { aplicativos, usuarios, niveisAcesso } from '@loginhub/schema';
-import { eq, and, ne } from 'drizzle-orm';
+import { eq, and, ne, sql } from 'drizzle-orm';
 import { emailService } from './EmailService';
 import {
     LoginInputDTO,
@@ -21,7 +21,10 @@ import {
 // ==========================================
 export class AuthService {
     public async login(data: LoginInputDTO): Promise<LoginResponseDTO> {
-        const result = await db.select({
+        // Mesmo e-mail pode existir em apps diferentes (unique composto).
+        // Se o cliente passa app_id, filtra direto. Senão e houver ambiguidade, devolve a lista
+        // de apps disponíveis para o cliente escolher.
+        const baseSelect = {
             id: usuarios.id,
             nome: usuarios.nome,
             email: usuarios.email,
@@ -29,27 +32,40 @@ export class AuthService {
             senha_padrao: usuarios.senhaPadrao,
             app_id: usuarios.appId,
             app_nome: aplicativos.nome,
+            app_logo: aplicativos.logo,
             app_status: aplicativos.status,
             status: usuarios.status,
-            role_nome: niveisAcesso.nome
-        })
-        .from(usuarios)
-        .innerJoin(aplicativos, eq(usuarios.appId, aplicativos.id))
-        .innerJoin(niveisAcesso, eq(usuarios.nivelAcessoId, niveisAcesso.id))
-        .where(eq(usuarios.email, data.email))
-        .limit(1);
+            role_nome: niveisAcesso.nome,
+        };
+
+        const whereClause = data.app_id
+            ? and(eq(usuarios.email, data.email), eq(usuarios.appId, Number(data.app_id)))
+            : eq(usuarios.email, data.email);
+
+        const result = await db.select(baseSelect)
+            .from(usuarios)
+            .innerJoin(aplicativos, eq(usuarios.appId, aplicativos.id))
+            .innerJoin(niveisAcesso, eq(usuarios.nivelAcessoId, niveisAcesso.id))
+            .where(whereClause);
+
+        if (result.length === 0) throw new Error('CREDENCIAIS_INVALIDAS');
+
+        // Ambiguidade: e-mail está em múltiplos apps e o cliente não disse qual quer.
+        if (result.length > 1) {
+            const ambig = new Error('AMBIGUOUS_EMAIL') as Error & { availableApps?: Array<{ id: string; nome: string; logo: string | null }> };
+            ambig.availableApps = result.map(r => ({
+                id: r.app_id ? r.app_id.toString() : '0',
+                nome: r.app_nome,
+                logo: r.app_logo ?? null,
+            }));
+            throw ambig;
+        }
 
         const user = result[0];
-
-        if (!user) throw new Error('CREDENCIAIS_INVALIDAS');
         if (user.app_status !== 'ativo') throw new Error('APP_BLOQUEADO');
         if (user.status !== 'ativo') throw new Error('USUARIO_BLOQUEADO');
 
-        const senhaValida = await db.transaction(async () => await bcrypt.compare(data.password, user.senha_hash)).catch(() => false);
-        if (!senhaValida) {
-            const isValid = await bcrypt.compare(data.password, user.senha_hash);
-            if(!isValid) throw new Error('CREDENCIAIS_INVALIDAS');
-        }
+        const senhaValida = await bcrypt.compare(data.password, user.senha_hash);
         if (!senhaValida) throw new Error('CREDENCIAIS_INVALIDAS');
 
         db.update(usuarios)
@@ -382,7 +398,7 @@ export class UserService {
             // Só devolve a senha ao admin se o e-mail não saiu (fallback de emergência)
             return { tempPassword: emailSent ? undefined : tempPassword, emailSent };
         } catch (error: any) {
-            if (error.code === '23505') throw Object.assign(new Error('E-mail já está em uso.'), { code: 'DUPLICATE_ENTRY' });
+            if (error.code === '23505') throw Object.assign(new Error('E-mail já está em uso neste aplicativo.'), { code: 'DUPLICATE_ENTRY' });
             if (error.code === '23503') throw Object.assign(new Error('A app informada não existe.'), { code: 'RELATION_ERROR' });
             throw error;
         }
@@ -423,13 +439,31 @@ export class UserService {
 
     public async updateUser(id: string, data: UpdateUserDTO) {
         if (data.email) {
+            // Duplicidade é por (email, app_id) — mesmo e-mail pode existir em apps diferentes.
+            // Precisamos descobrir o app do usuário sendo atualizado antes de validar.
+            const currentUser = await db.select({ appId: usuarios.appId })
+                .from(usuarios)
+                .where(eq(usuarios.id, Number(id)))
+                .limit(1);
+
+            if (currentUser.length === 0) {
+                const error = new Error('Usuário não encontrado.');
+                (error as any).code = 'NOT_FOUND';
+                throw error;
+            }
+
+            const currentAppId = currentUser[0].appId;
             const emailCheck = await db.select({ id: usuarios.id })
                 .from(usuarios)
-                .where(and(eq(usuarios.email, data.email), ne(usuarios.id, Number(id))))
+                .where(and(
+                    eq(usuarios.email, data.email),
+                    currentAppId !== null ? eq(usuarios.appId, currentAppId) : sql`${usuarios.appId} IS NULL`,
+                    ne(usuarios.id, Number(id)),
+                ))
                 .limit(1);
 
             if (emailCheck.length > 0) {
-                const error = new Error('E-mail já está em uso por outro usuário.');
+                const error = new Error('E-mail já está em uso por outro usuário neste aplicativo.');
                 (error as any).code = 'DUPLICATE_ENTRY';
                 throw error;
             }

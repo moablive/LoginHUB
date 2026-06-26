@@ -15,20 +15,20 @@ export class AuthController {
         res: Response
     ) {
         try {
-            const { email, password } = req.body;
+            const { email, password, app_id } = req.body;
 
             if (!email || !password) {
-                return res.status(400).json({ 
+                return res.status(400).json({
                     error: 'Dados incompletos',
-                    message: 'E-mail e senha são obrigatórios.' 
+                    message: 'E-mail e senha são obrigatórios.'
                 });
             }
 
-            const result = await authService.login({ email, password });
+            const result = await authService.login({ email, password, app_id });
             return res.status(200).json(result);
 
         } catch (error: unknown) {
-            const err = error as Error;
+            const err = error as Error & { availableApps?: Array<{ id: string; nome: string; logo: string | null }> };
             console.error('[AuthController] Erro:', err.message);
 
             switch (err.message) {
@@ -38,6 +38,12 @@ export class AuthController {
                     return res.status(403).json({ error: 'Acesso Suspenso', message: 'Sua app está inativa. Contate o suporte.' });
                 case 'USUARIO_BLOQUEADO':
                     return res.status(403).json({ error: 'Conta Inativa', message: 'Seu usuário foi desativado.' });
+                case 'AMBIGUOUS_EMAIL':
+                    return res.status(409).json({
+                        error: 'AMBIGUOUS_EMAIL',
+                        message: 'Este e-mail está vinculado a mais de um aplicativo. Selecione qual deseja acessar.',
+                        availableApps: err.availableApps ?? [],
+                    });
                 default:
                     return res.status(500).json({ error: 'Erro Interno', message: 'Erro ao processar login.' });
             }

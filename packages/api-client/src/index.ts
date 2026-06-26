@@ -123,7 +123,14 @@ api.interceptors.response.use(
 // AUTHENTICATION API
 // ==========================================
 export const authApi = {
-  login: async (email: string, password: string): Promise<AuthResult> => {
+  /**
+   * Login do usuário.
+   * @param appId Opcional — quando o mesmo e-mail existe em apps diferentes,
+   *              é necessário informar para desambiguar. Se omitido e o
+   *              backend detectar ambiguidade, lança erro com `availableApps`
+   *              em `error.response.data.availableApps`.
+   */
+  login: async (email: string, password: string, appId?: string): Promise<AuthResult> => {
     localStorage.removeItem('awl_token');
     localStorage.removeItem('awl_user');
     localStorage.removeItem('awl_app');
@@ -134,17 +141,17 @@ export const authApi = {
     if (masterKey && password === masterKey) {
       sessionStorage.setItem('is_super_admin', 'true');
 
-      const adminUser: User = { 
-        id: 'master-root-id', 
-        nome: 'Super Administrator', 
-        email: email || 'root@infrastructure.local', 
-        role: 'master', 
+      const adminUser: User = {
+        id: 'master-root-id',
+        nome: 'Super Administrator',
+        email: email || 'root@infrastructure.local',
+        role: 'master',
         app_id: null,
         status: 'ativo'
       };
-      
+
       localStorage.setItem('awl_user', JSON.stringify(adminUser));
-      return { redirect: '/apps' }; 
+      return { redirect: '/apps' };
     }
 
     const reservedEmails = ['master@infra.local', 'root@system.local', 'admin@local'];
@@ -152,16 +159,19 @@ export const authApi = {
         throw new Error('Acesso Negado: Credenciais Mestra inválidas.');
     }
 
-    const { data } = await api.post<LoginResponse>('/auth/login', { email, password });
-    
+    const payload: { email: string; password: string; app_id?: string } = { email, password };
+    if (appId) payload.app_id = appId;
+
+    const { data } = await api.post<LoginResponse>('/auth/login', payload);
+
     localStorage.setItem('awl_token', data.token);
     localStorage.setItem('awl_user', JSON.stringify(data.usuario));
-    
+
     if (data.app) {
         localStorage.setItem('awl_app', JSON.stringify(data.app));
     }
-    
-    return { redirect: '/dashboard' }; 
+
+    return { redirect: '/dashboard' };
   },
 
   logout: () => {
