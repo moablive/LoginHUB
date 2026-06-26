@@ -563,7 +563,7 @@ ls -la apps/ui/.env   # deve mostrar o link simbólico
 <summary><b>E-mail não chega no destinatário</b></summary>
 
 1. Confirme que `SMTP_HOST` (e não `SMTP_SERVER`) está no `.env`
-2. Cheque os logs: `docker logs server_loginhub_api | grep -i email`
+2. Cheque os logs: `docker logs server_loginhub_backend | grep -i email`
 3. Verifique a pasta **Spam** do destinatário (ProtonMail é especialmente filtrador)
 4. Configure SPF/DKIM no DNS do `astralwavelabel.com` autorizando o Hostinger
 </details>
