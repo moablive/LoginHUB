@@ -209,6 +209,7 @@ export class AppService {
                     telefone: data.telefone || null,
                     logo: data.logo || null,
                     botUrl: data.bot_url || null,
+                    platformUrl: data.platform_url || null,
                 }).returning({ id: aplicativos.id });
 
                 const appId = appRes[0].id;
@@ -269,6 +270,7 @@ export class AppService {
                 data_cadastro: row.dataCadastro,
                 data_atualizacao: row.dataAtualizacao,
                 bot_url: row.botUrl,
+                platform_url: row.platformUrl,
                 total_usuarios
             };
         });
@@ -289,6 +291,7 @@ export class AppService {
             data_cadastro: rows[0].dataCadastro,
             data_atualizacao: rows[0].dataAtualizacao,
             bot_url: rows[0].botUrl,
+            platform_url: rows[0].platformUrl,
             total_usuarios: allUsers.length
         };
     }
@@ -302,6 +305,7 @@ export class AppService {
             if (data.telefone !== undefined) updateData.telefone = data.telefone || null;
             if (data.logo !== undefined) updateData.logo = data.logo || null;
             if (data.bot_url !== undefined) updateData.botUrl = data.bot_url || null;
+            if (data.platform_url !== undefined) updateData.platformUrl = data.platform_url || null;
 
             if (Object.keys(updateData).length === 0) return null;
 

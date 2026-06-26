@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { XMarkIcon, UserPlusIcon, EnvelopeIcon, ArrowLeftIcon, PaperAirplaneIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
+import { XMarkIcon, UserPlusIcon, EnvelopeIcon, ArrowLeftIcon, PaperAirplaneIcon, InformationCircleIcon } from "@heroicons/react/24/outline";
 import { userApi } from "@loginhub/api-client";
 import ReactDOMServer from "react-dom/server";
 import { InviteEmailTemplate, MoneyAppInviteEmail } from "../../../templates/emails";
@@ -18,6 +18,7 @@ export interface CreateUserModalProps {
   appId: string;
   appName?: string;
   appBotUrl?: string | null;
+  appPlatformUrl?: string | null;
   appLogo?: string | null;
 }
 
@@ -33,6 +34,7 @@ export const CreateUserModal = ({
   appId,
   appName,
   appBotUrl,
+  appPlatformUrl,
   appLogo,
 }: CreateUserModalProps) => {
   const [step, setStep] = useState<Step>("form");
@@ -57,7 +59,8 @@ export const CreateUserModal = ({
   // HTML para o preview (com placeholder amigável)
   const previewHtml = useMemo(() => {
     if (!formData.email) return "";
-    const loginUrl = window.location.origin;
+    // Só inclui o botão "Acessar Sistema" se o app tem URL de plataforma cadastrada.
+    const loginUrl = appPlatformUrl || undefined;
     return ReactDOMServer.renderToStaticMarkup(
       isMoneyApp ? (
         <MoneyAppInviteEmail
@@ -78,7 +81,7 @@ export const CreateUserModal = ({
         />
       ),
     );
-  }, [formData.email, appName, isMoneyApp, appBotUrl]);
+  }, [formData.email, appName, isMoneyApp, appBotUrl, appPlatformUrl, appLogo]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
@@ -102,7 +105,8 @@ export const CreateUserModal = ({
     setError(null);
 
     try {
-      const loginUrl = window.location.origin;
+      // Só inclui o botão "Acessar Sistema" se o app tem URL de plataforma cadastrada.
+    const loginUrl = appPlatformUrl || undefined;
       // HTML real para envio: senha trocada pelo placeholder que o backend substitui
       const emailHtml = ReactDOMServer.renderToStaticMarkup(
         isMoneyApp ? (
@@ -227,10 +231,10 @@ export const CreateUserModal = ({
                     className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
                     placeholder="usuario@aplicativo.com"
                   />
-                  <div className="mt-2 flex items-start gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-2">
-                    <ExclamationTriangleIcon className="h-4 w-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                    <p className="text-xs text-amber-700 leading-snug">
-                      <strong>E-mail único no sistema:</strong> cada endereço de e-mail só pode ser cadastrado uma vez em toda a plataforma, independente do aplicativo. Se o e-mail já foi usado em outro app, utilize um endereço diferente.
+                  <div className="mt-2 flex items-start gap-2 rounded-md bg-blue-50 border border-blue-200 px-3 py-2">
+                    <InformationCircleIcon className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-blue-700 leading-snug">
+                      <strong>E-mail único por aplicativo:</strong> o mesmo e-mail pode ser usado em aplicativos diferentes, mas não pode se repetir dentro deste aplicativo.
                     </p>
                   </div>
                 </div>

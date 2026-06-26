@@ -3,7 +3,7 @@ import React from 'react';
 interface MoneyAppInviteEmailProps {
   email: string;
   tempPassword?: string;
-  loginUrl: string;
+  loginUrl?: string | null;
   botUrl?: string | null;
   appLogo?: string | null;
 }
@@ -37,11 +37,13 @@ export const MoneyAppInviteEmail: React.FC<MoneyAppInviteEmailProps> = ({ email,
           No seu primeiro acesso, o sistema exigirá a criação de uma senha definitiva.
           {botUrl ? ' Após criar sua nova senha, você poderá se conectar ao nosso assistente pelo link abaixo.' : ''}
         </p>
-        <div style={{ textAlign: 'center', marginTop: '35px' }}>
-          <a href={loginUrl} style={{ backgroundColor: '#10b981', color: '#ffffff', padding: '14px 28px', textDecoration: 'none', borderRadius: '8px', fontWeight: '600', display: 'inline-block', fontSize: '16px' }}>
-            Acessar MoneyAPP
-          </a>
-        </div>
+        {loginUrl && (
+          <div style={{ textAlign: 'center', marginTop: '35px' }}>
+            <a href={loginUrl} style={{ backgroundColor: '#10b981', color: '#ffffff', padding: '14px 28px', textDecoration: 'none', borderRadius: '8px', fontWeight: '600', display: 'inline-block', fontSize: '16px' }}>
+              Acessar MoneyAPP
+            </a>
+          </div>
+        )}
         {botUrl && (
           <div style={{ textAlign: 'center', marginTop: '15px' }}>
             <a href={botUrl} style={{ backgroundColor: '#0ea5e9', color: '#ffffff', padding: '12px 24px', textDecoration: 'none', borderRadius: '8px', fontWeight: '600', display: 'inline-block', fontSize: '15px' }}>

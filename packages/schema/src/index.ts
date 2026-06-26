@@ -130,6 +130,7 @@ export interface App {
     telefone?: string;
     logo?: string | null;
     bot_url?: string | null;
+    platform_url?: string | null;
     dominio?: string;
     status: 'ativo' | 'inativo' | 'bloqueado' | 'ativa' | 'inativa' | 'bloqueada';
     data_cadastro?: string | Date;
@@ -145,6 +146,7 @@ export interface CreateAppDTO {
     telefone?: string;
     logo?: string;
     bot_url?: string;
+    platform_url?: string;
     password?: string;
     admin_nome?: string;
     admin_email?: string;
@@ -159,6 +161,7 @@ export interface UpdateAppDTO {
     telefone?: string | undefined;
     logo?: string | null | undefined;
     bot_url?: string | null | undefined;
+    platform_url?: string | null | undefined;
 }
 
 export interface CreateAppResponse {
@@ -237,6 +240,7 @@ export const aplicativos = pgTable('aplicativos', {
     telefone: varchar('telefone', { length: 20 }),
     logo: text('logo'),
     botUrl: varchar('bot_url', { length: 500 }),
+    platformUrl: varchar('platform_url', { length: 500 }),
     status: varchar('status', { length: 20 }).default('ativo'),
     dataCadastro: timestamp('data_cadastro').defaultNow(),
     dataAtualizacao: timestamp('data_atualizacao'),

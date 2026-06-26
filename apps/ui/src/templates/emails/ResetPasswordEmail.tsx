@@ -4,7 +4,7 @@ interface ResetPasswordEmailProps {
   email: string;
   tempPassword?: string;
   appName: string;
-  loginUrl: string;
+  loginUrl?: string | null;
   appLogo?: string | null;
 }
 
@@ -28,11 +28,13 @@ export const ResetPasswordEmail: React.FC<ResetPasswordEmailProps> = ({ email, t
         <p style={{ fontSize: '14px', color: '#64748b' }}>
           Por favor, utilize esta senha temporária para acessar o sistema. Você deverá criar uma nova senha definitiva no primeiro acesso.
         </p>
-        <div style={{ textAlign: 'center', marginTop: '30px' }}>
-          <a href={loginUrl} style={{ backgroundColor: '#3b82f6', color: '#fff', padding: '12px 24px', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', display: 'inline-block' }}>
-            Acessar Sistema
-          </a>
-        </div>
+        {loginUrl && (
+          <div style={{ textAlign: 'center', marginTop: '30px' }}>
+            <a href={loginUrl} style={{ backgroundColor: '#3b82f6', color: '#fff', padding: '12px 24px', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', display: 'inline-block' }}>
+              Acessar Sistema
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );

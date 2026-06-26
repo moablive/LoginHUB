@@ -4,7 +4,7 @@ interface InviteEmailProps {
   email: string;
   tempPassword?: string;
   appName: string;
-  loginUrl: string;
+  loginUrl?: string | null;
   botUrl?: string | null;
   appLogo?: string | null;
 }
@@ -29,11 +29,13 @@ export const InviteEmailTemplate: React.FC<InviteEmailProps> = ({ email, tempPas
         <p style={{ fontSize: '14px', color: '#64748b' }}>
           No seu primeiro acesso, o sistema exigirá a criação de uma senha definitiva.
         </p>
-        <div style={{ textAlign: 'center', marginTop: '30px' }}>
-          <a href={loginUrl} style={{ backgroundColor: '#3b82f6', color: '#fff', padding: '12px 24px', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', display: 'inline-block' }}>
-            Acessar Sistema
-          </a>
-        </div>
+        {loginUrl && (
+          <div style={{ textAlign: 'center', marginTop: '30px' }}>
+            <a href={loginUrl} style={{ backgroundColor: '#3b82f6', color: '#fff', padding: '12px 24px', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', display: 'inline-block' }}>
+              Acessar Sistema
+            </a>
+          </div>
+        )}
         {botUrl && (
           <div style={{ textAlign: 'center', marginTop: '12px' }}>
             <a href={botUrl} style={{ backgroundColor: '#0ea5e9', color: '#fff', padding: '10px 22px', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', display: 'inline-block', fontSize: '14px' }}>

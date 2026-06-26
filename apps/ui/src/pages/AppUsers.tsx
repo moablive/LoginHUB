@@ -165,7 +165,7 @@ export const AppUsers = () => {
         <ResetPasswordEmail
           email={user.email}
           appName={app?.nome || 'nossa plataforma'}
-          loginUrl={window.location.origin}
+          loginUrl={app?.platform_url || undefined}
           tempPassword={'__TEMP_PASSWORD__'}
           appLogo={app?.logo}
         />
@@ -364,6 +364,7 @@ export const AppUsers = () => {
         appId={appId!}
         appName={app?.nome}
         appBotUrl={app?.bot_url}
+        appPlatformUrl={app?.platform_url}
         appLogo={app?.logo}
         onSuccess={({ email, emailSent, tempPassword }) => {
           fetchData();

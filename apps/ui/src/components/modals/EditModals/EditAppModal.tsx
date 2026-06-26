@@ -18,6 +18,7 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
     email: '',
     documento: '',
     telefone: '',
+    platform_url: '',
     bot_url: ''
   });
   const [logo, setLogo] = useState<string | null>(null);
@@ -31,6 +32,7 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
         email: app.email,
         documento: app.documento,
         telefone: app.telefone || '',
+        platform_url: app.platform_url || '',
         bot_url: app.bot_url || ''
       });
       setLogo(app.logo ?? null);
@@ -55,6 +57,7 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
         documento: cleanDocumento,
         telefone: cleanTelefone || undefined,
         logo: logo ?? null,
+        platform_url: formData.platform_url.trim() || null,
         bot_url: formData.bot_url.trim() || null,
       });
 
@@ -130,6 +133,20 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
               maxLength={15}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              URL da Plataforma <span className="text-gray-400 font-normal">(opcional)</span>
+            </label>
+            <input
+              type="url"
+              value={formData.platform_url}
+              onChange={e => setFormData({...formData, platform_url: e.target.value})}
+              placeholder="https://app.exemplo.com"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+            />
+            <p className="mt-1 text-xs text-gray-500">Link "Acessar Sistema" do e-mail de convite.</p>
           </div>
 
           <div>

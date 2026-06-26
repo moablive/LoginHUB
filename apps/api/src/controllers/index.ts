@@ -187,12 +187,12 @@ export class AppController {
         }
     }
 
-    static async updateApp(req: Request<{ id: string }, {}, UpdateAppDTO & { logo?: string | null; bot_url?: string | null }>, res: Response) {
+    static async updateApp(req: Request<{ id: string }, {}, UpdateAppDTO & { logo?: string | null; bot_url?: string | null; platform_url?: string | null }>, res: Response) {
         const { id } = req.params;
-        const { nome, email, documento, telefone, logo, bot_url } = req.body;
+        const { nome, email, documento, telefone, logo, bot_url, platform_url } = req.body;
 
         try {
-            const updatedApp = await appService.updateApp(id, { nome, email, documento, telefone: telefone || undefined, logo, bot_url });
+            const updatedApp = await appService.updateApp(id, { nome, email, documento, telefone: telefone || undefined, logo, bot_url, platform_url });
             return res.status(200).json(updatedApp);
         } catch (err: unknown) {
             const error = err as DbError;
