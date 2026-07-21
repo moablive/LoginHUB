@@ -15,7 +15,7 @@ export const SuperAdminRoute = () => {
   const isMaster = sessionStorage.getItem('is_super_admin') === 'true'; 
 
   if (!isAuth || !isMaster) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   return <Outlet />;

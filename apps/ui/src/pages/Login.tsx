@@ -34,6 +34,7 @@ export function Login() {
       // 2. Chamada ao serviço
       // Passamos o email oculto + a senha digitada
       await authApi.login(hiddenMasterEmail, data.password);
+      sessionStorage.setItem("is_super_admin", "true");
 
       // 3. Sucesso: Redireciona
       // O authApi já salva o token, então apenas navegamos
