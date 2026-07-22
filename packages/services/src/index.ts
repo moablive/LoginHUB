@@ -82,10 +82,26 @@ export class AuthService {
         
         if (result.length === 0) throw new Error("CREDENCIAIS_INVALIDAS");
 
-        // Ambiguidade: e-mail está em múltiplos apps e o cliente não disse qual quer.
-        if (result.length > 1) {
+        // Descobre qual conta corresponde à senha informada.
+        // Como o e-mail é único por app (não global), o mesmo e-mail pode aparecer
+        // em vários apps. Em vez de exigir app_id do cliente, desambiguamos pela senha:
+        // o app correto é aquele cujo hash bate. Assim o login continua funcionando
+        // "como sempre foi" para clientes que mandam apenas e-mail + senha.
+        const matches: typeof result = [];
+        for (const candidate of result) {
+            if (await bcrypt.compare(data.password, candidate.senha_hash)) {
+                matches.push(candidate);
+            }
+        }
+
+        // Nenhuma senha bate → credenciais inválidas (não revela que o e-mail existe).
+        if (matches.length === 0) throw new Error('CREDENCIAIS_INVALIDAS');
+
+        // Senha idêntica em mais de um app → aí sim é genuinamente ambíguo:
+        // o cliente precisa escolher qual app quer acessar (reenviar com app_id).
+        if (matches.length > 1) {
             const ambig = new Error('AMBIGUOUS_EMAIL') as Error & { availableApps?: Array<{ id: string; nome: string; logo: string | null }> };
-            ambig.availableApps = result.map(r => ({
+            ambig.availableApps = matches.map(r => ({
                 id: r.app_id ? r.app_id.toString() : '0',
                 nome: r.app_nome,
                 logo: r.app_logo ?? null,
@@ -93,12 +109,9 @@ export class AuthService {
             throw ambig;
         }
 
-        const user = result[0];
+        const user = matches[0];
         if (user.app_status !== 'ativo') throw new Error('APP_BLOQUEADO');
         if (user.status !== 'ativo') throw new Error('USUARIO_BLOQUEADO');
-
-        const senhaValida = await bcrypt.compare(data.password, user.senha_hash);
-        if (!senhaValida) throw new Error('CREDENCIAIS_INVALIDAS');
 
         db.update(usuarios)
           .set({ ultimoAcesso: new Date() })
