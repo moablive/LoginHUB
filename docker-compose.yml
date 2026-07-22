@@ -4,7 +4,7 @@ services:
   login-hub-api:
     container_name: server_loginhub_backend
     build:
-      context: ../../
+      context: .
       dockerfile: apps/api/Dockerfile
     restart: always
 
@@ -31,7 +31,7 @@ services:
       
     # Carrega o arquivo para ler os segredos (${DB_PASS}, etc)
     env_file:
-      - ../../.env
+      - .env
 
     networks:
       - awl_network
@@ -41,6 +41,26 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  login-hub-ui:
+    container_name: server_loginhub_frontend
+    build:
+      context: .
+      dockerfile: apps/ui/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+        VITE_MASTER_KEY: ${VITE_MASTER_KEY}
+    
+    env_file:
+      - .env
+
+    restart: always
+
+    ports:
+      - "3006:80"
+
+    networks:
+      - awl_network
 
 networks:
   awl_network:

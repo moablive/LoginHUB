@@ -89,7 +89,22 @@
       "Bash(curl -sS -o /dev/null -w \"LoginHub UI:  HTTP %{http_code}\\\\n\" -L https://loginhub.astralwavelabel.com/login)",
       "Bash(curl -sS -o /dev/null -w \"LoginHub API: HTTP %{http_code}\\\\n\" -L https://api-auth.astralwavelabel.com/api)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('  platform_url:', d.get\\('platform_url'\\)\\); print\\('  bot_url:', d.get\\('bot_url'\\)\\); print\\('  logo:', 'sim' if d.get\\('logo'\\) else 'não'\\)\")",
-      "Bash(curl -sS -o /dev/null -w \"LoginHub UI: HTTP %{http_code}\\\\n\" -L https://loginhub.astralwavelabel.com/login)"
+      "Bash(curl -sS -o /dev/null -w \"LoginHub UI: HTTP %{http_code}\\\\n\" -L https://loginhub.astralwavelabel.com/login)",
+      "Bash(grep -iE \"bcrypt|jsonweb|nodemailer|node$\")",
+      "Bash(git stash *)",
+      "Bash(npm install *)",
+      "Bash(gh auth *)",
+      "Bash(git ls-remote *)",
+      "Bash(git -c credential.helper='!gh auth git-credential' push origin main)",
+      "Bash(git fetch *)",
+      "Bash(xargs -I{} echo \"commits ahead of origin: {}\")",
+      "Bash(awk -F= '/^[A-Za-z]/ { *)",
+      "Bash(awk -F': ' '{gsub\\(/\"/,\"\",$2\\); printf \"%s -> len_resolvido=%d\\\\n\", $1, length\\($2\\)}')",
+      "Bash(awk -F= '/^\\(DB_PASSWORD|MASTER_API_KEY|VITE_MASTER_KEY|SMTP_PASS\\)=/ { *)",
+      "Bash(docker run *)",
+      "Bash(awk -F': ' '{gsub\\(/\"/,\"\",$2\\); printf \"%s -> len=%d\\\\n\", $1, length\\($2\\)}')",
+      "Bash(awk '{ if\\($0 ~ /PASSWORD|MASTER|SECRET/\\){ n=length\\($0\\); print \"  [line with secret, chars=\"n\"]\" } else print }')",
+      "Bash(echo \"exit=$?\")"
     ]
   }
 }

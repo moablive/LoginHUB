@@ -1,23 +1,21 @@
 #!/usr/bin/env bash
 # =============================================================================
-# redeploy.sh — Republica (redeploy) os projetos Docker do LifeBusinessSuit.
+# redeploy.sh — Republica (redeploy) o projeto Docker LoginHUB.
 #
-# Descobre AUTOMATICAMENTE cada subpasta que contém um docker-compose.yml
-# (MailAPP, MoneyAPP, TodoAPP e qualquer projeto futuro como o NotesAPP),
-# garante a rede externa `awl_network` e roda o padrão do repositório:
+# Roda o padrão do repositório a partir da raiz:
 #
 #     docker compose --env-file .env up -d --build
 #
-# Sem argumentos, num terminal, ele PERGUNTA qual app republicar (menu).
-# Em cron/pipe (sem terminal) e sem argumentos = republica TODOS os projetos.
+# Sem argumentos, num terminal, ele exibe um menu para escolher o serviço.
+# Em cron/pipe (sem terminal) e sem argumentos = republica TODOS os serviços.
 #
 # Exemplos:
-#   ./redeploy.sh                 # menu interativo: escolha qual app (ou TODOS)
-#   ./redeploy.sh MoneyAPP        # só o MoneyAPP
-#   ./redeploy.sh Money Todo      # dois projetos (case-insensitive, prefixo ok)
-#   ./redeploy.sh --list          # lista os projetos descobertos
-#   ./redeploy.sh --no-build App  # sobe sem rebuildar imagem
-#   ./redeploy.sh --down MailAPP  # derruba e recria do zero (recreate limpo)
+#   ./redeploy.sh                 # menu interativo
+#   ./redeploy.sh api             # só a API
+#   ./redeploy.sh ui              # só a UI
+#   ./redeploy.sh api ui          # os dois serviços
+#   ./redeploy.sh --no-build api  # sobe sem rebuildar imagem
+#   ./redeploy.sh --down api      # derruba e recria do zero
 #   ./redeploy.sh --pull --prune  # atualiza imagens base e limpa dangling
 # =============================================================================
 set -uo pipefail
@@ -48,7 +46,7 @@ JUST_LIST=0
 SELECTED=()
 
 usage() {
-  sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
@@ -71,32 +69,22 @@ done
 command -v docker >/dev/null 2>&1 || { err "docker não encontrado no PATH."; exit 1; }
 docker compose version >/dev/null 2>&1 || { err "'docker compose' (v2) não disponível."; exit 1; }
 
-# --- Descoberta de projetos --------------------------------------------------
-# Um "projeto" é qualquer subpasta imediata de ROOT_DIR com um docker-compose.yml.
-mapfile -t ALL_PROJECTS < <(
-  find "$ROOT_DIR" -name "node_modules" -prune -o -mindepth 2 -maxdepth 3 -name "$COMPOSE_FILE" -printf '%h\n' \
-    | sort -u
-)
-
-if [[ ${#ALL_PROJECTS[@]} -eq 0 ]]; then
-  err "Nenhum projeto com $COMPOSE_FILE encontrado em $ROOT_DIR"
-  exit 1
-fi
+# --- Serviços Disponíveis ----------------------------------------------------
+# No LoginHUB temos serviços definidos no docker-compose.yml raiz
+ALL_SERVICES=("login-hub-api" "login-hub-ui")
 
 if [[ $JUST_LIST -eq 1 ]]; then
-  log "Projetos descobertos em ${C_BOLD}$ROOT_DIR${C_RESET}:"
-  for p in "${ALL_PROJECTS[@]}"; do printf '   • %s\n' "$(basename "$p")"; done
+  log "Serviços disponíveis em ${C_BOLD}$ROOT_DIR${C_RESET}:"
+  for s in "${ALL_SERVICES[@]}"; do printf '   • %s\n' "$s"; done
   exit 0
 fi
 
-# --- Menu interativo (quando nenhum projeto é passado por argumento) ---------
-# Só pergunta se a saída for um terminal; em cron/pipe cai no comportamento
-# padrão (todos) para não travar a automação esperando input.
+# --- Menu interativo (quando nenhum serviço é passado por argumento) ---------
 if [[ ${#SELECTED[@]} -eq 0 && -t 0 ]]; then
-  printf '%s\n' "${C_BOLD}Qual app você quer republicar?${C_RESET}"
+  printf '%s\n' "${C_BOLD}Qual serviço você quer republicar?${C_RESET}"
   i=1
-  for p in "${ALL_PROJECTS[@]}"; do
-    printf '   %s%d%s) %s\n' "$C_BOLD" "$i" "$C_RESET" "$(basename "$p")"
+  for s in "${ALL_SERVICES[@]}"; do
+    printf '   %s%d%s) %s\n' "$C_BOLD" "$i" "$C_RESET" "$s"
     i=$((i + 1))
   done
   printf '   %s0%s) TODOS\n' "$C_BOLD" "$C_RESET"
@@ -111,12 +99,12 @@ if [[ ${#SELECTED[@]} -eq 0 && -t 0 ]]; then
   for choice in "${REPLY_ARR[@]}"; do
     case "$choice" in
       q|Q|sair) log "Cancelado."; exit 0 ;;
-      0|todos|TODOS|all) SELECTED=(); break ;;   # vazio => todos, resolvido abaixo
-      *[!0-9]*) SELECTED+=("$choice") ;;         # não-numérico: trata como nome
-      *)                                          # índice numérico
+      0|todos|TODOS|all) SELECTED=(); break ;;
+      *[!0-9]*) SELECTED+=("$choice") ;;
+      *)
         idx=$((choice - 1))
-        if [[ $idx -ge 0 && $idx -lt ${#ALL_PROJECTS[@]} ]]; then
-          SELECTED+=("$(basename "${ALL_PROJECTS[$idx]}")")
+        if [[ $idx -ge 0 && $idx -lt ${#ALL_SERVICES[@]} ]]; then
+          SELECTED+=("${ALL_SERVICES[$idx]}")
         else
           err "Opção inválida: '$choice'"; exit 1
         fi
@@ -125,27 +113,29 @@ if [[ ${#SELECTED[@]} -eq 0 && -t 0 ]]; then
   done
 fi
 
-# --- Resolve seleção (nome/prefixo case-insensitive) -------------------------
+# --- Resolve seleção -------------------------
 TARGETS=()
 if [[ ${#SELECTED[@]} -eq 0 ]]; then
-  TARGETS=("${ALL_PROJECTS[@]}")
+  TARGETS=("${ALL_SERVICES[@]}")
 else
   for want in "${SELECTED[@]}"; do
     match=""
-    for p in "${ALL_PROJECTS[@]}"; do
-      name="$(basename "$p")"
-      if [[ "${name,,}" == "${want,,}" || "${name,,}" == "${want,,}"* ]]; then
-        match="$p"; break
+    for s in "${ALL_SERVICES[@]}"; do
+      if [[ "${s,,}" == *"${want,,}"* ]]; then
+        match="$s"; break
       fi
     done
     if [[ -n "$match" ]]; then
       TARGETS+=("$match")
     else
-      err "Projeto não encontrado para '$want' (use --list para ver os nomes)."
+      err "Serviço não encontrado para '$want' (use --list para ver os nomes)."
       exit 1
     fi
   done
 fi
+
+# Elimina duplicatas de alvos se houver
+TARGETS=($(printf "%s\n" "${TARGETS[@]}" | sort -u))
 
 # --- Garante a rede externa compartilhada ------------------------------------
 if ! docker network inspect "$NETWORK" >/dev/null 2>&1; then
@@ -157,48 +147,50 @@ fi
 declare -a RESULTS=()
 FAILED=0
 
-deploy_one() {
-  local dir="$1" name; name="$(basename "$dir")"
+deploy_services() {
   local -a base=(docker compose)
-  [[ -f "$dir/.env" ]] && base+=(--env-file .env)
+  [[ -f "$ROOT_DIR/.env" ]] && base+=(--env-file .env)
 
   printf '\n%s\n' "${C_BOLD}────────────────────────────────────────────────────────${C_RESET}"
-  log "Redeploy ${C_BOLD}$name${C_RESET}  (${dir#"$ROOT_DIR"/})"
+  log "Redeploy dos serviços: ${C_BOLD}${TARGETS[*]}${C_RESET}"
 
   (
-    cd "$dir" || exit 1
+    cd "$ROOT_DIR" || exit 1
 
     if [[ $DO_DOWN -eq 1 ]]; then
-      log "down (removendo containers antigos)..."
-      "${base[@]}" down --remove-orphans || exit 1
+      log "down (removendo containers antigos dos serviços alvos)..."
+      "${base[@]}" rm -f -s -v "${TARGETS[@]}" || exit 1
     fi
 
     if [[ $DO_PULL -eq 1 ]]; then
       log "pull (imagens base)..."
-      "${base[@]}" pull --ignore-buildable || true
+      "${base[@]}" pull --ignore-buildable "${TARGETS[@]}" || true
     fi
 
     local -a up=("${base[@]}" up -d --remove-orphans)
     [[ $DO_BUILD -eq 1 ]] && up+=(--build)
+    up+=("${TARGETS[@]}")
+    
     log "${up[*]}"
     "${up[@]}"
   )
 
   local rc=$?
   if [[ $rc -eq 0 ]]; then
-    ok "$name atualizado."
-    RESULTS+=("${C_GREEN}✔${C_RESET} $name")
+    ok "Serviços atualizados com sucesso."
+    RESULTS+=("${C_GREEN}✔${C_RESET} ${TARGETS[*]}")
   else
-    err "$name falhou (exit $rc)."
-    RESULTS+=("${C_RED}✗${C_RESET} $name (exit $rc)")
+    err "Falha ao atualizar serviços (exit $rc)."
+    RESULTS+=("${C_RED}✗${C_RESET} ${TARGETS[*]} (exit $rc)")
     FAILED=$((FAILED + 1))
   fi
 }
 
 START_TS=$(date +%s)
-for dir in "${TARGETS[@]}"; do
-  deploy_one "$dir"
-done
+# Ao invés de iterar sobre diretórios, rodamos o docker compose up com os serviços selecionados
+if [[ ${#TARGETS[@]} -gt 0 ]]; then
+  deploy_services
+fi
 
 # --- Limpeza opcional --------------------------------------------------------
 if [[ $DO_PRUNE -eq 1 ]]; then
@@ -213,7 +205,7 @@ for r in "${RESULTS[@]}"; do printf '   %s\n' "$r"; done
 printf '\n'
 
 if [[ $FAILED -gt 0 ]]; then
-  err "$FAILED projeto(s) falharam."
+  err "O redeploy falhou."
   exit 1
 fi
-ok "Todos os projetos foram republicados."
+ok "Redeploy concluído."
