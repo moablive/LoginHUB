@@ -75,7 +75,7 @@ export class AuthService {
                 app: {
                     id: "0",
                     nome: "LoginHub Central",
-                    logo: null
+                    status: "ativo"
                 }
             };
         }
