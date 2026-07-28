@@ -14,7 +14,7 @@
 [![License](https://img.shields.io/badge/license-private-lightgrey)]()
 
 [**🌐 UI Pública**](https://loginhub.astralwavelabel.com/login) &nbsp;•&nbsp;
-[**🔌 API Pública**](https://api-auth.astralwavelabel.com/api) &nbsp;•&nbsp;
+[**🔌 API Pública**](https://loginhub.astralwavelabel.com/api) &nbsp;•&nbsp;
 [**📖 Endpoints**](#-endpoints-da-api) &nbsp;•&nbsp;
 [**🔄 Integração**](#-integração-em-um-app-cliente-ex-moneyapp)
 
@@ -179,9 +179,9 @@ VITE_MASTER_KEY='***'           # mesma key, embutida no bundle da UI
 # ====================
 # Domínios públicos
 # ====================
-API_PUBLIC_URL=https://api-auth.astralwavelabel.com
+API_PUBLIC_URL=https://loginhub.astralwavelabel.com
 UI_PUBLIC_URL=https://loginhub.astralwavelabel.com
-VITE_API_URL=https://api-auth.astralwavelabel.com/api
+VITE_API_URL=https://loginhub.astralwavelabel.com/api
 
 # ====================
 # SMTP (Hostinger)
@@ -199,8 +199,16 @@ SMTP_PASS='***'
 ## 🛣️ Endpoints da API
 
 **Base URL:**
-- Pública: `https://api-auth.astralwavelabel.com/api`
+- Pública: `https://loginhub.astralwavelabel.com/api`
 - Local: `http://localhost:3005/api`
+- Interna (outros containers na `awl_network`): `http://server_loginhub_backend:3000/api`
+
+> ⚠️ **Mudança em 2026-07-28.** A API era publicada num hostname próprio,
+> `api-auth.astralwavelabel.com`, apontando direto para o container da API. Essa
+> rota do Cloudflare foi removida e a API passou a ser servida pelo nginx da
+> própria UI (`apps/ui/nginx.conf`), em `/api` do mesmo hostname.
+>
+> Backends e bots **nunca** devem usar a URL pública — só a interna acima.
 
 ### 🔓 Auth (`/auth`)
 
