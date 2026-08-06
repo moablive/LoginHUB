@@ -187,6 +187,11 @@ export const authApi = {
     return data;
   },
 
+  setupPassword: async (token: string, novaSenha: string): Promise<{ message: string }> => {
+    const { data } = await api.post<{ message: string }>('/auth/setup-password', { token, novaSenha });
+    return data;
+  },
+
   /**
    * Renova o JWT atual. Aceita tokens válidos ou recém-expirados (grace de 7 dias).
    * Atualiza localStorage automaticamente em caso de sucesso.
@@ -274,8 +279,8 @@ export const userApi = {
     const { data } = await api.get<User[]>(`/admin/apps/${appId}/users`);
     return data;
   },
-  create: async (payload: CreateUserDTO): Promise<{ message: string; emailSent: boolean; tempPassword?: string }> => {
-    const { data } = await api.post<{ message: string; emailSent: boolean; tempPassword?: string }>(USERS_BASE_URL, payload);
+  create: async (payload: CreateUserDTO): Promise<{ message: string; emailSent: boolean; magicLinkToken?: string }> => {
+    const { data } = await api.post<{ message: string; emailSent: boolean; magicLinkToken?: string }>(USERS_BASE_URL, payload);
     return data;
   },
   update: async (id: string, payload: UpdateUserPayload): Promise<User> => {
@@ -292,8 +297,8 @@ export const userApi = {
   delete: async (id: string): Promise<void> => {
     await api.delete(`${USERS_BASE_URL}/${id}`);
   },
-  resetPassword: async (id: string, emailHtml?: string): Promise<{ message: string; emailSent: boolean; tempPassword?: string }> => {
-    const { data } = await api.post<{ message: string; emailSent: boolean; tempPassword?: string }>(`${USERS_BASE_URL}/${id}/reset-password`, { emailHtml });
+  resetPassword: async (id: string, emailHtml?: string): Promise<{ message: string; emailSent: boolean; magicLinkToken?: string }> => {
+    const { data } = await api.post<{ message: string; emailSent: boolean; magicLinkToken?: string }>(`${USERS_BASE_URL}/${id}/reset-password`, { emailHtml });
     return data;
   }
 };

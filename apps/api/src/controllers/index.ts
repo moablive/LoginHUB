@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { AuthService, AppService, UserService } from '@loginhub/services';
+import * as jwt from 'jsonwebtoken';
 import { LoginInputDTO, CreateAppDTO, UpdateAppDTO, CreateUserDTO, UpdateUserDTO, DbError } from '@loginhub/schema';
 
 const authService = new AuthService();
@@ -103,6 +104,52 @@ export class AuthController {
             const error = err as Error;
             console.error('[AuthController] changePassword:', error.message);
             return res.status(500).json({ error: 'Erro Interno', message: 'Erro ao atualizar a senha.' });
+        }
+    }
+
+    static async setupPassword(req: Request, res: Response) {
+        try {
+            const { token, novaSenha } = req.body;
+
+            if (!token || !novaSenha) {
+                return res.status(400).json({ error: 'Dados incompletos', message: 'O token e a nova senha são obrigatórios.' });
+            }
+
+            const jwtSecret = process.env.JWT_SECRET;
+            if (!jwtSecret) {
+                return res.status(500).json({ error: 'Configuração', message: 'JWT_SECRET não configurado.' });
+            }
+
+            let decoded: any;
+            try {
+                decoded = jwt.verify(token, jwtSecret);
+            } catch (err) {
+                return res.status(401).json({ error: 'Token Inválido', message: 'O link de acesso é inválido ou expirou.' });
+            }
+
+            if (decoded.action !== 'setup-password') {
+                return res.status(401).json({ error: 'Token Inválido', message: 'O link de acesso não é válido para esta ação.' });
+            }
+
+            // Ensure the link is single-use by checking if the user still has senhaPadrao
+            const userService = new UserService();
+            const users = await userService.getAllUsersGlobal();
+            const user = users.find(u => u.id === decoded.sub);
+
+            if (!user) {
+                return res.status(404).json({ error: 'Não Encontrado', message: 'Usuário não encontrado.' });
+            }
+
+            if (!user.senha_padrao) {
+                return res.status(401).json({ error: 'Token Inválido', message: 'Este link de acesso já foi utilizado.' });
+            }
+
+            await authService.changePassword(decoded.sub, novaSenha);
+            return res.status(200).json({ message: 'Senha definida com sucesso.' });
+        } catch (err: unknown) {
+            const error = err as Error;
+            console.error('[AuthController] setupPassword:', error.message);
+            return res.status(500).json({ error: 'Erro Interno', message: 'Erro ao definir a senha.' });
         }
     }
 }
@@ -220,7 +267,7 @@ export class UserController {
                     ? 'Convite enviado por e-mail com sucesso.'
                     : 'Usuário criado, mas o e-mail de convite não pôde ser enviado.',
                 emailSent: result.emailSent,
-                tempPassword: result.tempPassword,
+                magicLinkToken: result.magicLinkToken,
             });
         } catch (err) {
             const error = err as DbError;
@@ -325,10 +372,10 @@ export class UserController {
             const result = await userService.resetUserPassword(id, emailHtml);
             return res.status(200).json({
                 message: result.emailSent
-                    ? 'Nova senha enviada por e-mail com sucesso.'
-                    : 'Senha redefinida, mas o e-mail não pôde ser enviado.',
+                    ? 'Link de acesso enviado por e-mail com sucesso.'
+                    : 'Link de acesso gerado, mas o e-mail não pôde ser enviado.',
                 emailSent: result.emailSent,
-                tempPassword: result.tempPassword,
+                magicLinkToken: result.magicLinkToken,
             });
         } catch (err: unknown) {
             const error = err as { code?: string, message?: string };

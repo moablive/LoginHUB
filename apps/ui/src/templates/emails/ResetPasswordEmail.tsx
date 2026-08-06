@@ -2,13 +2,15 @@ import React from 'react';
 
 interface ResetPasswordEmailProps {
   email: string;
-  tempPassword?: string;
+  magicLinkToken?: string;
   appName: string;
   loginUrl?: string | null;
   appLogo?: string | null;
 }
 
-export const ResetPasswordEmail: React.FC<ResetPasswordEmailProps> = ({ email, tempPassword, appName, loginUrl, appLogo }) => {
+export const ResetPasswordEmail: React.FC<ResetPasswordEmailProps> = ({ email, magicLinkToken, appName, loginUrl, appLogo }) => {
+  const finalLoginUrl = magicLinkToken ? `${loginUrl || 'http://localhost:3006'}/setup-password?token=${magicLinkToken}` : loginUrl;
+
   return (
     <div style={{ fontFamily: 'sans-serif', padding: '20px', color: '#333' }}>
       <div style={{ maxWidth: '600px', margin: '0 auto', border: '1px solid #eee', borderRadius: '8px', padding: '20px', backgroundColor: '#fff' }}>
@@ -23,15 +25,14 @@ export const ResetPasswordEmail: React.FC<ResetPasswordEmailProps> = ({ email, t
         </p>
         <div style={{ backgroundColor: '#f8fafc', padding: '15px', borderRadius: '6px', margin: '20px 0' }}>
           <p style={{ margin: '0 0 10px 0' }}><strong>Login:</strong> {email}</p>
-          {tempPassword && <p style={{ margin: '0' }}><strong>Nova Senha Temporária:</strong> {tempPassword}</p>}
         </div>
         <p style={{ fontSize: '14px', color: '#64748b' }}>
-          Por favor, utilize esta senha temporária para acessar o sistema. Você deverá criar uma nova senha definitiva no primeiro acesso.
+          Por favor, utilize o botão abaixo para definir sua nova senha e acessar o sistema. Este link é seguro e só pode ser usado uma vez.
         </p>
-        {loginUrl && (
+        {finalLoginUrl && (
           <div style={{ textAlign: 'center', marginTop: '30px' }}>
-            <a href={loginUrl} style={{ backgroundColor: '#3b82f6', color: '#fff', padding: '12px 24px', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', display: 'inline-block' }}>
-              Acessar Sistema
+            <a href={finalLoginUrl} style={{ backgroundColor: '#3b82f6', color: '#fff', padding: '12px 24px', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', display: 'inline-block' }}>
+              Definir nova senha
             </a>
           </div>
         )}

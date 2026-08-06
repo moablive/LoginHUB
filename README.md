@@ -36,8 +36,8 @@ O **LoginHUB** é o serviço de **identidade central** que autentica os usuário
 | 👥 Multi-tenant (apps isolados, usuários por app) | ✅ |
 | 🛡️ 4 níveis de acesso (`master` / `admin` / `user` / `suporte`) | ✅ |
 | 📧 Envio automático de convites por e-mail (SMTP) | ✅ |
-| 🔒 Senha temporária + troca obrigatória no 1º acesso | ✅ |
-| 🗝️ Reset de senha pelo admin (gera nova temp, envia e-mail) | ✅ |
+| 🔒 Acesso por Magic Link + definição de senha no 1º acesso | ✅ |
+| 🗝️ Reset de senha pelo admin (gera Magic Link, envia e-mail) | ✅ |
 | 🖼️ Logo do app em base64 (PNG/JPG/WEBP/SVG, ≤256px) | ✅ |
 | 🤖 URL de bot por app (Telegram, WhatsApp, etc.) incluída no convite | ✅ |
 | 🔐 Master key para acesso administrativo de infra | ✅ |
@@ -327,34 +327,34 @@ Toda a coreografia gira em torno da coluna `usuarios.senha_padrao`:
 
 | Operação | Flag depois |
 |---|---|
-| Admin cria usuário (sem senha → gera temp) | `senha_padrao = true` |
+| Admin cria usuário (sem senha) | `senha_padrao = true` |
 | Admin reseta a senha | `senha_padrao = true` |
+| Usuário define a senha via Magic Link | `senha_padrao = false` |
 | Usuário chama `/auth/change-password` | `senha_padrao = false` |
 
 E essa flag é refletida no response do login como `requirePasswordChange`.
 
-### Fluxo completo de primeiro acesso
+### Fluxo completo de primeiro acesso (Magic Link)
+
+O LoginHub não gera senha temporária.
+Em vez disso, envia um link seguro de acesso.
+O usuário clica no link e define a própria senha final.
+Simples, seguro e alinhado com o padrão das aplicações modernas.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │  1. Admin cria usuário no LoginHUB → POST /admin/users              │
-│     Backend gera senha temp + dispara e-mail com link e credenciais │
+│     Backend gera JWT de uso único + dispara e-mail com Magic Link   │
 │                                                                     │
-│  2. Usuário recebe e-mail (login + senha temp + URL do app + bot)   │
+│  2. Usuário recebe e-mail e clica no botão "Definir minha senha"    │
 │                                                                     │
-│  3. Usuário abre o MoneyAPP → digita email + senha temp             │
+│  3. Usuário abre a tela de setup de senha (/setup-password)         │
 │                                                                     │
-│  4. MoneyAPP → POST /auth/login                                     │
+│  4. UI chama POST /auth/setup-password com token e nova senha       │
 │                                                                     │
-│  5. LoginHUB responde { token, requirePasswordChange: TRUE, ... }   │
+│  5. LoginHUB verifica JWT, grava hash, zera senha_padrao            │
 │                                                                     │
-│  6. MoneyAPP detecta a flag → tela "Defina sua nova senha"          │
-│                                                                     │
-│  7. Usuário define a senha → POST /auth/change-password             │
-│                                                                     │
-│  8. LoginHUB grava hash, zera senha_padrao                          │
-│                                                                     │
-│  9. MoneyAPP libera o app — próximos logins entram direto           │
+│  6. Usuário é redirecionado para o login e acessa normalmente       │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -460,8 +460,8 @@ SMTP configurado via `.env` (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`)
 
 ### Comportamento
 - O frontend renderiza o template para HTML com `ReactDOMServer.renderToStaticMarkup` antes de enviar
-- A senha temporária é colocada como placeholder `__TEMP_PASSWORD__` no HTML — o backend substitui pela senha real **na hora do envio** (admin nunca vê a senha em tela)
-- Se o e-mail **não** for enviado (SMTP fora do ar, ex.), o backend devolve `{ emailSent: false, tempPassword: "..." }` e a UI cai num fallback mostrando as credenciais para repasse manual
+- O token do Magic Link é colocado como placeholder `__MAGIC_LINK__` no HTML — o backend substitui pelo token JWT **na hora do envio**
+- Se o e-mail **não** for enviado (SMTP fora do ar, ex.), o backend devolve `{ emailSent: false, magicLinkToken: "..." }` e a UI cai num fallback mostrando o link para repasse manual
 - Se o app tem `bot_url` cadastrado, o template inclui um CTA secundário "Acessar Bot"
 
 > ⚠️ **SPF/DKIM**: para evitar quarentena/spam (especialmente no ProtonMail), configure SPF e DKIM no DNS do `astralwavelabel.com` autorizando o Hostinger a enviar em nome do domínio.
