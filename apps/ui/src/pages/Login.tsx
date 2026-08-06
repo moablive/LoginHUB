@@ -61,18 +61,18 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-lg border border-gray-200">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-dracula-bg px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8 bg-white dark:bg-dracula-cur p-8 rounded-xl shadow-lg border border-gray-200 dark:border-dracula-comment">
 
         {/* CABEÇALHO */}
         <div className="text-center">
-          <div className="mx-auto h-12 w-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center">
+          <div className="mx-auto h-12 w-12 bg-blue-100 dark:bg-dracula-comment text-blue-600 dark:text-dracula-cyan rounded-full flex items-center justify-center">
             <ShieldCheckIcon className="h-8 w-8" />
           </div>
-          <h2 className="mt-6 text-3xl font-extrabold text-gray-900 tracking-tight">
+          <h2 className="mt-6 text-3xl font-extrabold text-gray-900 dark:text-dracula-fg tracking-tight">
             LoginHub
           </h2>
-          <p className="mt-2 text-sm text-gray-600">
+          <p className="mt-2 text-sm text-gray-600 dark:text-dracula-cyan">
             Acesso Administrativo (Master Key)
           </p>
         </div>
@@ -93,7 +93,7 @@ export function Login() {
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
                 required
-                className="appearance-none rounded-lg relative block w-full pl-10 pr-10 px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                className="appearance-none rounded-lg relative block w-full pl-10 pr-10 px-3 py-3 border border-gray-300 dark:border-dracula-comment placeholder-gray-500 text-gray-900 dark:text-dracula-fg dark:bg-dracula-bg focus:outline-none focus:ring-blue-500 dark:focus:ring-dracula-purple focus:border-blue-500 dark:focus:border-dracula-purple focus:z-10 sm:text-sm"
                 placeholder="Insira a Master Key"
                 {...register('password', { required: true })}
               />
@@ -101,7 +101,7 @@ export function Login() {
               {/* Botão Olho (Show/Hide) */}
               <button
                 type="button"
-                className="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer text-gray-400 hover:text-gray-600"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer text-gray-400 hover:text-gray-600 dark:hover:text-dracula-cyan"
                 onClick={() => setShowPassword(!showPassword)}
               >
                 {showPassword ? (
@@ -115,11 +115,11 @@ export function Login() {
 
           {/* MENSAGEM DE ERRO */}
           {loginError && (
-            <div className="rounded-md bg-red-50 p-4 border border-red-200 animate-pulse">
+            <div className="rounded-md bg-red-50 dark:bg-[#ff555520] p-4 border border-red-200 dark:border-[#ff555550] animate-pulse">
               <div className="flex">
                 <div className="ml-3">
-                  <h3 className="text-sm font-medium text-red-800">Falha na Autenticação</h3>
-                  <div className="mt-2 text-sm text-red-700">
+                  <h3 className="text-sm font-medium text-red-800 dark:text-dracula-red">Falha na Autenticação</h3>
+                  <div className="mt-2 text-sm text-red-700 dark:text-dracula-red">
                     <p>{loginError}</p>
                   </div>
                 </div>
@@ -132,14 +132,14 @@ export function Login() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-70 transition-all shadow-sm"
+              className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 dark:bg-dracula-purple hover:bg-blue-700 dark:hover:bg-dracula-pink focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-70 transition-all shadow-sm"
             >
               {isSubmitting ? 'Verificando...' : 'Acessar Painel'}
             </button>
           </div>
         </form>
 
-        <p className="text-center text-xs text-gray-400 mt-4">
+        <p className="text-center text-xs text-gray-400 dark:text-dracula-comment mt-4">
           &copy; 2026 LoginHub Infrastructure.
         </p>
       </div>

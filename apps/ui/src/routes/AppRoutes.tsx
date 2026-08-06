@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { authApi } from '@loginhub/api-client';
 
 // Layout
@@ -24,7 +25,9 @@ export const SuperAdminRoute = () => {
 
 export function AppRoutes() {
   return (
-    <Routes>
+    <>
+      <ThemeToggle />
+      <Routes>
       
       {/* --- ROTAS PÚBLICAS --- */}
       <Route path="/login" element={<Login />} />
@@ -57,5 +60,6 @@ export function AppRoutes() {
       {/* Rota 404 -> Login */}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
+    </>
   );
 }

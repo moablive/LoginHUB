@@ -4,6 +4,7 @@
 @tailwind components;
 @tailwind utilities;
 
+
 /* Se precisar de estilos globais personalizados, coloque aqui.
   Mas REMOVA as regras padrões de 'button', 'a', 'body' que vieram com o template.
 */
