@@ -166,7 +166,7 @@ export const AppUsers = () => {
           email={user.email}
           appName={app?.nome || 'nossa plataforma'}
           loginUrl={app?.platform_url || undefined}
-          tempPassword={'__TEMP_PASSWORD__'}
+          magicLinkToken={'__MAGIC_LINK__'}
           appLogo={app?.logo}
         />
       );
@@ -177,18 +177,19 @@ export const AppUsers = () => {
 
       if (res.emailSent) {
         showAlert(
-          'Senha Redefinida',
-          `Uma nova senha temporária foi enviada por e-mail para ${user.email}. No próximo login, o sistema exigirá a criação de uma senha definitiva.`,
+          'Acesso Redefinido',
+          `Um link para definição de senha foi enviado por e-mail para ${user.email}.`,
           'info',
         );
-      } else if (res.tempPassword) {
+      } else if (res.magicLinkToken) {
+        const loginUrlBase = app?.platform_url || window.location.origin;
         setCredentialsAlert({
           isOpen: true,
-          title: 'Senha Redefinida (envio falhou)',
-          message: `O e-mail não pôde ser enviado. Repasse manualmente:\n\nAcesse: ${window.location.origin}\nLogin: ${user.email}\nNova Senha Temporária: ${res.tempPassword}\n\nNo primeiro acesso, o sistema exigirá a criação de uma senha definitiva.`,
+          title: 'Acesso Redefinido (envio falhou)',
+          message: `O e-mail não pôde ser enviado. Repasse o link manualmente:\n\nLink: ${loginUrlBase}/setup-password?token=${res.magicLinkToken}`,
         });
       } else {
-        showAlert('Senha Redefinida', 'Senha redefinida com sucesso.', 'info');
+        showAlert('Acesso Redefinido', 'Link de redefinição gerado com sucesso.', 'info');
       }
     } catch (error: unknown) {
       console.error(error);
@@ -366,16 +367,17 @@ export const AppUsers = () => {
         appBotUrl={app?.bot_url}
         appPlatformUrl={app?.platform_url}
         appLogo={app?.logo}
-        onSuccess={({ email, emailSent, tempPassword }) => {
+        onSuccess={({ email, emailSent, magicLinkToken }) => {
           fetchData();
           setShowFormModal(false);
           if (emailSent) {
             showAlert('Convite Enviado', `O convite foi enviado por e-mail para ${email}.`, 'info');
-          } else if (tempPassword) {
+          } else if (magicLinkToken) {
+            const loginUrlBase = app?.platform_url || window.location.origin;
             setCredentialsAlert({
               isOpen: true,
               title: 'Convite Gerado (envio falhou)',
-              message: `O e-mail não pôde ser enviado. Repasse manualmente:\n\nAcesse: ${window.location.origin}\nLogin: ${email}\nSenha temporária: ${tempPassword}\n\nNo primeiro acesso, o sistema exigirá a criação de uma senha definitiva.`,
+              message: `O e-mail não pôde ser enviado. Repasse o link manualmente:\n\nLink: ${loginUrlBase}/setup-password?token=${magicLinkToken}`,
             });
           } else {
             setShowSuccessModal(true);
@@ -423,12 +425,12 @@ export const AppUsers = () => {
         icon={<KeyIcon className="h-6 w-6" />}
         message={
           <>
-            Uma nova senha temporária será gerada e enviada por e-mail para o usuário.
-            No próximo login, ele será obrigado a definir uma nova senha definitiva.
+            Um link de acesso será gerado e enviado por e-mail para o usuário.
+            Através deste link, ele deverá definir uma nova senha definitiva.
           </>
         }
         highlight={userToReset ? `${userToReset.nome} — ${userToReset.email}` : undefined}
-        confirmText="Gerar nova senha"
+        confirmText="Gerar novo link"
         loadingText="Gerando..."
         isLoading={isResetting === userToReset?.id}
       />

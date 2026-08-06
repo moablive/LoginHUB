@@ -2,13 +2,15 @@ import React from 'react';
 
 interface MoneyAppInviteEmailProps {
   email: string;
-  tempPassword?: string;
+  magicLinkToken?: string;
   loginUrl?: string | null;
   botUrl?: string | null;
   appLogo?: string | null;
 }
 
-export const MoneyAppInviteEmail: React.FC<MoneyAppInviteEmailProps> = ({ email, tempPassword, loginUrl, botUrl, appLogo }) => {
+export const MoneyAppInviteEmail: React.FC<MoneyAppInviteEmailProps> = ({ email, magicLinkToken, loginUrl, botUrl, appLogo }) => {
+  const finalLoginUrl = magicLinkToken ? `${loginUrl || 'http://localhost:3006'}/setup-password?token=${magicLinkToken}` : loginUrl;
+
   return (
     <div style={{ fontFamily: '"Inter", sans-serif', padding: '20px', color: '#e2e8f0', backgroundColor: '#0f172a' }}>
       <div style={{ maxWidth: '600px', margin: '0 auto', border: '1px solid #334155', borderRadius: '12px', padding: '30px', backgroundColor: '#1e293b' }}>
@@ -21,26 +23,21 @@ export const MoneyAppInviteEmail: React.FC<MoneyAppInviteEmailProps> = ({ email,
           Seu acesso ao MoneyAPP foi liberado!
         </h2>
         <p style={{ fontSize: '16px', lineHeight: '1.6', color: '#cbd5e1' }}>
-          Bem-vindo(a) ao MoneyAPP. Aqui estão suas credenciais para o primeiro acesso:
+          Bem-vindo(a) ao MoneyAPP. Para acessar sua conta, clique no botão abaixo e defina sua senha:
         </p>
         <div style={{ backgroundColor: '#0f172a', border: '1px solid #334155', padding: '20px', borderRadius: '8px', margin: '25px 0' }}>
           <p style={{ margin: '0 0 12px 0', fontSize: '15px' }}>
             <span style={{ color: '#94a3b8' }}>Login:</span> <strong>{email}</strong>
           </p>
-          {tempPassword && (
-            <p style={{ margin: '0', fontSize: '15px' }}>
-              <span style={{ color: '#94a3b8' }}>Senha temporária:</span> <strong>{tempPassword}</strong>
-            </p>
-          )}
         </div>
         <p style={{ fontSize: '14px', color: '#94a3b8', lineHeight: '1.5' }}>
-          No seu primeiro acesso, o sistema exigirá a criação de uma senha definitiva.
-          {botUrl ? ' Após criar sua nova senha, você poderá se conectar ao nosso assistente pelo link abaixo.' : ''}
+          Este link é seguro e só pode ser usado uma vez. Se você não solicitou este acesso, ignore este e-mail.
+          {botUrl ? ' Após criar sua nova senha, você poderá se conectar ao nosso assistente.' : ''}
         </p>
-        {loginUrl && (
+        {finalLoginUrl && (
           <div style={{ textAlign: 'center', marginTop: '35px' }}>
-            <a href={loginUrl} style={{ backgroundColor: '#10b981', color: '#ffffff', padding: '14px 28px', textDecoration: 'none', borderRadius: '8px', fontWeight: '600', display: 'inline-block', fontSize: '16px' }}>
-              Acessar MoneyAPP
+            <a href={finalLoginUrl} style={{ backgroundColor: '#10b981', color: '#ffffff', padding: '14px 28px', textDecoration: 'none', borderRadius: '8px', fontWeight: '600', display: 'inline-block', fontSize: '16px' }}>
+              Definir minha senha
             </a>
           </div>
         )}

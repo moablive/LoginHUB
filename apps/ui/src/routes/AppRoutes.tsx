@@ -9,6 +9,7 @@ import { Login } from '../pages/Login';
 import { Dashboard } from '../pages/Dashboard';
 import { CreateApp } from '../pages/CreateApp'; 
 import { AppUsers } from '../pages/AppUsers';
+import { SetupPassword } from '../pages/SetupPassword';
 
 export const SuperAdminRoute = () => {
   const isAuth = authApi.isAuthenticated();
@@ -28,6 +29,7 @@ export function AppRoutes() {
       
       {/* --- ROTAS PÚBLICAS --- */}
       <Route path="/login" element={<Login />} />
+      <Route path="/setup-password" element={<SetupPassword />} />
       
       {/* Redireciona a raiz para o dashboard */}
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

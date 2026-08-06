@@ -14,7 +14,7 @@ const ROLE_OPTIONS: { value: Exclude<UserRole, "master">; label: string; descrip
 export interface CreateUserModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (result: { email: string; emailSent: boolean; tempPassword?: string }) => void;
+  onSuccess: (result: { email: string; emailSent: boolean; magicLinkToken?: string }) => void;
   appId: string;
   appName?: string;
   appBotUrl?: string | null;
@@ -24,8 +24,8 @@ export interface CreateUserModalProps {
 
 type Step = "form" | "preview";
 
-const TEMP_PASSWORD_PLACEHOLDER = "__TEMP_PASSWORD__";
-const PREVIEW_FAKE_PASSWORD = "(gerada no envio)";
+const MAGIC_LINK_PLACEHOLDER = "__MAGIC_LINK__";
+const PREVIEW_FAKE_TOKEN = "preview-token-xyz";
 
 export const CreateUserModal = ({
   isOpen,
@@ -65,7 +65,7 @@ export const CreateUserModal = ({
       isMoneyApp ? (
         <MoneyAppInviteEmail
           email={formData.email}
-          tempPassword={PREVIEW_FAKE_PASSWORD}
+          magicLinkToken={PREVIEW_FAKE_TOKEN}
           loginUrl={loginUrl}
           botUrl={appBotUrl}
           appLogo={appLogo}
@@ -74,7 +74,7 @@ export const CreateUserModal = ({
         <InviteEmailTemplate
           email={formData.email}
           appName={appName || "nossa plataforma"}
-          tempPassword={PREVIEW_FAKE_PASSWORD}
+          magicLinkToken={PREVIEW_FAKE_TOKEN}
           loginUrl={loginUrl}
           botUrl={appBotUrl}
           appLogo={appLogo}
@@ -107,12 +107,12 @@ export const CreateUserModal = ({
     try {
       // Só inclui o botão "Acessar Sistema" se o app tem URL de plataforma cadastrada.
     const loginUrl = appPlatformUrl || undefined;
-      // HTML real para envio: senha trocada pelo placeholder que o backend substitui
+      // HTML real para envio: link trocado pelo placeholder que o backend substitui
       const emailHtml = ReactDOMServer.renderToStaticMarkup(
         isMoneyApp ? (
           <MoneyAppInviteEmail
             email={formData.email}
-            tempPassword={TEMP_PASSWORD_PLACEHOLDER}
+            magicLinkToken={MAGIC_LINK_PLACEHOLDER}
             loginUrl={loginUrl}
             botUrl={appBotUrl}
             appLogo={appLogo}
@@ -121,7 +121,7 @@ export const CreateUserModal = ({
           <InviteEmailTemplate
             email={formData.email}
             appName={appName || "nossa plataforma"}
-            tempPassword={TEMP_PASSWORD_PLACEHOLDER}
+            magicLinkToken={MAGIC_LINK_PLACEHOLDER}
             loginUrl={loginUrl}
             botUrl={appBotUrl}
             appLogo={appLogo}
@@ -137,7 +137,7 @@ export const CreateUserModal = ({
         emailHtml,
       });
 
-      onSuccess({ email: formData.email, emailSent: res.emailSent, tempPassword: res.tempPassword });
+      onSuccess({ email: formData.email, emailSent: res.emailSent, magicLinkToken: res.magicLinkToken });
       onClose();
     } catch (err: unknown) {
       console.error(err);
@@ -289,10 +289,7 @@ export const CreateUserModal = ({
                   <EnvelopeIcon className="h-5 w-5 flex-shrink-0 mt-0.5" />
                   <div>
                     Este e-mail será enviado para <strong>{formData.email}</strong>.
-                    A senha temporária é gerada automaticamente e inserida no lugar de
-                    <span className="mx-1 font-mono bg-white px-1.5 py-0.5 rounded text-xs border border-blue-200">
-                      {PREVIEW_FAKE_PASSWORD}
-                    </span>
+                    O link de acesso (Magic Link) é gerado automaticamente e inserido no template
                     no momento do envio.
                   </div>
                 </div>

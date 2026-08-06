@@ -2,14 +2,16 @@ import React from 'react';
 
 interface InviteEmailProps {
   email: string;
-  tempPassword?: string;
+  magicLinkToken?: string;
   appName: string;
   loginUrl?: string | null;
   botUrl?: string | null;
   appLogo?: string | null;
 }
 
-export const InviteEmailTemplate: React.FC<InviteEmailProps> = ({ email, tempPassword, appName, loginUrl, botUrl, appLogo }) => {
+export const InviteEmailTemplate: React.FC<InviteEmailProps> = ({ email, magicLinkToken, appName, loginUrl, botUrl, appLogo }) => {
+  const finalLoginUrl = magicLinkToken ? `${loginUrl || 'http://localhost:3006'}/setup-password?token=${magicLinkToken}` : loginUrl;
+
   return (
     <div style={{ fontFamily: 'sans-serif', padding: '20px', color: '#333' }}>
       <div style={{ maxWidth: '600px', margin: '0 auto', border: '1px solid #eee', borderRadius: '8px', padding: '20px', backgroundColor: '#fff' }}>
@@ -20,19 +22,19 @@ export const InviteEmailTemplate: React.FC<InviteEmailProps> = ({ email, tempPas
         )}
         <h2 style={{ color: '#0f172a', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>Bem-vindo(a) ao {appName}!</h2>
         <p style={{ fontSize: '16px', lineHeight: '1.5' }}>
-          Seu acesso foi liberado com sucesso. Abaixo estão suas credenciais para o primeiro acesso:
+          Seu acesso foi liberado com sucesso. Para acessar sua conta, clique no botão abaixo e defina sua senha:
         </p>
         <div style={{ backgroundColor: '#f8fafc', padding: '15px', borderRadius: '6px', margin: '20px 0' }}>
           <p style={{ margin: '0 0 10px 0' }}><strong>Login:</strong> {email}</p>
-          {tempPassword && <p style={{ margin: '0' }}><strong>Senha temporária:</strong> {tempPassword}</p>}
         </div>
         <p style={{ fontSize: '14px', color: '#64748b' }}>
-          No seu primeiro acesso, o sistema exigirá a criação de uma senha definitiva.
+          Este link é seguro e só pode ser usado uma vez.
+          Se você não solicitou este acesso, ignore este e-mail.
         </p>
-        {loginUrl && (
+        {finalLoginUrl && (
           <div style={{ textAlign: 'center', marginTop: '30px' }}>
-            <a href={loginUrl} style={{ backgroundColor: '#3b82f6', color: '#fff', padding: '12px 24px', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', display: 'inline-block' }}>
-              Acessar Sistema
+            <a href={finalLoginUrl} style={{ backgroundColor: '#3b82f6', color: '#fff', padding: '12px 24px', textDecoration: 'none', borderRadius: '6px', fontWeight: 'bold', display: 'inline-block' }}>
+              Definir minha senha
             </a>
           </div>
         )}

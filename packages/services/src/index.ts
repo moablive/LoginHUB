@@ -396,7 +396,7 @@ export class AppService {
 // 3. USER SERVICE
 // ==========================================
 export class UserService {
-    public async addUser(data: CreateUserDTO): Promise<{ tempPassword?: string; emailSent: boolean }> {
+    public async addUser(data: CreateUserDTO): Promise<{ magicLinkToken?: string; emailSent: boolean }> {
         if (!data.app_id) throw Object.assign(new Error('Aplicativo é obrigatória'), { code: 'VALIDATION' });
         if (!data.email) throw Object.assign(new Error('E-mail é obrigatório'), { code: 'VALIDATION' });
 
@@ -407,35 +407,47 @@ export class UserService {
 
         const roleId = roleRes[0].id;
 
-        let tempPassword: string | undefined = undefined;
+        let isGeneratingMagicLink = false;
         let passwordToHash = data.password;
 
         if (!passwordToHash) {
-            tempPassword = Math.random().toString(36).slice(-8);
-            passwordToHash = tempPassword;
+            isGeneratingMagicLink = true;
+            // Provide a random placeholder hash since they will define it via magic link
+            passwordToHash = Math.random().toString(36).slice(-8);
         }
 
         const salt = await bcrypt.genSalt(10);
         const passwordHash = await bcrypt.hash(passwordToHash, salt);
 
         try {
-            await db.insert(usuarios).values({
+            const insertedUser = await db.insert(usuarios).values({
                 appId: Number(data.app_id),
                 nivelAcessoId: roleId,
                 nome: data.nome || '',
                 email: data.email,
                 senhaHash: passwordHash,
-                senhaPadrao: tempPassword ? true : false,
+                senhaPadrao: isGeneratingMagicLink ? true : false,
                 telefone: data.telefone || null
-            });
+            }).returning({ id: usuarios.id });
+
+            const newUserId = insertedUser[0].id;
+            let magicLinkToken: string | undefined = undefined;
+
+            if (isGeneratingMagicLink) {
+                const jwtSecret = process.env.JWT_SECRET;
+                if (!jwtSecret) {
+                    console.error("JWT_SECRET missing in .env");
+                }
+                magicLinkToken = jwt.sign({ sub: newUserId, action: 'setup-password', email: data.email }, jwtSecret || 'secret', { expiresIn: '1h' });
+            }
 
             let emailSent = false;
-            if (data.emailHtml && tempPassword) {
+            if (data.emailHtml && magicLinkToken) {
                 const appRow = await db.select({ nome: aplicativos.nome }).from(aplicativos).where(eq(aplicativos.id, Number(data.app_id))).limit(1);
                 const appName = appRow.length > 0 ? appRow[0].nome : 'nosso sistema';
 
-                // Substitui o placeholder pela senha real antes de enviar
-                const finalHtml = data.emailHtml.replace(/__TEMP_PASSWORD__/g, tempPassword);
+                // Substitui o placeholder pelo token real antes de enviar
+                const finalHtml = data.emailHtml.replace(/__MAGIC_LINK__/g, magicLinkToken);
 
                 emailSent = await emailService.sendEmail(
                     data.email,
@@ -444,8 +456,8 @@ export class UserService {
                 );
             }
 
-            // Só devolve a senha ao admin se o e-mail não saiu (fallback de emergência)
-            return { tempPassword: emailSent ? undefined : tempPassword, emailSent };
+            // Só devolve o magic link ao admin se o e-mail não saiu (fallback de emergência)
+            return { magicLinkToken: emailSent ? undefined : magicLinkToken, emailSent };
         } catch (error: any) {
             if (error.code === '23505') throw Object.assign(new Error('E-mail já está em uso neste aplicativo.'), { code: 'DUPLICATE_ENTRY' });
             if (error.code === '23503') throw Object.assign(new Error('A app informada não existe.'), { code: 'RELATION_ERROR' });
@@ -586,7 +598,7 @@ export class UserService {
         }
     }
 
-    public async resetUserPassword(id: string, emailHtml?: string): Promise<{ tempPassword?: string; emailSent: boolean }> {
+    public async resetUserPassword(id: string, emailHtml?: string): Promise<{ magicLinkToken?: string; emailSent: boolean }> {
         const userRes = await db.select({ id: usuarios.id, email: usuarios.email, app_id: usuarios.appId }).from(usuarios).where(eq(usuarios.id, Number(id))).limit(1);
         if (userRes.length === 0) {
             const error = new Error('Usuário não encontrado.');
@@ -602,6 +614,12 @@ export class UserService {
             .set({ senhaHash, senhaPadrao: true })
             .where(eq(usuarios.id, Number(id)));
 
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+            console.error("JWT_SECRET missing in .env");
+        }
+        const magicLinkToken = jwt.sign({ sub: id, action: 'setup-password', email: userRes[0].email }, jwtSecret || 'secret', { expiresIn: '1h' });
+
         let emailSent = false;
         if (emailHtml) {
             let appName = 'nosso sistema';
@@ -610,7 +628,7 @@ export class UserService {
                 if (appRow.length > 0) appName = appRow[0].nome;
             }
 
-            const finalHtml = emailHtml.replace(/__TEMP_PASSWORD__/g, randomPassword);
+            const finalHtml = emailHtml.replace(/__MAGIC_LINK__/g, magicLinkToken);
 
             emailSent = await emailService.sendEmail(
                 userRes[0].email,
@@ -619,6 +637,6 @@ export class UserService {
             );
         }
 
-        return { tempPassword: emailSent ? undefined : randomPassword, emailSent };
+        return { magicLinkToken: emailSent ? undefined : magicLinkToken, emailSent };
     }
 }
