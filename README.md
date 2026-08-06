@@ -9,6 +9,7 @@
 <br/><br/>
 
 [![Status](https://img.shields.io/badge/status-em%20produção-success)](https://loginhub.astralwavelabel.com)
+[![PWA](https://img.shields.io/badge/pwa-enabled-blueviolet)]()
 [![JWT](https://img.shields.io/badge/auth-JWT%20%2B%20Refresh-blue)](#-fluxo-de-autenticação)
 [![Monorepo](https://img.shields.io/badge/npm-workspaces-CB3837?logo=npm&logoColor=white)](#-estrutura-do-monorepo)
 [![License](https://img.shields.io/badge/license-private-lightgrey)]()
@@ -40,6 +41,7 @@ O **LoginHUB** é o serviço de **identidade central** que autentica os usuário
 | 🖼️ Logo do app em base64 (PNG/JPG/WEBP/SVG, ≤256px) | ✅ |
 | 🤖 URL de bot por app (Telegram, WhatsApp, etc.) incluída no convite | ✅ |
 | 🔐 Master key para acesso administrativo de infra | ✅ |
+| 📱 PWA funcional (Instalável, Ícones, Service Worker) | ✅ |
 
 ---
 
