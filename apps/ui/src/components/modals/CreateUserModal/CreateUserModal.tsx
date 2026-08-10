@@ -167,29 +167,29 @@ export const CreateUserModal = ({
           aria-hidden="true"
         />
 
-        <div className={`relative transform overflow-hidden rounded-2xl bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full ${step === "preview" ? "sm:max-w-3xl" : "sm:max-w-lg"} border border-gray-200 animate-fade-in-up`}>
+        <div className={`relative transform overflow-hidden rounded-2xl bg-card text-card-foreground text-left shadow-xl transition-all sm:my-8 sm:w-full ${step === "preview" ? "sm:max-w-3xl" : "sm:max-w-lg"} border border-border animate-fade-in-up`}>
           {/* Cabeçalho */}
-          <div className="bg-gray-50 px-4 py-3 sm:px-6 flex justify-between items-center border-b border-gray-100">
-            <h3 className="text-lg font-semibold leading-6 text-gray-900 flex items-center gap-2">
+          <div className="bg-muted/50 px-4 py-3 sm:px-6 flex justify-between items-center border-b border-border">
+            <h3 className="text-lg font-semibold leading-6 text-foreground flex items-center gap-2">
               {step === "form" ? (
                 <>
                   {appLogo ? (
                     <img src={appLogo} alt={appName || "Logo"} className="h-6 w-6 rounded-sm object-contain" />
                   ) : (
-                    <UserPlusIcon className="h-5 w-5 text-blue-600" />
+                    <UserPlusIcon className="h-5 w-5 text-primary" />
                   )}
                   Convidar Usuário
                 </>
               ) : (
                 <>
-                  <EnvelopeIcon className="h-5 w-5 text-blue-600" />
+                  <EnvelopeIcon className="h-5 w-5 text-primary" />
                   Pré-visualizar Convite
                 </>
               )}
             </h3>
             <button
               type="button"
-              className="rounded-md bg-transparent text-gray-400 hover:text-gray-500 focus:outline-none disabled:opacity-50"
+              className="rounded-md bg-transparent text-muted-foreground hover:text-muted-foreground focus:outline-none disabled:opacity-50"
               onClick={onClose}
               disabled={isLoading}
             >
@@ -202,8 +202,8 @@ export const CreateUserModal = ({
             <form onSubmit={handleAdvance}>
               <div className="px-4 py-5 sm:p-6 space-y-4">
                 {error && (
-                  <div className="mb-4 bg-red-50 border-l-4 border-red-500 p-4 rounded-md">
-                    <p className="text-sm text-red-700">{error}</p>
+                  <div className="mb-4 bg-danger/10 border-l-4 border-red-500 p-4 rounded-md">
+                    <p className="text-sm text-danger">{error}</p>
                   </div>
                 )}
 
@@ -215,7 +215,7 @@ export const CreateUserModal = ({
                     required
                     value={formData.nome}
                     onChange={handleChange}
-                    className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+                    className="mt-1 block w-full rounded-lg border-input shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
                     placeholder="Ex: João Silva"
                   />
                 </div>
@@ -228,12 +228,12 @@ export const CreateUserModal = ({
                     required
                     value={formData.email}
                     onChange={handleChange}
-                    className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+                    className="mt-1 block w-full rounded-lg border-input shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
                     placeholder="usuario@aplicativo.com"
                   />
-                  <div className="mt-2 flex items-start gap-2 rounded-md bg-blue-50 border border-blue-200 px-3 py-2">
+                  <div className="mt-2 flex items-start gap-2 rounded-md bg-primary/10 border border-blue-200 px-3 py-2">
                     <InformationCircleIcon className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
-                    <p className="text-xs text-blue-700 leading-snug">
+                    <p className="text-xs text-primary leading-snug">
                       <strong>E-mail único por aplicativo:</strong> o mesmo e-mail pode ser usado em aplicativos diferentes, mas não pode se repetir dentro deste aplicativo.
                     </p>
                   </div>
@@ -245,7 +245,7 @@ export const CreateUserModal = ({
                     name="role"
                     value={formData.role}
                     onChange={handleChange}
-                    className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border bg-white"
+                    className="mt-1 block w-full rounded-lg border-input shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border bg-card text-card-foreground"
                   >
                     {ROLE_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>
@@ -253,23 +253,23 @@ export const CreateUserModal = ({
                       </option>
                     ))}
                   </select>
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     {ROLE_OPTIONS.find((opt) => opt.value === formData.role)?.description}
                   </p>
                 </div>
               </div>
 
-              <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
+              <div className="bg-muted/50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
                 <button
                   type="submit"
-                  className="inline-flex w-full justify-center items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 sm:w-auto transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  className="inline-flex w-full justify-center items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 sm:w-auto transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                 >
                   Pré-visualizar
                   <EnvelopeIcon className="h-4 w-4" />
                 </button>
                 <button
                   type="button"
-                  className="mt-3 inline-flex w-full justify-center rounded-lg bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto transition-colors"
+                  className="mt-3 inline-flex w-full justify-center rounded-lg bg-card text-card-foreground px-4 py-2 text-sm font-semibold text-foreground shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-muted/50 sm:mt-0 sm:w-auto transition-colors"
                   onClick={onClose}
                 >
                   Cancelar
@@ -280,12 +280,12 @@ export const CreateUserModal = ({
             <div>
               <div className="px-4 py-5 sm:p-6 space-y-4">
                 {error && (
-                  <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-md">
-                    <p className="text-sm text-red-700">{error}</p>
+                  <div className="bg-danger/10 border-l-4 border-red-500 p-4 rounded-md">
+                    <p className="text-sm text-danger">{error}</p>
                   </div>
                 )}
 
-                <div className="bg-blue-50 border border-blue-100 text-blue-700 text-sm rounded-lg p-3 flex items-start gap-2">
+                <div className="bg-primary/10 border border-blue-100 text-primary text-sm rounded-lg p-3 flex items-start gap-2">
                   <EnvelopeIcon className="h-5 w-5 flex-shrink-0 mt-0.5" />
                   <div>
                     Este e-mail será enviado para <strong>{formData.email}</strong>.
@@ -294,22 +294,22 @@ export const CreateUserModal = ({
                   </div>
                 </div>
 
-                <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+                <div className="border border-border rounded-lg overflow-hidden bg-muted/50">
                   <iframe
                     title="Pré-visualização do e-mail"
                     srcDoc={previewHtml}
-                    className="w-full bg-white"
+                    className="w-full bg-card text-card-foreground"
                     style={{ height: "480px", border: 0 }}
                   />
                 </div>
               </div>
 
-              <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
+              <div className="bg-muted/50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
                 <button
                   type="button"
                   onClick={handleSend}
                   disabled={isLoading}
-                  className="inline-flex w-full justify-center items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto transition-colors focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+                  className="inline-flex w-full justify-center items-center gap-2 rounded-lg bg-success px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-success/90 disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto transition-colors focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
                 >
                   {isLoading ? (
                     "Enviando..."
@@ -324,7 +324,7 @@ export const CreateUserModal = ({
                   type="button"
                   onClick={() => setStep("form")}
                   disabled={isLoading}
-                  className="mt-3 inline-flex w-full justify-center items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 sm:mt-0 sm:w-auto transition-colors"
+                  className="mt-3 inline-flex w-full justify-center items-center gap-2 rounded-lg bg-card text-card-foreground px-4 py-2 text-sm font-semibold text-foreground shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-muted/50 disabled:opacity-50 sm:mt-0 sm:w-auto transition-colors"
                 >
                   <ArrowLeftIcon className="h-4 w-4" />
                   Voltar

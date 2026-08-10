@@ -121,22 +121,22 @@ export const Dashboard = () => {
     <div className="space-y-8 animate-fade-in">
       
       {/* HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-dracula-cur p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-dracula-comment">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card text-card-foreground p-6 rounded-2xl shadow-sm border border-border">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-dracula-fg tracking-tight">LoginHub <span className="text-blue-600 dark:text-dracula-cyan">Manager</span></h1>
-          <p className="text-lg text-gray-500 dark:text-dracula-cyan mt-1">Gestão Centralizada de Aplicativos e Infraestrutura</p>
+          <h1 className="text-3xl font-bold text-foreground tracking-tight">LoginHub <span className="text-primary">Manager</span></h1>
+          <p className="text-lg text-muted-foreground mt-1">Gestão Centralizada de Aplicativos e Infraestrutura</p>
         </div>
         <div className="flex gap-3">
           <button 
             onClick={() => setShowLogoutModal(true)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-white dark:bg-dracula-cur border border-red-200 dark:border-dracula-red text-red-600 dark:text-dracula-red rounded-xl hover:bg-red-50 dark:bg-[#ff555520] dark:border-[#ff555550] hover:border-red-300 transition font-medium shadow-sm"
+            className="flex items-center gap-2 px-5 py-2.5 bg-background border border-danger/20 text-danger rounded-xl hover:bg-danger/10 hover:border-danger/30 transition font-medium shadow-sm"
           >
             <ArrowRightOnRectangleIcon className="h-5 w-5" />
             Sair
           </button>
           <button 
             onClick={() => navigate('/apps/new')}
-            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 dark:bg-dracula-purple text-white rounded-xl hover:bg-blue-700 dark:hover:bg-dracula-pink transition font-medium shadow-lg shadow-blue-500/30"
+            className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition font-medium shadow-lg shadow-primary/30"
           >
             <PlusIcon className="h-5 w-5" />
             Novo Aplicativo
@@ -146,83 +146,83 @@ export const Dashboard = () => {
 
       {/* CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white dark:bg-dracula-cur p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-dracula-comment flex items-center gap-5 transition hover:shadow-md">
-          <div className="p-4 bg-blue-50 dark:bg-dracula-comment rounded-xl">
-            <BuildingOfficeIcon className="h-8 w-8 text-blue-600 dark:text-dracula-cyan" />
+        <div className="bg-card text-card-foreground p-6 rounded-2xl shadow-sm border border-border flex items-center gap-5 transition hover:shadow-md">
+          <div className="p-4 bg-primary/10 rounded-xl">
+            <BuildingOfficeIcon className="h-8 w-8 text-primary" />
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-500 dark:text-dracula-cyan uppercase tracking-wide">Aplicativos Ativos</p>
-            <p className="text-3xl font-bold text-gray-900 dark:text-dracula-fg">{activeApps}</p>
+            <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Aplicativos Ativos</p>
+            <p className="text-3xl font-bold text-foreground">{activeApps}</p>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-dracula-cur p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-dracula-comment flex items-center gap-5 transition hover:shadow-md">
-          <div className="p-4 bg-purple-50 dark:bg-dracula-comment rounded-xl">
-            <UsersIcon className="h-8 w-8 text-purple-600 dark:text-dracula-purple" />
+        <div className="bg-card text-card-foreground p-6 rounded-2xl shadow-sm border border-border flex items-center gap-5 transition hover:shadow-md">
+          <div className="p-4 bg-muted rounded-xl">
+            <UsersIcon className="h-8 w-8 text-foreground" />
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-500 dark:text-dracula-cyan uppercase tracking-wide">Total Cadastrado</p>
-            <p className="text-3xl font-bold text-gray-900 dark:text-dracula-fg">{apps.length}</p>
+            <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Total Cadastrado</p>
+            <p className="text-3xl font-bold text-foreground">{apps.length}</p>
           </div>
         </div>
       </div>
 
       {/* TABELA */}
-      <div className="bg-white dark:bg-dracula-cur rounded-2xl shadow-sm border border-gray-200 dark:border-dracula-comment overflow-hidden">
+      <div className="bg-card text-card-foreground rounded-2xl shadow-sm border border-border overflow-hidden">
         
         {/* Toolbar */}
-        <div className="p-6 border-b border-gray-200 dark:border-dracula-comment flex flex-col sm:flex-row justify-between items-center gap-4 bg-gray-50 dark:bg-dracula-bg/50">
-          <h2 className="text-xl font-bold text-gray-800 dark:text-dracula-fg flex items-center gap-2">
+        <div className="p-6 border-b border-border flex flex-col sm:flex-row justify-between items-center gap-4 bg-muted/30">
+          <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
             Aplicativos Cadastrados
-            <span className="bg-gray-200 dark:bg-dracula-comment text-gray-600 dark:text-dracula-cyan text-xs px-2 py-1 rounded-full">{filteredApps.length}</span>
+            <span className="bg-muted text-muted-foreground text-xs px-2 py-1 rounded-full">{filteredApps.length}</span>
           </h2>
           
           <div className="relative w-full sm:w-80">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <MagnifyingGlassIcon className="h-5 w-5 text-gray-400 dark:text-dracula-comment" />
+              <MagnifyingGlassIcon className="h-5 w-5 text-muted-foreground" />
             </div>
             <input 
               type="text" 
               placeholder="Buscar por nome, email ou CNPJ..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-dracula-cur dark:text-dracula-fg border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition shadow-sm text-sm"
+              className="w-full pl-10 pr-4 py-2.5 bg-background text-foreground border border-input rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition shadow-sm text-sm"
             />
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50 dark:bg-dracula-bg">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted/50">
               <tr>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 dark:text-dracula-cyan uppercase tracking-wider">Aplicativo</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 dark:text-dracula-cyan uppercase tracking-wider">Documento</th>
-                <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 dark:text-dracula-cyan uppercase tracking-wider">Usuários</th>
-                <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 dark:text-dracula-cyan uppercase tracking-wider">Status</th>
-                <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 dark:text-dracula-cyan uppercase tracking-wider">Cadastro</th>
-                <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 dark:text-dracula-cyan uppercase tracking-wider">Ações</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-muted-foreground uppercase tracking-wider">Aplicativo</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-muted-foreground uppercase tracking-wider">Documento</th>
+                <th className="px-6 py-4 text-center text-xs font-bold text-muted-foreground uppercase tracking-wider">Usuários</th>
+                <th className="px-6 py-4 text-center text-xs font-bold text-muted-foreground uppercase tracking-wider">Status</th>
+                <th className="px-6 py-4 text-left text-xs font-bold text-muted-foreground uppercase tracking-wider">Cadastro</th>
+                <th className="px-6 py-4 text-right text-xs font-bold text-muted-foreground uppercase tracking-wider">Ações</th>
               </tr>
             </thead>
-            <tbody className="bg-white dark:bg-dracula-cur divide-y divide-gray-200">
+            <tbody className="bg-card divide-y divide-border">
               {filteredApps.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500 dark:text-dracula-cyan">
+                  <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
                     <div className="flex flex-col items-center justify-center">
-                      <MagnifyingGlassIcon className="h-12 w-12 text-gray-300 mb-2" />
+                      <MagnifyingGlassIcon className="h-12 w-12 text-muted-foreground mb-2 opacity-50" />
                       <p className="text-lg font-medium">Nenhum resultado encontrado.</p>
                     </div>
                   </td>
                 </tr>
               ) : (
                 filteredApps.map((app) => (
-                  <tr key={app.id} className="hover:bg-gray-50 dark:bg-dracula-bg dark:hover:bg-dracula-cur transition duration-150 group">
+                  <tr key={app.id} className="hover:bg-muted/50 transition duration-150 group">
                     <td className="px-6 py-5 whitespace-nowrap">
                       <div className="flex items-center">
                         {app.logo ? (
                           <img
                             src={app.logo}
                             alt={app.nome}
-                            className="h-12 w-12 rounded-xl object-contain bg-white dark:bg-dracula-cur border border-gray-200 dark:border-dracula-comment shadow-sm p-1"
+                            className="h-12 w-12 rounded-xl object-contain bg-background border border-border shadow-sm p-1"
                           />
                         ) : (
                           <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
@@ -230,22 +230,22 @@ export const Dashboard = () => {
                           </div>
                         )}
                         <div className="ml-4">
-                          <div className="text-base font-semibold text-gray-900 dark:text-dracula-fg group-hover:text-blue-700 transition-colors">
+                          <div className="text-base font-semibold text-foreground group-hover:text-primary transition-colors">
                             {app.nome}
                           </div>
-                          <div className="text-sm text-gray-500 dark:text-dracula-cyan">{app.email}</div>
+                          <div className="text-sm text-muted-foreground">{app.email}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-5 whitespace-nowrap text-sm text-gray-600 dark:text-dracula-cyan font-mono">
+                    <td className="px-6 py-5 whitespace-nowrap text-sm text-muted-foreground font-mono">
                       {masks.cnpj(app.documento)}
                     </td>
 
                     <td className="px-6 py-5 whitespace-nowrap text-center">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         (app.total_usuarios || 0) > 0 
-                          ? 'bg-blue-100 dark:bg-dracula-comment text-blue-800'
-                          : 'bg-gray-100 text-gray-800 dark:text-dracula-fg'
+                          ? 'bg-primary/20 text-primary'
+                          : 'bg-muted text-muted-foreground'
                       }`}>
                         <UsersIcon className="h-3 w-3 mr-1" />
                         {app.total_usuarios || 0}
@@ -260,7 +260,7 @@ export const Dashboard = () => {
                       />
                     </td>
 
-                    <td className="px-6 py-5 whitespace-nowrap text-sm text-gray-500 dark:text-dracula-cyan">
+                    <td className="px-6 py-5 whitespace-nowrap text-sm text-muted-foreground">
                       {app.data_cadastro ? (
                         new Date(app.data_cadastro).toLocaleDateString('pt-BR', {
                           day: '2-digit',
@@ -268,7 +268,7 @@ export const Dashboard = () => {
                           year: 'numeric'
                         })
                       ) : (
-                        <span className="text-gray-300">-</span>
+                        <span className="text-muted-foreground opacity-50">-</span>
                       )}
                     </td>
 
@@ -276,14 +276,14 @@ export const Dashboard = () => {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => navigate(`/apps/${app.id}/users`)}
-                          className="px-3 py-1.5 text-blue-600 dark:text-dracula-cyan bg-blue-50 dark:bg-dracula-comment rounded-lg hover:bg-blue-100 dark:bg-dracula-comment transition font-semibold text-xs border border-blue-100"
+                          className="px-3 py-1.5 text-primary bg-primary/10 rounded-lg hover:bg-primary/20 transition font-semibold text-xs border border-transparent"
                         >
                           Usuários
                         </button>
 
                         <button 
                           onClick={() => setAppToEdit(app)}
-                          className="p-2 text-gray-400 dark:text-dracula-comment hover:text-blue-600 dark:text-dracula-cyan hover:bg-blue-50 dark:bg-dracula-comment rounded-lg transition border border-transparent hover:border-blue-100"
+                          className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition border border-transparent"
                           title="Editar Dados da Aplicativo"
                         >
                           <PencilSquareIcon className="h-5 w-5" />
@@ -291,7 +291,7 @@ export const Dashboard = () => {
 
                         <button 
                           onClick={() => handleDeleteClick(app)}
-                          className="p-2 text-gray-400 dark:text-dracula-comment hover:text-red-600 dark:text-dracula-red hover:bg-red-50 dark:bg-[#ff555520] dark:border-[#ff555550] rounded-lg transition border border-transparent hover:border-red-100"
+                          className="p-2 text-muted-foreground hover:text-danger hover:bg-danger/10 rounded-lg transition border border-transparent"
                           title="Excluir Aplicativo"
                         >
                           <TrashIcon className="h-5 w-5" />

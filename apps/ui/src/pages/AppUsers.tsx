@@ -208,26 +208,26 @@ export const AppUsers = () => {
         <div>
           <button 
             onClick={() => navigate('/dashboard')} 
-            className="flex items-center text-sm text-gray-500 hover:text-blue-600 mb-2 transition"
+            className="flex items-center text-sm text-muted-foreground hover:text-primary mb-2 transition"
           >
             <ArrowLeftIcon className="h-4 w-4 mr-1" />
             Voltar para Aplicativos
           </button>
           
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <div className="p-2 bg-blue-50 rounded-lg">
-               <UsersIcon className="h-6 w-6 text-blue-600" />
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            <div className="p-2 bg-primary/10 rounded-lg">
+               <UsersIcon className="h-6 w-6 text-primary" />
             </div>
             Gestão de Usuários
           </h1>
-          <p className="text-gray-500 mt-1 ml-1">
-            Aplicativo: <span className="font-semibold text-gray-800">{app?.nome || 'Carregando...'}</span>
+          <p className="text-muted-foreground mt-1 ml-1">
+            Aplicativo: <span className="font-semibold text-foreground">{app?.nome || 'Carregando...'}</span>
           </p>
         </div>
         
         <button 
           onClick={() => setShowFormModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition shadow-md text-sm font-medium"
+          className="flex items-center gap-2 px-4 py-2 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition shadow-md text-sm font-medium"
         >
           <UserPlusIcon className="h-5 w-5" />
           Convidar Usuário
@@ -236,70 +236,70 @@ export const AppUsers = () => {
 
       {/* TABELA */}
       <div className="max-w-7xl mx-auto">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-card text-card-foreground rounded-xl shadow-sm border border-border overflow-hidden">
           {loading ? (
             <div className="p-12 text-center">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-4 text-gray-500">Sincronizando dados...</p>
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto"></div>
+              <p className="mt-4 text-muted-foreground">Sincronizando dados...</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+                <thead className="bg-muted/50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acesso</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contato</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Nome</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Acesso</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Contato</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Ações</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-card text-card-foreground divide-y divide-gray-200">
                   {users.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                      <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground">
                         <div className="flex flex-col items-center justify-center">
-                          <UserIcon className="h-10 w-10 text-gray-300 mb-2" />
+                          <UserIcon className="h-10 w-10 text-muted-foreground opacity-50 mb-2" />
                           <span>Nenhum usuário vinculado a esta aplicativo.</span>
                         </div>
                       </td>
                     </tr>
                   ) : (
                     users.map((user) => (
-                      <tr key={user.id} className="hover:bg-gray-50 transition">
+                      <tr key={user.id} className="hover:bg-muted/50 transition">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
-                            <div className="flex-shrink-0 h-10 w-10 bg-gray-100 rounded-full flex items-center justify-center">
-                              <span className="font-bold text-gray-500 text-sm">{user.nome.charAt(0).toUpperCase()}</span>
+                            <div className="flex-shrink-0 h-10 w-10 bg-muted rounded-full flex items-center justify-center">
+                              <span className="font-bold text-muted-foreground text-sm">{user.nome.charAt(0).toUpperCase()}</span>
                             </div>
                             <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900">{user.nome}</div>
-                              <div className="text-sm text-gray-500">{user.email}</div>
+                              <div className="text-sm font-medium text-foreground">{user.nome}</div>
+                              <div className="text-sm text-muted-foreground">{user.email}</div>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {user.role === 'admin' ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-200">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/30">
                               <ShieldCheckIcon className="h-3 w-3 mr-1" />
                               Admin
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-muted text-foreground border border-border">
                               Usuário
                             </span>
                           )}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
                           {user.telefone || '-'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {user.status === 'ativo' ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-success/20 text-success border border-success/30">
                               Ativo
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-danger/20 text-danger border border-danger/30">
                               Bloqueado
                             </span>
                           )}
@@ -309,7 +309,7 @@ export const AppUsers = () => {
                             <button
                               onClick={() => handleResetPasswordClick(user)}
                               disabled={isResetting === user.id}
-                              className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition disabled:opacity-50"
+                              className="p-2 text-muted-foreground hover:text-amber-500 dark:hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition disabled:opacity-50"
                               title="Resetar Senha"
                             >
                               <KeyIcon className="h-5 w-5" />
@@ -319,8 +319,8 @@ export const AppUsers = () => {
                               onClick={() => handleToggleStatus(user)}
                               className={`p-2 rounded-lg transition ${
                                 user.status === 'ativo' 
-                                  ? 'text-gray-400 hover:text-red-600 hover:bg-red-50' 
-                                  : 'text-gray-400 hover:text-green-600 hover:bg-green-50'
+                                  ? 'text-muted-foreground hover:text-danger hover:bg-danger/10' 
+                                  : 'text-muted-foreground hover:text-success hover:bg-success/10'
                               }`}
                               title={user.status === 'ativo' ? 'Bloquear Usuário' : 'Desbloquear Usuário'}
                             >
@@ -333,7 +333,7 @@ export const AppUsers = () => {
 
                             <button 
                               onClick={() => setUserToEdit(user)}
-                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                              className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition"
                               title="Editar Usuário"
                             >
                               <PencilSquareIcon className="h-5 w-5" />
@@ -341,7 +341,7 @@ export const AppUsers = () => {
 
                             <button 
                               onClick={() => handleDeleteClick(user)}
-                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                              className="p-2 text-muted-foreground hover:text-danger hover:bg-danger/10 rounded-lg transition"
                               title="Remover Usuário"
                             >
                               <TrashIcon className="h-5 w-5" />
@@ -449,15 +449,15 @@ export const AppUsers = () => {
         <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
           <div className="flex min-h-screen items-center justify-center p-4 text-center sm:p-0">
             <div className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity" onClick={() => setCredentialsAlert({ ...credentialsAlert, isOpen: false })} aria-hidden="true" />
-            <div className="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg border border-gray-200">
-              <div className="bg-gray-50 px-4 py-3 sm:px-6 border-b border-gray-100 flex justify-between items-center">
-                <h3 className="text-lg font-semibold leading-6 text-gray-900 flex items-center gap-2">
+            <div className="relative transform overflow-hidden rounded-2xl bg-card text-card-foreground text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg border border-border">
+              <div className="bg-muted/50 px-4 py-3 sm:px-6 border-b border-border flex justify-between items-center">
+                <h3 className="text-lg font-semibold leading-6 text-foreground flex items-center gap-2">
                   <KeyIcon className="h-5 w-5 text-amber-500" />
                   {credentialsAlert.title}
                 </h3>
                 <button
                   type="button"
-                  className="rounded-md bg-transparent text-gray-400 hover:text-gray-500"
+                  className="rounded-md bg-transparent text-muted-foreground hover:text-muted-foreground"
                   onClick={() => setCredentialsAlert({ ...credentialsAlert, isOpen: false })}
                 >
                   <XMarkIcon className="h-6 w-6" />
@@ -469,23 +469,23 @@ export const AppUsers = () => {
                     readOnly
                     value={credentialsAlert.message}
                     rows={7}
-                    className="w-full text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-3 font-mono resize-none focus:outline-none"
+                    className="w-full text-sm text-gray-700 bg-muted/50 border border-border rounded-lg p-3 font-mono resize-none focus:outline-none"
                   />
                   <button 
                     onClick={() => navigator.clipboard.writeText(credentialsAlert.message)}
-                    className="absolute top-2 right-2 bg-white border border-gray-200 shadow-sm p-1.5 rounded-md text-xs font-medium text-gray-600 hover:bg-gray-50"
+                    className="absolute top-2 right-2 bg-card text-card-foreground border border-border shadow-sm p-1.5 rounded-md text-xs font-medium text-muted-foreground hover:bg-muted/50"
                   >
                     Copiar
                   </button>
                 </div>
-                <p className="mt-3 text-sm text-gray-500 flex items-center gap-1.5 bg-blue-50 text-blue-700 p-2 rounded-md border border-blue-100">
+                <p className="mt-3 text-sm text-muted-foreground flex items-center gap-1.5 bg-primary/10 text-primary p-2 rounded-md border border-blue-100">
                   ⚠️ Guarde esta senha. Ela não poderá ser visualizada novamente.
                 </p>
               </div>
-              <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+              <div className="bg-muted/50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
                 <button
                   type="button"
-                  className="inline-flex w-full justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 sm:w-auto"
+                  className="inline-flex w-full justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 sm:w-auto"
                   onClick={() => setCredentialsAlert({ ...credentialsAlert, isOpen: false })}
                 >
                   Entendi

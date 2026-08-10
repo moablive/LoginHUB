@@ -50,15 +50,15 @@ export function SetupPassword() {
   if (!token) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 text-center border border-slate-100">
-          <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-6">
-            <ShieldCheckIcon className="w-8 h-8 text-red-600" />
+        <div className="bg-card text-card-foreground rounded-2xl shadow-xl max-w-md w-full p-8 text-center border border-slate-100">
+          <div className="mx-auto w-16 h-16 bg-danger/20 rounded-full flex items-center justify-center mb-6">
+            <ShieldCheckIcon className="w-8 h-8 text-danger" />
           </div>
           <h2 className="text-2xl font-bold text-slate-800 mb-2">Link Inválido</h2>
           <p className="text-slate-600 mb-8">Não foi possível encontrar o token de acesso. O link pode estar quebrado ou já foi utilizado.</p>
           <button
             onClick={() => navigate('/login')}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg transition-colors w-full"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-2 px-6 rounded-lg transition-colors w-full"
           >
             Ir para o Login
           </button>
@@ -70,9 +70,9 @@ export function SetupPassword() {
   if (success) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 text-center border border-slate-100">
-          <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-6">
-            <ShieldCheckIcon className="w-8 h-8 text-green-600" />
+        <div className="bg-card text-card-foreground rounded-2xl shadow-xl max-w-md w-full p-8 text-center border border-slate-100">
+          <div className="mx-auto w-16 h-16 bg-success/20 rounded-full flex items-center justify-center mb-6">
+            <ShieldCheckIcon className="w-8 h-8 text-success" />
           </div>
           <h2 className="text-2xl font-bold text-slate-800 mb-2">Senha definida!</h2>
           <p className="text-slate-600 mb-8">Sua senha foi configurada com sucesso. Você já pode acessar a plataforma.</p>
@@ -84,17 +84,17 @@ export function SetupPassword() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 border border-slate-100">
+      <div className="bg-card text-card-foreground rounded-2xl shadow-xl max-w-md w-full p-8 border border-slate-100">
         <div className="text-center mb-8">
-          <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-6">
-            <ShieldCheckIcon className="w-8 h-8 text-blue-600" />
+          <div className="mx-auto w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mb-6">
+            <ShieldCheckIcon className="w-8 h-8 text-primary" />
           </div>
           <h2 className="text-2xl font-bold text-slate-800">Defina sua senha</h2>
           <p className="text-slate-500 mt-2 text-sm">Crie uma senha segura para o seu primeiro acesso.</p>
         </div>
 
         {error && (
-          <div className="bg-red-50 text-red-700 p-4 rounded-xl mb-6 text-sm border border-red-100 text-center">
+          <div className="bg-danger/10 text-danger p-4 rounded-xl mb-6 text-sm border border-red-100 text-center">
             {error}
           </div>
         )}
@@ -127,7 +127,7 @@ export function SetupPassword() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-3 px-4 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-2"
           >
             {loading ? 'Salvando...' : 'Salvar Senha e Acessar'}
           </button>

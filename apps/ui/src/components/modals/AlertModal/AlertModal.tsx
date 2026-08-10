@@ -46,21 +46,21 @@ export const AlertModal = ({
       titleColor: 'text-yellow-900' // Opcional, ou manter gray-900
     },
     error: {
-      icon: <XCircleIcon className="h-6 w-6 text-red-600" />,
-      bgIcon: 'bg-red-100',
-      button: 'bg-red-600 hover:bg-red-700 focus:ring-red-500',
+      icon: <XCircleIcon className="h-6 w-6 text-danger" />,
+      bgIcon: 'bg-danger/20',
+      button: 'bg-danger hover:bg-danger/90 focus:ring-red-500',
       titleColor: 'text-red-900'
     },
     info: {
-      icon: <InformationCircleIcon className="h-6 w-6 text-blue-600" />,
-      bgIcon: 'bg-blue-100',
-      button: 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500',
+      icon: <InformationCircleIcon className="h-6 w-6 text-primary" />,
+      bgIcon: 'bg-primary/20',
+      button: 'bg-primary hover:bg-primary/90 focus:ring-blue-500',
       titleColor: 'text-blue-900'
     },
     success: {
-      icon: <CheckCircleIcon className="h-6 w-6 text-green-600" />,
-      bgIcon: 'bg-green-100',
-      button: 'bg-green-600 hover:bg-green-700 focus:ring-green-500',
+      icon: <CheckCircleIcon className="h-6 w-6 text-success" />,
+      bgIcon: 'bg-success/20',
+      button: 'bg-success hover:bg-success/90 focus:ring-green-500',
       titleColor: 'text-green-900'
     }
   };
@@ -79,8 +79,8 @@ export const AlertModal = ({
         />
 
         {/* Modal Panel */}
-        <div className="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-sm border border-gray-100 animate-fade-in-up">
-          <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+        <div className="relative transform overflow-hidden rounded-2xl bg-card text-card-foreground text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-sm border border-border animate-fade-in-up">
+          <div className="bg-card text-card-foreground px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
             <div className="sm:flex sm:items-start">
               
               {/* Ícone Dinâmico */}
@@ -89,11 +89,11 @@ export const AlertModal = ({
               </div>
 
               <div className="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left">
-                <h3 className={`text-lg font-semibold leading-6 text-gray-900`} id="modal-title">
+                <h3 className={`text-lg font-semibold leading-6 text-foreground`} id="modal-title">
                   {title}
                 </h3>
                 <div className="mt-2">
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-muted-foreground">
                     {message}
                   </p>
                 </div>
@@ -102,10 +102,10 @@ export const AlertModal = ({
           </div>
           
           {/* Rodapé / Botão */}
-          <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+          <div className="bg-muted/50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
             <button
               type="button"
-              className={`inline-flex w-full justify-center rounded-lg px-3 py-2 text-sm font-semibold text-white shadow-sm sm:ml-3 sm:w-auto transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${currentStyle.button}`}
+              className={`inline-flex w-full justify-center rounded-lg px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm sm:ml-3 sm:w-auto transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${currentStyle.button}`}
               onClick={onClose}
             >
               {buttonText}

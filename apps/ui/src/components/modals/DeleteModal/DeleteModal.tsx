@@ -31,16 +31,16 @@ export const DeleteModal = ({
         </div>
 
         {/* Textos */}
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+        <h2 className="text-2xl font-bold text-foreground mb-2">
           {title}
         </h2>
         
-        <p className="text-gray-500 mb-1">
+        <p className="text-muted-foreground mb-1">
           Você tem certeza que deseja realizar esta ação?
         </p>
         
         {itemName && (
-          <p className="text-gray-800 font-medium bg-red-50 py-2 px-3 rounded-lg border border-red-100 mt-2 inline-block">
+          <p className="text-foreground font-medium bg-danger/10 py-2 px-3 rounded-lg border border-red-100 mt-2 inline-block">
             "{itemName}"
           </p>
         )}

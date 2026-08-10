@@ -12,6 +12,15 @@
     <meta name="description" content="LoginHub Manager Application" />
     
     <title>LoginHub | Manager</title>
+    <script>
+      (function() {
+        try {
+          var isDark = localStorage.getItem('theme') === 'dark' || 
+                      (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (isDark) document.documentElement.classList.add('dark');
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

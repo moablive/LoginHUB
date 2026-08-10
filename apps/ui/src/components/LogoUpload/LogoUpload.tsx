@@ -110,11 +110,11 @@ export const LogoUpload = ({
       {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
 
       <div className="flex items-center gap-4">
-        <div className="flex-shrink-0 h-20 w-20 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center overflow-hidden">
+        <div className="flex-shrink-0 h-20 w-20 rounded-xl border-2 border-dashed border-input bg-muted/50 flex items-center justify-center overflow-hidden">
           {value ? (
             <img src={value} alt="Logo" className="h-full w-full object-contain p-1" />
           ) : (
-            <PhotoIcon className="h-8 w-8 text-gray-300" />
+            <PhotoIcon className="h-8 w-8 text-muted-foreground opacity-50" />
           )}
         </div>
 
@@ -124,7 +124,7 @@ export const LogoUpload = ({
               type="button"
               onClick={handlePick}
               disabled={isProcessing}
-              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-lg border border-blue-200 transition-colors disabled:opacity-50"
             >
               <ArrowUpTrayIcon className="h-4 w-4" />
               {isProcessing ? "Processando..." : value ? "Trocar imagem" : "Selecionar imagem"}
@@ -134,18 +134,18 @@ export const LogoUpload = ({
                 type="button"
                 onClick={handleRemove}
                 disabled={isProcessing}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg border border-red-100 transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-danger hover:text-danger hover:bg-danger/10 rounded-lg border border-red-100 transition-colors disabled:opacity-50"
               >
                 <TrashIcon className="h-4 w-4" />
                 Remover
               </button>
             )}
           </div>
-          {helperText && <p className="text-xs text-gray-500">{helperText}</p>}
+          {helperText && <p className="text-xs text-muted-foreground">{helperText}</p>}
         </div>
       </div>
 
-      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+      {error && <p className="mt-2 text-xs text-danger">{error}</p>}
 
       <input
         ref={fileRef}

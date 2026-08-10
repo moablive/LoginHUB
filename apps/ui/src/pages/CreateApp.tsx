@@ -76,7 +76,7 @@ export const CreateApp = () => {
     navigate('/apps');
   };
 
-  const inputClass = "block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-colors";
+  const inputClass = "block w-full pl-10 pr-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-colors";
   const errorClass = "border-red-500 focus:ring-red-500 focus:border-red-500";
 
   return (
@@ -84,17 +84,17 @@ export const CreateApp = () => {
       
       <div className="max-w-5xl mx-auto mb-8 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
+          <div className="p-2 bg-primary/20 rounded-lg text-primary">
             <BuildingOfficeIcon className="h-6 w-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Novo Aplicativo</h1>
-            <p className="text-sm text-gray-500">Provisionamento de novo Tenant</p>
+            <h1 className="text-2xl font-bold text-foreground">Novo Aplicativo</h1>
+            <p className="text-sm text-muted-foreground">Provisionamento de novo Tenant</p>
           </div>
         </div>
         <button 
           onClick={() => navigate(-1)}
-          className="flex items-center text-gray-600 hover:text-blue-600 transition font-medium text-sm bg-white border border-gray-300 px-4 py-2 rounded-lg shadow-sm"
+          className="flex items-center text-muted-foreground hover:text-primary transition font-medium text-sm bg-card text-card-foreground border border-input px-4 py-2 rounded-lg shadow-sm"
         >
           <ArrowLeftIcon className="h-4 w-4 mr-2" />
           Voltar
@@ -102,13 +102,13 @@ export const CreateApp = () => {
       </div>
 
       <div className="max-w-5xl mx-auto">
-        <form onSubmit={handleSubmit(onSubmit)} className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+        <form onSubmit={handleSubmit(onSubmit)} className="bg-card text-card-foreground rounded-xl shadow-lg border border-border overflow-hidden">
           
           <div className="p-8 max-w-2xl mx-auto">
             
             <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2 flex items-center gap-2">
-                <BuildingOfficeIcon className="h-5 w-5 text-gray-400" />
+              <h3 className="text-lg font-semibold text-foreground border-b pb-2 flex items-center gap-2">
+                <BuildingOfficeIcon className="h-5 w-5 text-muted-foreground" />
                 Dados Corporativos
               </h3>
               
@@ -116,7 +116,7 @@ export const CreateApp = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nome do Aplicativo</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <BuildingOfficeIcon className="h-5 w-5 text-gray-400" />
+                    <BuildingOfficeIcon className="h-5 w-5 text-muted-foreground" />
                   </div>
                   <input
                     {...register('nome', { required: 'Nome é obrigatório' })}
@@ -133,7 +133,7 @@ export const CreateApp = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Documento (CPF/CNPJ)</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <IdentificationIcon className="h-5 w-5 text-gray-400" />
+                    <IdentificationIcon className="h-5 w-5 text-muted-foreground" />
                   </div>
                   <input 
                     {...register('documento', { required: 'Documento é obrigatório' })}
@@ -152,7 +152,7 @@ export const CreateApp = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">E-mail Corporativo</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <EnvelopeIcon className="h-5 w-5 text-gray-400" />
+                    <EnvelopeIcon className="h-5 w-5 text-muted-foreground" />
                   </div>
                   <input 
                     type="email"
@@ -167,7 +167,7 @@ export const CreateApp = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <PhoneIcon className="h-5 w-5 text-gray-400" />
+                    <PhoneIcon className="h-5 w-5 text-muted-foreground" />
                   </div>
                   <input
                     {...register('telefone', { required: true })}
@@ -180,10 +180,10 @@ export const CreateApp = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">URL da Plataforma <span className="text-gray-400 font-normal">(opcional)</span></label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">URL da Plataforma <span className="text-muted-foreground font-normal">(opcional)</span></label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <GlobeAltIcon className="h-5 w-5 text-gray-400" />
+                    <GlobeAltIcon className="h-5 w-5 text-muted-foreground" />
                   </div>
                   <input
                     type="url"
@@ -197,15 +197,15 @@ export const CreateApp = () => {
                     placeholder="https://app.exemplo.com"
                   />
                 </div>
-                <p className="mt-1 text-xs text-gray-500">Endereço web do aplicativo. É o link "Acessar Sistema" do e-mail de convite.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Endereço web do aplicativo. É o link "Acessar Sistema" do e-mail de convite.</p>
                 {errors.platform_url && <p className="mt-1 text-xs text-red-500">{errors.platform_url.message}</p>}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">URL do Bot <span className="text-gray-400 font-normal">(opcional)</span></label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">URL do Bot <span className="text-muted-foreground font-normal">(opcional)</span></label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <LinkIcon className="h-5 w-5 text-gray-400" />
+                    <LinkIcon className="h-5 w-5 text-muted-foreground" />
                   </div>
                   <input
                     type="url"
@@ -219,18 +219,18 @@ export const CreateApp = () => {
                     placeholder="https://t.me/seu_bot"
                   />
                 </div>
-                <p className="mt-1 text-xs text-gray-500">Link enviado no e-mail de convite para os usuários acessarem o bot (Telegram, WhatsApp, etc).</p>
+                <p className="mt-1 text-xs text-muted-foreground">Link enviado no e-mail de convite para os usuários acessarem o bot (Telegram, WhatsApp, etc).</p>
                 {errors.bot_url && <p className="mt-1 text-xs text-red-500">{errors.bot_url.message}</p>}
               </div>
             </div>
 
           </div>
 
-          <div className="px-8 py-5 bg-gray-50 border-t border-gray-200 flex justify-end">
+          <div className="px-8 py-5 bg-muted/50 border-t border-border flex justify-end">
             <button 
               type="submit" 
               disabled={isSubmitting}
-              className="flex items-center gap-2 bg-blue-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-blue-700 transition shadow-md disabled:opacity-70 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 bg-primary text-primary-foreground font-semibold py-2 px-6 rounded-lg hover:bg-primary/90 transition shadow-md disabled:opacity-70 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 <>

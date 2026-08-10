@@ -63,11 +63,11 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+      <div className="bg-card text-card-foreground rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-          <h3 className="text-lg font-bold text-gray-900">Editar Usuário</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition">
+        <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/50">
+          <h3 className="text-lg font-bold text-foreground">Editar Usuário</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-muted-foreground transition">
             <XMarkIcon className="h-6 w-6" />
           </button>
         </div>
@@ -75,8 +75,8 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
 
           {error && (
-            <div className="bg-red-50 border-l-4 border-red-500 p-3 rounded-md">
-              <p className="text-sm text-red-700">{error}</p>
+            <div className="bg-danger/10 border-l-4 border-red-500 p-3 rounded-md">
+              <p className="text-sm text-danger">{error}</p>
             </div>
           )}
 
@@ -88,7 +88,7 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
               required
               value={formData.nome}
               onChange={e => setFormData({...formData, nome: e.target.value})}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+              className="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
             />
           </div>
 
@@ -100,7 +100,7 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
               required
               value={formData.email}
               onChange={e => setFormData({...formData, email: e.target.value})}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+              className="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
             />
           </div>
 
@@ -110,7 +110,7 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
             <select
               value={formData.role}
               onChange={e => setFormData({...formData, role: e.target.value})}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white"
+              className="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-card text-card-foreground"
             >
               <option value="user">Usuário</option>
               <option value="admin">Administrador</option>
@@ -122,7 +122,7 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
           {/* ✅ Campo Telefone Adicionado */}
           <div>
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
-               <PhoneIcon className="h-4 w-4 text-gray-400" />
+               <PhoneIcon className="h-4 w-4 text-muted-foreground" />
                Telefone / WhatsApp
             </label>
             <input
@@ -131,7 +131,7 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
               onChange={e => setFormData({...formData, telefone: e.target.value})}
               maxLength={15}
               placeholder="(00) 00000-0000"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+              className="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
             />
           </div>
 
@@ -141,14 +141,14 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition font-medium"
+              className="px-4 py-2 text-gray-700 bg-card text-card-foreground border border-input rounded-lg hover:bg-muted/50 transition font-medium"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium shadow-md disabled:opacity-50"
+              className="px-4 py-2 bg-success text-primary-foreground rounded-lg hover:bg-success/90 transition font-medium shadow-md disabled:opacity-50"
             >
               {loading ? 'Salvando...' : 'Salvar Alterações'}
             </button>

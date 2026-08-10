@@ -25,15 +25,15 @@ export const StatusModal = ({ isOpen, onClose, onConfirm, isBlocking, entityName
                 <ShieldCheckIcon className="h-6 w-6" />
               )}
             </div>
-            <h3 className="text-lg font-bold leading-6 text-white" id="modal-title">
+            <h3 className="text-lg font-bold leading-6 text-primary-foreground" id="modal-title">
               {isBlocking ? 'Bloquear Acesso?' : 'Reativar Acesso?'}
             </h3>
           </div>
 
           <div className="mt-2">
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-muted-foreground">
               Você está prestes a <strong>{isBlocking ? 'bloquear' : 'reativar'}</strong> o acesso de 
-              <span className="text-white font-medium"> {entityName || 'este usuário'}</span>.
+              <span className="text-primary-foreground font-medium"> {entityName || 'este usuário'}</span>.
               <br/><br/>
               {isBlocking 
                 ? 'Ele perderá acesso imediato à plataforma até ser reativado.' 
@@ -44,17 +44,17 @@ export const StatusModal = ({ isOpen, onClose, onConfirm, isBlocking, entityName
           <div className="mt-6 flex justify-end gap-3">
             <button
               type="button"
-              className="px-4 py-2 rounded-lg text-sm font-medium text-gray-300 hover:bg-white/5 transition-colors border border-gray-600"
+              className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground opacity-50 hover:bg-card text-card-foreground/5 transition-colors border border-gray-600"
               onClick={onClose}
             >
               Cancelar
             </button>
             <button
               type="button"
-              className={`px-4 py-2 rounded-lg text-sm font-medium text-white transition-all shadow-lg ${
+              className={`px-4 py-2 rounded-lg text-sm font-medium text-primary-foreground transition-all shadow-lg ${
                 isBlocking 
-                  ? 'bg-red-600 hover:bg-red-700 shadow-red-500/20' 
-                  : 'bg-green-600 hover:bg-green-700 shadow-green-500/20'
+                  ? 'bg-danger hover:bg-danger/90 shadow-red-500/20' 
+                  : 'bg-success hover:bg-success/90 shadow-green-500/20'
               }`}
               onClick={() => {
                 onConfirm();

@@ -19,8 +19,8 @@ export const StatusButton = ({ currentStatus, entityName, onStatusChange }: Stat
         className={`
           group w-24 h-8 flex items-center justify-center rounded-full text-xs font-semibold transition-colors duration-300 border
           ${isActive 
-            ? 'bg-green-50 text-green-700 border-green-200 hover:bg-red-50 hover:text-red-700 hover:border-red-200' 
-            : 'bg-red-50 text-red-700 border-red-200 hover:bg-green-50 hover:text-green-700 hover:border-green-200'
+            ? 'bg-green-50 text-green-700 border-success/30 hover:bg-danger/10 hover:text-danger hover:border-danger/30' 
+            : 'bg-danger/10 text-danger border-danger/30 hover:bg-success/10 hover:text-green-700 hover:border-success/30'
           }
         `}
       >

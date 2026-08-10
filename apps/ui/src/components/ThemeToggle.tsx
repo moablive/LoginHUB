@@ -25,12 +25,11 @@ export function ThemeToggle() {
     <button
       onClick={() => setIsDark(!isDark)}
       className="fixed bottom-6 right-6 p-3 rounded-full shadow-lg transition-colors duration-200 z-50
-                 bg-white text-gray-800 hover:bg-gray-100 border border-gray-200
-                 dark:bg-dracula-cur dark:text-dracula-fg dark:hover:bg-dracula-comment dark:border-dracula-comment"
+                 bg-card text-foreground hover:bg-muted border border-border"
       title="Toggle Dark Mode"
     >
       {isDark ? (
-        <SunIcon className="h-6 w-6 text-dracula-yellow" />
+        <SunIcon className="h-6 w-6 text-amber-400" />
       ) : (
         <MoonIcon className="h-6 w-6" />
       )}
