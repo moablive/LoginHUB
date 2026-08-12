@@ -4,7 +4,7 @@ import {
   AppController,
   UserController
 } from '../controllers';
-import { adminMiddleware, authMiddleware } from '@loginhub/middlewares';
+import { adminMiddleware } from '@loginhub/middlewares';
 
 export const mainRouter = Router();
 
@@ -15,7 +15,7 @@ const authRouter = Router();
 authRouter.post('/login', AuthController.login);
 authRouter.post('/logout', AuthController.logout);
 authRouter.post('/refresh', AuthController.refresh);
-authRouter.post('/change-password', authMiddleware as any, AuthController.changePassword as any);
+// /change-password removido — senhas são definidas exclusivamente via magic link (setup-password)
 authRouter.post('/setup-password', AuthController.setupPassword as any);
 
 mainRouter.use('/auth', authRouter);

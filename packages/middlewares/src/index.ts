@@ -95,13 +95,9 @@ export const authMiddleware: RequestHandler = async (req, res, next) => {
 // ==========================================
 // 3. CORS MIDDLEWARE
 // ==========================================
-const ALLOWED_ORIGINS = [
-    'https://astralwavelabel.com',
-    'https://www.astralwavelabel.com',
-    'https://loginhub.astralwavelabel.com',
-    'https://moneyapp.astralwavelabel.com',
-    'https://app.astralwavelabel.com'
-];
+// Aceita qualquer subdomínio de astralwavelabel.com automaticamente.
+// Novos apps em *.astralwavelabel.com não precisam ser adicionados manualmente.
+const ASTRALWAVE_ORIGIN_RE = /^https:\/\/([\w-]+\.)*astralwavelabel\.com$/;
 
 const corsOptions: CorsOptions = {
     origin: (origin, callback) => {
@@ -115,8 +111,8 @@ const corsOptions: CorsOptions = {
             return callback(null, true);
         }
 
-        // 3. Permitir Domínios da Whitelist (Produção)
-        if (ALLOWED_ORIGINS.includes(origin)) {
+        // 3. Permitir qualquer *.astralwavelabel.com (Produção)
+        if (ASTRALWAVE_ORIGIN_RE.test(origin)) {
             return callback(null, true);
         }
 
@@ -128,6 +124,7 @@ const corsOptions: CorsOptions = {
     allowedHeaders: [
         'Content-Type', 
         'Authorization', 
+        'x-api-key',
         'x-master-key'
     ], 
     

@@ -29,7 +29,6 @@ export class AuthService {
             nome: usuarios.nome,
             email: usuarios.email,
             senha_hash: usuarios.senhaHash,
-            senha_padrao: usuarios.senhaPadrao,
             app_id: usuarios.appId,
             app_nome: aplicativos.nome,
             app_logo: aplicativos.logo,
@@ -101,7 +100,7 @@ export class AuthService {
         // o cliente precisa escolher qual app quer acessar (reenviar com app_id).
         if (matches.length > 1) {
             const ambig = new Error('AMBIGUOUS_EMAIL') as Error & { availableApps?: Array<{ id: string; nome: string; logo: string | null }> };
-            ambig.availableApps = matches.map(r => ({
+            ambig.availableApps = matches.map((r: typeof matches[0]) => ({
                 id: r.app_id ? r.app_id.toString() : '0',
                 nome: r.app_nome,
                 logo: r.app_logo ?? null,
@@ -117,7 +116,7 @@ export class AuthService {
           .set({ ultimoAcesso: new Date() })
           .where(eq(usuarios.id, user.id))
           .execute()
-          .catch(err => console.error('[AuthService] Update last_login failed:', err));
+          .catch((err: Error) => console.error('[AuthService] Update last_login failed:', err));
 
         const jwtSecret = process.env.JWT_SECRET;
         if (!jwtSecret) {
@@ -137,7 +136,7 @@ export class AuthService {
         return {
             token,
             expiresIn: 86400,
-            requirePasswordChange: user.senha_padrao,
+            requirePasswordChange: false, // fluxo senha_padrao removido — convite é feito via magic link
             usuario: {
                 id: user.id.toString(),
                 nome: user.nome,
@@ -182,7 +181,6 @@ export class AuthService {
             id: usuarios.id,
             nome: usuarios.nome,
             email: usuarios.email,
-            senha_padrao: usuarios.senhaPadrao,
             app_id: usuarios.appId,
             app_nome: aplicativos.nome,
             app_status: aplicativos.status,
@@ -212,7 +210,7 @@ export class AuthService {
         return {
             token,
             expiresIn: 86400,
-            requirePasswordChange: user.senha_padrao,
+            requirePasswordChange: false, // fluxo senha_padrao removido — convite é feito via magic link
             usuario: {
                 id: user.id.toString(),
                 nome: user.nome,
@@ -246,7 +244,7 @@ export class AuthService {
 export class AppService {
     public async registerApp(data: CreateAppDTO) {
         try {
-            return await db.transaction(async (tx) => {
+            return await db.transaction(async (tx: any) => {
                 const appRes = await tx.insert(aplicativos).values({
                     nome: data.nome,
                     documento: data.documento,
@@ -308,8 +306,8 @@ export class AppService {
         const rows = await db.select().from(aplicativos);
         const allUsers = await db.select({ appId: usuarios.appId }).from(usuarios);
 
-        return rows.map(row => {
-            const total_usuarios = allUsers.filter(u => u.appId === row.id).length;
+        return rows.map((row: typeof rows[0]) => {
+            const total_usuarios = allUsers.filter((u: typeof allUsers[0]) => u.appId === row.id).length;
             return {
                 ...row,
                 data_cadastro: row.dataCadastro,
@@ -473,7 +471,8 @@ export class UserService {
             email: usuarios.email,
             telefone: usuarios.telefone,
             role: niveisAcesso.nome,
-            status: usuarios.status
+            status: usuarios.status,
+            senha_padrao: usuarios.senhaPadrao,
         })
         .from(usuarios)
         .leftJoin(niveisAcesso, eq(usuarios.nivelAcessoId, niveisAcesso.id));
@@ -489,7 +488,8 @@ export class UserService {
             email: usuarios.email,
             telefone: usuarios.telefone,
             role: niveisAcesso.nome,
-            status: usuarios.status
+            status: usuarios.status,
+            senha_padrao: usuarios.senhaPadrao,
         })
         .from(usuarios)
         .leftJoin(niveisAcesso, eq(usuarios.nivelAcessoId, niveisAcesso.id))

@@ -1,16 +1,15 @@
 import express from 'express';
-import cors from 'cors';
 import helmet from 'helmet';
 import { mainRouter as router } from './routes';
-import { monitoringMiddleware, metricsEndpoint } from '@loginhub/middlewares';
+import { monitoringMiddleware, metricsEndpoint, corsMiddleware } from '@loginhub/middlewares';
 
 const app = express();
 
 // ==========================================
 // 1. Middlewares Globais
 // ==========================================
-app.use(helmet());       
-app.use(cors());         
+app.use(helmet());
+app.use(corsMiddleware);
 app.use(express.json({ limit: '5mb' }));
 
 // Prometheus medir o tempo de TODAS as rotas abaixo

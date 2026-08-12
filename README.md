@@ -218,7 +218,7 @@ SMTP_PASS='***'
 |---|---|---|---|
 | `POST` | `/auth/login` | público | Autentica e devolve JWT 24h |
 | `POST` | `/auth/refresh` | Bearer (mesmo expirado, grace 7d) | Renova o JWT |
-| `POST` | `/auth/change-password` | Bearer | Define nova senha definitiva e zera `senha_padrao` |
+| `POST` | `/auth/setup-password` | público (via token) | Define a senha no primeiro acesso (Magic Link) |
 | `POST` | `/auth/logout` | público | Sinal de saída (cliente limpa storage) |
 
 ### 🔐 Admin (`/admin/*`)
@@ -300,22 +300,9 @@ Aceita JWT **válido ou expirado há até 7 dias** (grace period). Revalida usu�
 | `401` | `USUARIO_INVALIDO` | Usuário foi removido |
 | `403` | `APP_BLOQUEADO` | App foi suspenso |
 
-### 3️⃣ Trocar senha definitiva
+### 3️⃣ Trocar senha definitiva (Removido)
 
-```http
-POST /api/auth/change-password
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{ "novaSenha": "novaSenhaForte123!" }
-```
-
-**Resposta 200:**
-```json
-{ "message": "Senha atualizada com sucesso." }
-```
-
-No DB: `senha_padrao = false`. O JWT atual continua válido — não precisa relogar.
+> **Fluxo descontinuado.** A definição de senha agora ocorre exclusivamente pelo Magic Link (setup-password) enviado por e-mail no momento da criação ou reset da conta. Não há mais senha temporária.
 
 ---
 
@@ -373,12 +360,8 @@ if (requirePasswordChange) {
   navigate('/dashboard');
 }
 
-// 2) TROCAR SENHA DEFINITIVA
-await loginHub.post('/auth/change-password',
-  { novaSenha: 'minhaSenhaForte123!' },
-  { headers: { Authorization: `Bearer ${token}` } }
-);
-// senha_padrao agora é false — próximos logins vêm com requirePasswordChange: false
+// 2) TROCAR SENHA DEFINITIVA (Descontinuado)
+// O redirecionamento força o logout e exige acesso pelo Magic Link se necessário.
 navigate('/dashboard');
 ```
 
@@ -402,9 +385,7 @@ if (!result) authApi.logout();   // refresh falhou — sessão acabou
 ### Checklist de integração
 
 - [ ] Tela de login chama `POST /auth/login` e persiste `token`, `usuario`, `app`
-- [ ] **Verifica `requirePasswordChange`** e redireciona para tela de troca se `true`
-- [ ] Bloqueia rotas protegidas enquanto `requirePasswordChange === true`
-- [ ] Tela de troca chama `POST /auth/change-password` com `Authorization: Bearer <token>`
+- [ ] Bloqueia rotas protegidas enquanto `requirePasswordChange === true` (Redireciona/Informa necessidade de acesso via e-mail)
 - [ ] (Recomendado) Usa `@loginhub/api-client` para ganhar auto-refresh em 401
 - [ ] (Opcional) Botão "Sair" chama `POST /auth/logout` e limpa storage
 
@@ -485,7 +466,6 @@ import { authApi, userApi, appApi } from '@loginhub/api-client';
 // Auth
 authApi.login(email, password)              // login + master key fallback
 authApi.logout()                            // limpa storage + redireciona
-authApi.changePassword(novaSenha)
 authApi.refresh()                           // refresh manual proativo
 authApi.isAuthenticated()
 authApi.getUser()
@@ -540,7 +520,6 @@ Acesso restrito ao **master** (autentica via `VITE_MASTER_KEY` digitada no campo
 
 ### ⚠️ Pontos de atenção
 
-- O `corsMiddleware` com whitelist está implementado em `@loginhub/middlewares` mas o `app.ts` ainda usa `cors()` aberto. **Trocar para fechar a brecha.**
 - Não há **rate limiting** nas rotas de login — vulnerável a brute force.
 - Não há fluxo de **forgot-password** público — só admin reseta hoje.
 - Coluna `vencimento` ainda existe no DB (não usada) — pode ser dropada com segurança.
@@ -591,7 +570,6 @@ Hard-refresh no browser (Ctrl+Shift+R) ou limpe cache do Cloudflare:
 
 ## 🗺️ Roadmap
 
-- [ ] Fechar CORS com whitelist (`corsMiddleware`)
 - [ ] Rate limiting em `/auth/login`
 - [ ] `POST /auth/forgot-password` público (usuário esqueceu a senha)
 - [ ] `GET /auth/me` — perfil do usuário logado

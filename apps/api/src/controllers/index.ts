@@ -86,26 +86,7 @@ export class AuthController {
         }
     }
 
-    static async changePassword(req: Request, res: Response) {
-        try {
-            const { novaSenha } = req.body;
-            const userId = (req as any).user?.sub;
-            
-            if (!novaSenha) {
-                return res.status(400).json({ error: 'Dados incompletos', message: 'A nova senha é obrigatória.' });
-            }
-            if (!userId) {
-                return res.status(401).json({ error: 'Acesso Negado', message: 'Usuário não autenticado.' });
-            }
-
-            await authService.changePassword(userId, novaSenha);
-            return res.status(200).json({ message: 'Senha atualizada com sucesso.' });
-        } catch (err: unknown) {
-            const error = err as Error;
-            console.error('[AuthController] changePassword:', error.message);
-            return res.status(500).json({ error: 'Erro Interno', message: 'Erro ao atualizar a senha.' });
-        }
-    }
+    // changePassword removido — troca de senha agora é feita exclusivamente via magic link (setup-password)
 
     static async setupPassword(req: Request, res: Response) {
         try {
@@ -134,7 +115,7 @@ export class AuthController {
             // Ensure the link is single-use by checking if the user still has senhaPadrao
             const userService = new UserService();
             const users = await userService.getAllUsersGlobal();
-            const user = users.find(u => u.id === decoded.sub);
+            const user = users.find(u => String(u.id) === String(decoded.sub));
 
             if (!user) {
                 return res.status(404).json({ error: 'Não Encontrado', message: 'Usuário não encontrado.' });
