@@ -15,7 +15,7 @@ const authRouter = Router();
 authRouter.post('/login', AuthController.login);
 authRouter.post('/logout', AuthController.logout);
 authRouter.post('/refresh', AuthController.refresh);
-// /change-password removido — senhas são definidas exclusivamente via magic link (setup-password)
+authRouter.post('/change-password', AuthController.setupPassword as any);
 authRouter.post('/setup-password', AuthController.setupPassword as any);
 
 mainRouter.use('/auth', authRouter);

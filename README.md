@@ -2,7 +2,7 @@
 
 # 🛡️ LoginHUB
 
-**Plataforma de autenticação centralizada da Astral Wave Label**
+**Plataforma de autenticação e gestão de identidade centralizada da Astral Wave Label**
 
 <img src="https://skillicons.dev/icons?i=ts,react,vite,tailwind,nodejs,express,postgres,docker,nginx,git&perline=10" />
 
@@ -10,14 +10,16 @@
 
 [![Status](https://img.shields.io/badge/status-em%20produção-success)](https://loginhub.astralwavelabel.com)
 [![PWA](https://img.shields.io/badge/pwa-enabled-blueviolet)]()
-[![JWT](https://img.shields.io/badge/auth-JWT%20%2B%20Refresh-blue)](#-fluxo-de-autenticação)
+[![Theme](https://img.shields.io/badge/theme-Dracula%20Dark%20%2F%20Light-purple)]()
+[![JWT](https://img.shields.io/badge/auth-JWT%20%2B%20Magic%20Link-blue)](#-fluxo-de-autenticação-e-regras-de-negócio)
 [![Monorepo](https://img.shields.io/badge/npm-workspaces-CB3837?logo=npm&logoColor=white)](#-estrutura-do-monorepo)
 [![License](https://img.shields.io/badge/license-private-lightgrey)]()
 
 [**🌐 UI Pública**](https://loginhub.astralwavelabel.com/login) &nbsp;•&nbsp;
 [**🔌 API Pública**](https://loginhub.astralwavelabel.com/api) &nbsp;•&nbsp;
 [**📖 Endpoints**](#-endpoints-da-api) &nbsp;•&nbsp;
-[**🔄 Integração**](#-integração-em-um-app-cliente-ex-moneyapp)
+[**🔄 Integração**](#-integração-em-um-app-cliente-ex-moneyapp) &nbsp;•&nbsp;
+[**🚢 Redeploy**](#-script-de-redeploy-redeploysh)
 
 </div>
 
@@ -25,135 +27,167 @@
 
 ## 📌 Sobre o projeto
 
-O **LoginHUB** é o serviço de **identidade central** que autentica os usuários de todos os aplicativos da infraestrutura Astral Wave Label (MoneyAPP, LifeDash, e futuros tenants). Cada usuário pertence a **um aplicativo** (`tenant`) com **um nível de acesso** (`role`), e todo o ciclo de vida da conta — convite, primeiro acesso, troca de senha, refresh de sessão — é gerenciado por aqui.
+O **LoginHUB** é a plataforma de **identidade central** que autentica os usuários de todos os ecossistemas e aplicações da infraestrutura Astral Wave Label (MoneyAPP, LifeDash, e outros clientes). 
 
-### Principais capacidades
+Cada usuário pertence a um **aplicativo (tenant)** com um nível de acesso (`role`). O sistema oferece suporte **multi-tenant real**: o mesmo e-mail pode ser cadastrado em aplicativos distintos de forma totalmente isolada.
 
-| Recurso | Status |
-|---|---|
-| 🔑 Login com e-mail + senha (JWT 24h) | ✅ |
-| 🔄 Refresh sliding com grace period de 7 dias | ✅ |
-| 👥 Multi-tenant (apps isolados, usuários por app) | ✅ |
-| 🛡️ 4 níveis de acesso (`master` / `admin` / `user` / `suporte`) | ✅ |
-| 📧 Envio automático de convites por e-mail (SMTP) | ✅ |
-| 🔒 Acesso por Magic Link + definição de senha no 1º acesso | ✅ |
-| 🗝️ Reset de senha pelo admin (gera Magic Link, envia e-mail) | ✅ |
-| 🖼️ Logo do app em base64 (PNG/JPG/WEBP/SVG, ≤256px) | ✅ |
-| 🤖 URL de bot por app (Telegram, WhatsApp, etc.) incluída no convite | ✅ |
-| 🔐 Master key para acesso administrativo de infra | ✅ |
-| 📱 PWA funcional (Instalável, Ícones, Service Worker) | ✅ |
+Todo o ciclo de vida da conta — convite por e-mail, primeiro acesso via **Magic Link**, desambiguação de tenant no login, redefinição de senha, alteração de status e renovação transparente de sessão — é gerenciado de forma centralizada pelo LoginHUB.
+
+### Principais Capacidades
+
+| Recurso | Status | Descrição |
+|---|---|---|
+| 🔑 Login com E-mail + Senha (JWT 24h) | ✅ | Autenticação centralizada com emissão de token JWT válido por 24 horas. |
+| 🔀 Desambiguação Multi-Tenant | ✅ | E-mail único por aplicativo. Se um e-mail existir em múltiplos apps, a API orienta a escolha do app ou desambigua pela senha (`AMBIGUOUS_EMAIL`). |
+| 🪄 Magic Link (1º Acesso & Reset) | ✅ | Criação de conta e reset de senha utilizam Magic Link seguro de uso único (JWT 1h) em substituição a senhas temporárias. |
+| 🔄 Refresh Session (Sliding 7d) | ✅ | Renovação contínua do JWT com grace period de até 7 dias após a expiração. |
+| 👥 Multi-Tenant Isolado | ✅ | Cada aplicativo possui seus próprios usuários, configurações, logos e URLs de integração. |
+| 🛡️ 4 Níveis de Acesso | ✅ | Níveis padronizados: `master` / `admin` / `user` / `suporte`. |
+| 🚦 Gestão Granular de Status | ✅ | Controle de status em apps (`ativo`/`inativo`) e usuários (`ativo`/`inativo`/`bloqueado`). |
+| 📧 Envio Automático por E-mail (SMTP) | ✅ | Disparo de convites e links de acesso via templates HTML personalizáveis. |
+| 🔗 URLs de Integração (`bot_url` / `platform_url`) | ✅ | Suporte a links diretos para bots (Telegram/WhatsApp) e plataformas web por aplicativo. |
+| 🎨 Dracula Dark Mode & Light Mode | ✅ | Alternância dinâmica de tema na UI com suporte nativo ao Dracula Theme. |
+| 📱 PWA Funcional | ✅ | Frontend instalável como Progressive Web App (Service Worker + Web App Manifest). |
+| 🚢 Script de Deploy Automatizado | ✅ | Script `./redeploy.sh` na raiz para deploy interativo ou via CLI com Docker Compose. |
 
 ---
 
 ## 🧱 Arquitetura
 
+A API e a UI do LoginHUB rodam em containers Docker na rede interna `awl_network`. O Nginx da UI atua como proxy reverso servindo as requisições de frontend e roteando chamadas `/api` para o backend.
+
 ```
-┌────────────────────────────────────────────────────────────────────┐
-│                          USUÁRIO FINAL                             │
-│   (cliente do MoneyAPP, LifeDash, etc — não acessa o LoginHUB UI)  │
-└──────────────────────────────────┬─────────────────────────────────┘
-                                   │
-                                   ▼
-                    ┌──────────────────────────────┐
-                    │   APP CLIENTE (MoneyAPP)     │
-                    │   - tela de login            │
-                    │   - tela de troca de senha   │
-                    └──────────────┬───────────────┘
-                                   │  HTTPS
-                                   │  (@loginhub/api-client)
-                                   ▼
-┌────────────────────────────────────────────────────────────────────┐
-│                          LOGINHUB                                  │
-│  ┌────────────────────┐         ┌────────────────────────────────┐ │
-│  │  apps/ui (React)   │         │  apps/api (Express + JWT)      │ │
-│  │  Admin Dashboard   │ ◀──▶    │  /auth/*  /admin/*             │ │
-│  │  (master/admin)    │         │                                │ │
-│  └────────────────────┘         └─────────────┬──────────────────┘ │
-│                                               │                    │
-│                                               ▼                    │
-│                              ┌──────────────────────────┐          │
-│                              │  PostgreSQL (Drizzle ORM)│          │
-│                              │  aplicativos / usuarios  │          │
-│                              │  niveis_acesso           │          │
-│                              └──────────────────────────┘          │
-└────────────────────────────────────────────────────────────────────┘
-                                   ▲
-                                   │
-                          ┌────────┴────────┐
-                          │  SMTP Hostinger │  (e-mails de convite)
-                          └─────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                             USUÁRIO FINAL                                   │
+│            (Acessa MoneyAPP, LifeDash ou o LoginHUB Admin UI)               │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           LOGINHUB FRONTEND (UI)                            │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │ React + Vite + Tailwind + PWA + Dracula Theme                         │  │
+│  │ (Dashboard, Gestão de Tenants, Usuários, Convites & Magic Links)      │  │
+│  └───────────────────────────────────┬───────────────────────────────────┘  │
+│                                      │ /api (Nginx Reverse Proxy)           │
+│                                      ▼                                      │
+│                           LOGINHUB BACKEND (API)                            │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │ Express + JWT + Drizzle ORM + SMTP Client                             │  │
+│  │ /auth/* (login, refresh, setup-password)                             │  │
+│  │ /admin/* (apps, users, status, reset-password)                        │  │
+│  └───────────────────────────────────┬───────────────────────────────────┘  │
+└──────────────────────────────────────┼──────────────────────────────────────┘
+                                       │
+                                       ▼
+                    ┌────────────────────────────────────┐
+                    │ PostgreSQL Database (login_hub)    │
+                    │ - aplicativos (bot_url, platform)  │
+                    │ - usuarios (unique: email + app)   │
+                    │ - niveis_acesso                    │
+                    └────────────────────────────────────┘
 ```
 
 ---
 
-## 📂 Estrutura do monorepo
+## 📂 Estrutura do Monorepo
 
-Gerenciado com **NPM workspaces** e build em ordem topológica explícita (`schema → database → api-client → middlewares → services → api → ui`).
+O projeto é estruturado como um monorepo gerenciado via **NPM Workspaces**, compilado na ordem topológica: `schema → database → api-client → middlewares → services → api → ui`.
 
 ```
 LoginHUB/
 ├── apps/
 │   ├── api/                      # Express + JWT + Drizzle (porta 3000 interna / 3005 externa)
 │   │   ├── src/
-│   │   │   ├── app.ts            # Configuração de middlewares globais
-│   │   │   ├── server.ts         # Bootstrap
-│   │   │   ├── routes/index.ts   # Definição de rotas
-│   │   │   └── controllers/      # Camada HTTP (input → service → response)
+│   │   │   ├── app.ts            # Configuração de Express & Middlewares
+│   │   │   ├── server.ts         # Bootstrap do servidor HTTP
+│   │   │   ├── routes/           # Rotas /auth e /admin
+│   │   │   └── controllers/      # Handlers HTTP (AuthController, AppController, UserController)
 │   │   ├── Dockerfile
 │   │   └── docker-compose.yml
-│   └── ui/                       # React + Vite + Tailwind (porta 80 interna / 3006 externa)
+│   └── ui/                       # React + Vite + PWA (porta 80 interna / 3006 externa)
+│       ├── nginx.conf            # Proxy reverso (/api → server_loginhub_backend:3000)
 │       ├── src/
-│       │   ├── pages/            # Dashboard, AppUsers, CreateApp, Login
-│       │   ├── components/
-│       │   │   ├── modals/       # CreateUserModal, ConfirmModal, etc.
-│       │   │   ├── LogoUpload/   # Upload + resize de logo do app
-│       │   │   └── ...
-│       │   └── templates/emails/ # Templates React → HTML para envio
+│       │   ├── pages/            # Login, Dashboard, AppUsers, CreateApp, SetupPassword
+│       │   ├── components/       # Modais, LogoUpload, Layout, Header (Dracula Toggle)
+│       │   └── templates/emails/ # Templates React → HTML para disparo de convites
 │       ├── Dockerfile
 │       └── docker-compose.yml
-└── packages/
-    ├── schema/                   # Interfaces TS + Drizzle table definitions
-    ├── database/                 # Drizzle client + connection pool
-    ├── api-client/               # Axios com interceptors + auto-refresh
-    ├── middlewares/              # authMiddleware, adminMiddleware, CORS, métricas
-    └── services/                 # Regras de negócio (AuthService, UserService, AppService, EmailService)
+├── packages/
+│   ├── schema/                   # Drizzle Table Schemas, Unique Constraints, Interfaces DTOs
+│   ├── database/                 # Pool de conexão PostgreSQL + Client Drizzle
+│   ├── api-client/               # Cliente Axios com interceptor de Auto-Refresh (single-flight)
+│   ├── middlewares/              # authMiddleware, adminMiddleware, CORS, Métricas
+│   └── services/                 # AuthService, AppService, UserService, EmailService
+├── docker-compose.yml            # Compose principal da raiz (subição combinada de API + UI)
+├── redeploy.sh                   # Script de redeploy interativo/automatizado
+└── .env                          # Variáveis de ambiente
 ```
 
 ---
 
-## 🚀 Setup local
+## 🚀 Setup Local e Desenvolvimento
 
 ### Pré-requisitos
-- Docker + Docker Compose
-- Rede Docker `awl_network` (externa, compartilhada com `server_db_postgres`)
-- PostgreSQL rodando em `server_db_postgres` (mesma rede)
+- Docker & Docker Compose (v2)
+- Rede Docker `awl_network` criada (`docker network create awl_network`)
+- Banco PostgreSQL acessível em `server_db_postgres` na rede `awl_network`
 
-### Subir tudo
+### Execução via Docker (Produção / Homologação)
+
+Para subir todos os serviços utilizando o compose principal da raiz:
+
 ```bash
-# A partir da raiz
-docker compose -f apps/api/docker-compose.yml up -d --build
-docker compose -f apps/ui/docker-compose.yml up -d --build
+docker compose --env-file .env up -d --build
 ```
 
-### Build local (sem Docker, para desenvolvimento)
+Ou utilize o script de gerenciamento:
+
 ```bash
+./redeploy.sh
+```
+
+### Build Local (Desenvolvimento sem Docker)
+
+```bash
+# 1. Instalar dependências de todos os workspaces
 npm install
-npm run build      # build topológico de todos os workspaces
+
+# 2. Build em ordem topológica de dependências
+npm run build
 ```
 
-> ℹ️ **Importante**: o script `build` da raiz já está na ordem correta. Não use `npm run build --workspaces` direto — ele roda em ordem alfabética e quebra por dependência cruzada.
+> ⚠️ **Atenção**: O comando `npm run build` na raiz executa os builds na sequência de dependência correta. Não utilize `npm run build --workspaces` diretamente para evitar falhas de compilação por referência cruzada.
 
-### Reset Cloudflare cache (regra de deploy)
-Após qualquer deploy que afete o frontend:
+---
+
+## 🚢 Script de Redeploy (`redeploy.sh`)
+
+O LoginHUB disponibiliza o utilitário `./redeploy.sh` na raiz para simplificar o gerenciamento dos containers em produção:
+
 ```bash
-/mnt/docker-services/documentacao/scripts/cleancachecloudflare.sh
+# Menu interativo (exibe opções para escolher api, ui ou ambos)
+./redeploy.sh
+
+# Republicar apenas um serviço específico
+./redeploy.sh api
+./redeploy.sh ui
+
+# Republicar API e UI sem rebuildar imagens
+./redeploy.sh --no-build api ui
+
+# Derrubar containers antigos e recriar do zero
+./redeploy.sh --down
+
+# Atualizar imagens base e limpar imagens dangling
+./redeploy.sh --pull --prune
 ```
 
 ---
 
-## 🔧 Variáveis de ambiente
+## 🔧 Variáveis de Ambiente (`.env`)
 
-Arquivo `.env` na **raiz** do projeto. O `docker-compose.yml` da UI tem um symlink `apps/ui/.env → ../../.env` para que o Vite consiga interpolar os `VITE_*` no build.
+O arquivo `.env` deve ser mantido na **raiz** do projeto.
 
 ```env
 # ====================
@@ -163,7 +197,7 @@ PORT=3000
 TZ=America/Sao_Paulo
 
 # ====================
-# Banco de dados
+# Banco de Dados PostgreSQL
 # ====================
 DB_HOST=server_db_postgres
 DB_PORT=5432
@@ -172,21 +206,21 @@ DB_USER=admin_root
 DB_PASS='***'
 
 # ====================
-# Segurança
+# Autenticação e Segurança
 # ====================
-JWT_SECRET='***'                # usado para assinar JWTs
-MASTER_API_KEY='***'            # admin key para rotas /admin/*
-VITE_MASTER_KEY='***'           # mesma key, embutida no bundle da UI
+JWT_SECRET='***'                # Chave privada para assinatura de JWT (login e magic links)
+MASTER_API_KEY='***'            # Chave de administrador mestre para chamadas /admin/*
+VITE_MASTER_KEY='***'           # Chave mestra exposta para o build da UI
 
 # ====================
-# Domínios públicos
+# URLs Públicas
 # ====================
 API_PUBLIC_URL=https://loginhub.astralwavelabel.com
 UI_PUBLIC_URL=https://loginhub.astralwavelabel.com
 VITE_API_URL=https://loginhub.astralwavelabel.com/api
 
 # ====================
-# SMTP (Hostinger)
+# Serviço de E-mail (SMTP Hostinger)
 # ====================
 SMTP_HOST=smtp.hostinger.com
 SMTP_PORT=587
@@ -194,396 +228,281 @@ SMTP_USER=awlsrvlab@astralwavelabel.com
 SMTP_PASS='***'
 ```
 
-> 🔐 `NODE_ENV` **NÃO** vai no `.env` — o Vite reclama. Ele é definido pelo `environment` do `docker-compose.yml` da API.
-
 ---
 
 ## 🛣️ Endpoints da API
 
 **Base URL:**
 - Pública: `https://loginhub.astralwavelabel.com/api`
-- Local: `http://localhost:3005/api`
-- Interna (outros containers na `awl_network`): `http://server_loginhub_backend:3000/api`
+- Interna Docker (`awl_network`): `http://server_loginhub_backend:3000/api`
 
-> ⚠️ **Mudança em 2026-07-28.** A API era publicada num hostname próprio,
-> `api-auth.astralwavelabel.com`, apontando direto para o container da API. Essa
-> rota do Cloudflare foi removida e a API passou a ser servida pelo nginx da
-> própria UI (`apps/ui/nginx.conf`), em `/api` do mesmo hostname.
->
-> Backends e bots **nunca** devem usar a URL pública — só a interna acima.
+---
 
-### 🔓 Auth (`/auth`)
+### 🔓 Autenticação (`/auth`)
 
-| Método | Path | Auth | Função |
+| Método | Path | Autenticação | Descrição |
 |---|---|---|---|
-| `POST` | `/auth/login` | público | Autentica e devolve JWT 24h |
-| `POST` | `/auth/refresh` | Bearer (mesmo expirado, grace 7d) | Renova o JWT |
-| `POST` | `/auth/setup-password` | público (via token) | Define a senha no primeiro acesso (Magic Link) |
-| `POST` | `/auth/logout` | público | Sinal de saída (cliente limpa storage) |
+| `POST` | `/auth/login` | Público | Autentica e emite JWT 24h. Aceita `email`, `password` e `app_id` (opcional). |
+| `POST` | `/auth/refresh` | Bearer Token (válido ou grace 7d) | Renova o token JWT por mais 24h. |
+| `POST` | `/auth/setup-password` | Público (via Magic Link Token) | Define a senha do usuário no 1º acesso ou reset (invalida o Magic Link). |
+| `POST` | `/auth/change-password` | Público (via Magic Link Token) | Alias de compatibilidade para `setup-password`. |
+| `POST` | `/auth/logout` | Público | Retorna orientação para o cliente limpar o storage local. |
 
-### 🔐 Admin (`/admin/*`)
+---
 
-Todas exigem header `x-api-key: <MASTER_API_KEY>`.
+### 🔐 Administração (`/admin/*`)
 
-#### Aplicativos
+*Exige o header `x-api-key: <MASTER_API_KEY>` em todas as requisições.*
 
-| Método | Path | Função |
-|---|---|---|
-| `GET` | `/admin/apps` | Lista todos com `total_usuarios`, `logo`, `bot_url` |
-| `GET` | `/admin/apps/:id` | Detalhes |
-| `POST` | `/admin/apps` | Cria app (+ admin opcional) |
-| `PUT` | `/admin/apps/:id` | Atualiza (`nome`, `email`, `documento`, `telefone`, `logo`, `bot_url`) |
-| `PATCH` | `/admin/apps/:id/status` | Body: `{ status: 'ativo' \| 'inativo' }` |
-| `DELETE` | `/admin/apps/:id` | Remove (cascata nos usuários) |
+#### Aplicativos (Tenants)
+
+| Método | Path | Body / Params | Descrição |
+|---|---|---|---|
+| `GET` | `/admin/apps` | - | Lista todos os aplicativos com contagem de usuários (`total_usuarios`), `logo`, `bot_url` e `platform_url`. |
+| `GET` | `/admin/apps/:id` | - | Obtém detalhes completos de um aplicativo. |
+| `POST` | `/admin/apps` | `CreateAppDTO` | Cadastra novo aplicativo (+ conta admin inicial opcional). |
+| `PUT` | `/admin/apps/:id` | `UpdateAppDTO` | Atualiza dados (`nome`, `email`, `documento`, `telefone`, `logo`, `bot_url`, `platform_url`). |
+| `PATCH` | `/admin/apps/:id/status` | `{ "status": "ativo" \| "inativo" }` | Altera a situação do aplicativo. |
+| `DELETE` | `/admin/apps/:id` | - | Exclui o aplicativo e remove em cascata todos os usuários vinculados. |
 
 #### Usuários
 
-| Método | Path | Função |
-|---|---|---|
-| `GET` | `/admin/users` | Lista global |
-| `GET` | `/admin/apps/:id/users` | Lista por app |
-| `POST` | `/admin/users` | Cria usuário; envia e-mail se `emailHtml` no payload |
-| `PUT` | `/admin/users/:id` | Atualiza dados |
-| `POST` | `/admin/users/:id/reset-password` | Gera nova temp e envia e-mail |
-| `DELETE` | `/admin/users/:id` | Remove |
-
-#### Misc
-
-| Método | Path | Função |
-|---|---|---|
-| `GET` | `/api` | Health check (status, env, master_key flag) |
-| `GET` | `/metrics` | Prometheus scrape |
+| Método | Path | Body / Params | Descrição |
+|---|---|---|---|
+| `GET` | `/admin/users` | - | Listagem global de usuários de todos os aplicativos. |
+| `GET` | `/admin/apps/:id/users` | - | Lista usuários vinculados a um aplicativo específico. |
+| `POST` | `/admin/users` | `CreateUserDTO` | Cria usuário. Gera Magic Link (1h); dispara e-mail com template se `emailHtml` for informado. |
+| `PUT` | `/admin/users/:id` | `UpdateUserDTO` | Atualiza dados cadastrais, telefone, e-mail ou nível de acesso (`role`). |
+| `PATCH` | `/admin/users/:id/status` | `{ "status": "ativo" \| "inativo" \| "bloqueado" }` | Atualiza o status do usuário. |
+| `POST` | `/admin/users/:id/reset-password` | `{ "emailHtml"?: "..." }` | Invalida senha atual, gera Magic Link (1h) e dispara e-mail de redefinição. |
+| `DELETE` | `/admin/users/:id` | - | Exclui a conta do usuário. |
 
 ---
 
-## 🔄 Fluxo de autenticação
+## 🔄 Fluxos de Autenticação e Regras de Negócio
 
-### 1️⃣ Login
+### 1️⃣ Fluxo de Login e Desambiguação Multi-Tenant
 
-```http
-POST /api/auth/login
-Content-Type: application/json
+Como um mesmo e-mail pode pertencer a múltiplos aplicativos clientes, o backend trata a autenticação da seguinte forma:
 
-{ "email": "user@app.com", "password": "..." }
+```
+[ POST /api/auth/login ] { email, password, app_id? }
+          │
+          ├─► Se app_id foi informado ──► Autentica diretamente naquele app.
+          │
+          └─► Se app_id NÃO foi informado:
+                │
+                ├─► Valida as senhas dos apps vinculados ao e-mail.
+                │
+                ├─► Apenas 1 app teve senha correspondente ──► Sucesso (Login automático).
+                │
+                └─► 2 ou mais apps possuem a mesma senha ──► Retorna 409 AMBIGUOUS_EMAIL:
+                      {
+                        "error": "AMBIGUOUS_EMAIL",
+                        "message": "Este e-mail está vinculado a mais de um aplicativo...",
+                        "availableApps": [
+                          { "id": "1", "nome": "MoneyAPP", "logo": "data:image/..." },
+                          { "id": "2", "nome": "LifeDash", "logo": "data:image/..." }
+                        ]
+                      }
 ```
 
-**Resposta 200:**
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiIs...",
-  "expiresIn": 86400,
-  "requirePasswordChange": true,
-  "usuario": { "id": "12", "nome": "...", "email": "...", "role": "user" },
-  "app":     { "id": "3", "nome": "MoneyAPP", "status": "ativo" }
-}
+O app cliente exibe a interface de seleção e reenvia a requisição com o `app_id` selecionado.
+
+---
+
+### 2️⃣ Fluxo de Primeiro Acesso via Magic Link
+
+O LoginHUB não gera senhas temporárias. Toda a inclusão de novos usuários utiliza **Magic Link**:
+
+```
+ ┌─────────────────────────────────────────────────────────────────────────┐
+ │ 1. Admin cria usuário no LoginHUB UI (POST /admin/users)                │
+ │    - Backend cria registro com `senha_padrao = true`.                   │
+ │    - Backend assina JWT (1h, `action: 'setup-password'`).               │
+ │    - SMTP envia o e-mail contendo o Magic Link ao usuário.              │
+ └────────────────────────────────────┬────────────────────────────────────┘
+                                      │
+                                      ▼
+ ┌─────────────────────────────────────────────────────────────────────────┐
+ │ 2. Usuário clica no link do e-mail (redireciona para /setup-password)   │
+ └────────────────────────────────────┬────────────────────────────────────┘
+                                      │
+                                      ▼
+ ┌─────────────────────────────────────────────────────────────────────────┐
+ │ 3. UI chama POST /auth/setup-password { token, novaSenha }              │
+ │    - Backend valida o JWT.                                              │
+ │    - Verifica se `senha_padrao === true` (garante uso único).           │
+ │    - Grava o hash da nova senha e atualiza `senha_padrao = false`.       │
+ └────────────────────────────────────┬────────────────────────────────────┘
+                                      │
+                                      ▼
+ ┌─────────────────────────────────────────────────────────────────────────┐
+ │ 4. Usuário é redirecionado para o Login e acessa o app com a nova senha│
+ └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Erros:**
-| Status | Código | Quando |
-|---|---|---|
-| `401` | `CREDENCIAIS_INVALIDAS` | E-mail/senha errados |
-| `403` | `APP_BLOQUEADO` | App do usuário foi suspenso |
+> ℹ️ **Fallback de E-mail**: Se o SMTP falhar ao enviar o e-mail, a API retorna `{ emailSent: false, magicLinkToken: "..." }`. A UI exibe o link gerado para que o administrador possa enviá-lo manualmente ao usuário.
 
-### 2️⃣ Refresh (sliding session)
+---
+
+### 3️⃣ Fluxo de Redefinição de Senha (Reset)
+
+1. O administrador aciona **"Resetar Senha"** no painel de usuários (`POST /admin/users/:id/reset-password`).
+2. O backend marca a conta com `senha_padrao = true` e gera um novo Magic Link token (expiração 1h).
+3. O e-mail de redefinição é disparado. Ao acessar o link, o usuário define sua nova senha e conclui o processo.
+
+---
+
+### 4️⃣ Fluxo de Renovação de Sessão (Sliding Refresh)
 
 ```http
 POST /api/auth/refresh
-Authorization: Bearer <token-atual-ou-recém-expirado>
+Authorization: Bearer <token-jwt>
 ```
 
-Aceita JWT **válido ou expirado há até 7 dias** (grace period). Revalida usuário + status do app no DB e emite novo JWT 24h. Mesma estrutura de response do `/login`.
-
-**Erros:**
-| Status | Código | Quando |
-|---|---|---|
-| `401` | `TOKEN_AUSENTE` / `TOKEN_INVALIDO` / `TOKEN_EXPIRADO` | Sem token / assinatura inválida / passou da grace |
-| `401` | `USUARIO_INVALIDO` | Usuário foi removido |
-| `403` | `APP_BLOQUEADO` | App foi suspenso |
-
-### 3️⃣ Trocar senha definitiva (Removido)
-
-> **Fluxo descontinuado.** A definição de senha agora ocorre exclusivamente pelo Magic Link (setup-password) enviado por e-mail no momento da criação ou reset da conta. Não há mais senha temporária.
+- Valida o token atual (aceita tokens expirados há **até 7 dias** — Grace Period).
+- Checa se o usuário e o aplicativo continuam com status `ativo` no banco de dados.
+- Emite um novo token JWT com validade renovada de 24 horas.
 
 ---
 
-## 🔌 Integração em um app cliente (ex: MoneyAPP)
+## 🔌 Integração em um App Cliente (ex: MoneyAPP)
 
-### A flag-chave: `requirePasswordChange`
+### Fluxo de Login com Suporte a Desambiguação (TypeScript)
 
-Toda a coreografia gira em torno da coluna `usuarios.senha_padrao`:
-
-| Operação | Flag depois |
-|---|---|
-| Admin cria usuário (sem senha) | `senha_padrao = true` |
-| Admin reseta a senha | `senha_padrao = true` |
-| Usuário define a senha via Magic Link | `senha_padrao = false` |
-| Usuário chama `/auth/change-password` | `senha_padrao = false` |
-
-E essa flag é refletida no response do login como `requirePasswordChange`.
-
-### Fluxo completo de primeiro acesso (Magic Link)
-
-O LoginHub não gera senha temporária.
-Em vez disso, envia um link seguro de acesso.
-O usuário clica no link e define a própria senha final.
-Simples, seguro e alinhado com o padrão das aplicações modernas.
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  1. Admin cria usuário no LoginHUB → POST /admin/users              │
-│     Backend gera JWT de uso único + dispara e-mail com Magic Link   │
-│                                                                     │
-│  2. Usuário recebe e-mail e clica no botão "Definir minha senha"    │
-│                                                                     │
-│  3. Usuário abre a tela de setup de senha (/setup-password)         │
-│                                                                     │
-│  4. UI chama POST /auth/setup-password com token e nova senha       │
-│                                                                     │
-│  5. LoginHUB verifica JWT, grava hash, zera senha_padrao            │
-│                                                                     │
-│  6. Usuário é redirecionado para o login e acessa normalmente       │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Implementação no cliente (TypeScript)
-
-```ts
-// 1) LOGIN
-const { token, requirePasswordChange, usuario } = await loginHub.post('/auth/login', {
-  email, password
-});
-localStorage.setItem('moneyapp_token', token);
-
-if (requirePasswordChange) {
-  navigate('/define-nova-senha');   // 🚨 bloqueia acesso ao resto do app
-} else {
-  navigate('/dashboard');
-}
-
-// 2) TROCAR SENHA DEFINITIVA (Descontinuado)
-// O redirecionamento força o logout e exige acesso pelo Magic Link se necessário.
-navigate('/dashboard');
-```
-
-### Refresh transparente (recomendado)
-
-Se o app cliente usar `@loginhub/api-client`, o interceptor já cuida do refresh automaticamente em qualquer `401`:
-
-```
-chamada → 401 → tenta /auth/refresh com o token atual → recebe novo →
-reexecuta a chamada original transparentemente
-```
-
-Refresh proativo (opcional):
 ```ts
 import { authApi } from '@loginhub/api-client';
 
-const result = await authApi.refresh();
-if (!result) authApi.logout();   // refresh falhou — sessão acabou
+async function handleLogin(email: string, password: string, appId?: string) {
+  try {
+    const response = await authApi.login(email, password, appId);
+    
+    // Sucesso no login
+    localStorage.setItem('user_token', response.token);
+    return response;
+  } catch (error: any) {
+    if (error.response?.data?.error === 'AMBIGUOUS_EMAIL') {
+      // Exibe modal para o usuário escolher o aplicativo desejado
+      const apps = error.response.data.availableApps;
+      showTenantSelectorModal(apps, (selectedAppId) => {
+        handleLogin(email, password, selectedAppId);
+      });
+      return;
+    }
+    throw error;
+  }
+}
 ```
 
-### Checklist de integração
+### Auto-Refresh com `@loginhub/api-client`
 
-- [ ] Tela de login chama `POST /auth/login` e persiste `token`, `usuario`, `app`
-- [ ] Bloqueia rotas protegidas enquanto `requirePasswordChange === true` (Redireciona/Informa necessidade de acesso via e-mail)
-- [ ] (Recomendado) Usa `@loginhub/api-client` para ganhar auto-refresh em 401
-- [ ] (Opcional) Botão "Sair" chama `POST /auth/logout` e limpa storage
+Se o aplicativo cliente utilizar a biblioteca `@loginhub/api-client`, o interceptor Axios já renova o token automaticamente em caso de resposta `401 Unauthorized` por expiração do JWT.
 
 ---
 
-## 👥 Modelo de dados
+## 👥 Modelo de Dados (PostgreSQL)
 
-### `aplicativos` (tenants)
+### Tabela `aplicativos` (Tenants)
 
-| Coluna | Tipo | Notas |
+| Coluna | Tipo | Descrição |
 |---|---|---|
-| `id` | serial PK | |
-| `nome` | varchar(255) | obrigatório |
-| `documento` | varchar(20) | CPF/CNPJ |
-| `email` | varchar(255) | contato corporativo |
-| `telefone` | varchar(20) | |
-| `logo` | text | base64 dataURL (≤256px após resize) |
-| `bot_url` | varchar(500) | link enviado no e-mail de convite |
-| `status` | varchar(20) | `'ativo'` \| `'inativo'` |
-| `data_cadastro` | timestamp | |
-
-### `usuarios`
-
-| Coluna | Tipo | Notas |
-|---|---|---|
-| `id` | serial PK | |
-| `app_id` | FK → aplicativos | cascata no delete |
-| `nivel_acesso_id` | FK → niveis_acesso | |
-| `nome`, `email`, `senha_hash`, `telefone` | varchar | `email` único |
-| `senha_padrao` | boolean | **flag-chave** — controla `requirePasswordChange` |
-| `ultimo_acesso` | timestamp | atualizado no login |
-
-### `niveis_acesso` (roles)
-
-| ID | Nome | Uso |
-|---|---|---|
-| 1 | `master` | nível de sistema (autenticado via MASTER_API_KEY, não atribuído a usuário comum) |
-| 2 | `admin` | gerencia outros usuários do mesmo app |
-| 3 | `user` | acesso comum ao app |
-| 4 | `suporte` | atendimento/diagnóstico |
+| `id` | `serial` (PK) | Identificador do aplicativo. |
+| `nome` | `varchar(255)` | Nome exibido do app (obrigatório). |
+| `documento` | `varchar(20)` | CNPJ/CPF da organização responsável. |
+| `email` | `varchar(255)` | E-mail de contato do aplicativo. |
+| `telefone` | `varchar(20)` | Telefone de contato. |
+| `logo` | `text` | Imagem da logo em base64 (dataURL, auto-resized). |
+| `bot_url` | `varchar(500)` | Link do bot de suporte (Telegram, WhatsApp, etc.). |
+| `platform_url` | `varchar(500)` | Link da plataforma web/painel do cliente. |
+| `status` | `varchar(20)` | Estado do tenant: `'ativo'` ou `'inativo'`. |
+| `data_cadastro` | `timestamp` | Data de criação no sistema. |
+| `data_atualizacao` | `timestamp` | Data da última alteração. |
 
 ---
 
-## 📧 E-mail (SMTP + templates)
+### Tabela `usuarios`
 
-### Configuração
-SMTP configurado via `.env` (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`). Hoje aponta para Hostinger. Se as credenciais faltarem, o `EmailService` cai em modo simulado (loga no console em vez de enviar).
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `id` | `serial` (PK) | Identificador único do usuário. |
+| `app_id` | `integer` (FK) | Referência para `aplicativos.id` (delete em cascata). |
+| `nivel_acesso_id` | `integer` (FK) | Referência para `niveis_acesso.id`. |
+| `nome` | `varchar(255)` | Nome completo do usuário. |
+| `email` | `varchar(255)` | E-mail do usuário. *(Único por aplicativo)*. |
+| `senha_hash` | `varchar(255)` | Hash bcrypt da senha (cost factor 10). |
+| `senha_padrao` | `boolean` | Flag que indica se a senha ainda não foi personalizada (controla uso do Magic Link). |
+| `telefone` | `varchar(20)` | Telefone de contato do usuário. |
+| `status` | `varchar(20)` | Situação da conta: `'ativo'`, `'inativo'` ou `'bloqueado'`. |
+| `ultimo_acesso` | `timestamp` | Timestamp atualizado a cada login com sucesso. |
+| `data_cadastro` | `timestamp` | Data de cadastro. |
 
-### Templates disponíveis (`apps/ui/src/templates/emails/`)
-- **`MoneyAppInviteEmail.tsx`** — convite específico do MoneyAPP (tema dark com tons emerald)
-- **`InviteEmailTemplate.tsx`** — convite genérico (tema light, qualquer app)
-- **`ResetPasswordEmail.tsx`** — usado quando admin reseta senha
+> 🔒 **Constraint de Unicidade**: `usuarios_email_app_id_unique` UNIQUE (`email`, `app_id`).
 
-### Comportamento
-- O frontend renderiza o template para HTML com `ReactDOMServer.renderToStaticMarkup` antes de enviar
-- O token do Magic Link é colocado como placeholder `__MAGIC_LINK__` no HTML — o backend substitui pelo token JWT **na hora do envio**
-- Se o e-mail **não** for enviado (SMTP fora do ar, ex.), o backend devolve `{ emailSent: false, magicLinkToken: "..." }` e a UI cai num fallback mostrando o link para repasse manual
-- Se o app tem `bot_url` cadastrado, o template inclui um CTA secundário "Acessar Bot"
+---
 
-> ⚠️ **SPF/DKIM**: para evitar quarentena/spam (especialmente no ProtonMail), configure SPF e DKIM no DNS do `astralwavelabel.com` autorizando o Hostinger a enviar em nome do domínio.
+### Tabela `niveis_acesso` (Roles)
+
+| ID | Nome | Descrição |
+|---|---|---|
+| 1 | `master` | Acesso de infraestrutura/sistema (autenticado por `MASTER_API_KEY`). |
+| 2 | `admin` | Administrador da organização/tenant. |
+| 3 | `user` | Usuário comum com acesso ao aplicativo. |
+| 4 | `suporte` | Perfil de atendimento e suporte. |
 
 ---
 
 ## 🧰 Pacote `@loginhub/api-client`
 
-Cliente Axios pronto para uso em qualquer app cliente. Já vem com:
+SDK em TypeScript para integração rápida de aplicações clientes com a API do LoginHUB:
 
-✅ Injeção automática do header `Authorization: Bearer <token>` (lê do localStorage)
-✅ Injeção automática do header `x-api-key` para chamadas administrativas
-✅ Interceptor de resposta com **auto-refresh em 401** (single-flight, evita loops)
-✅ Métodos tipados para todos os endpoints
-
-### Métodos expostos
+- ✅ Injeção automática de `Authorization: Bearer <token>`
+- ✅ Interceptor com **Auto-Refresh transparente em 401** (evita chamadas duplicadas simultâneas)
+- ✅ Métodos tipados para Auth, Apps e Usuários
 
 ```ts
 import { authApi, userApi, appApi } from '@loginhub/api-client';
 
-// Auth
-authApi.login(email, password)              // login + master key fallback
-authApi.logout()                            // limpa storage + redireciona
-authApi.refresh()                           // refresh manual proativo
-authApi.isAuthenticated()
-authApi.getUser()
-authApi.getRole()
+// Realizar Login
+const response = await authApi.login('usuario@email.com', 'senha123');
 
-// Apps
-appApi.getAll() / getById(id)
-appApi.create(payload)                      // payload inclui logo e bot_url opcionais
-appApi.update(id, payload)
-appApi.toggleStatus(id, status)
-appApi.delete(id)
+// Se houver ambiguidade de tenant:
+if (response.error === 'AMBIGUOUS_EMAIL') {
+  const selectedAppId = response.availableApps[0].id;
+  const loginResult = await authApi.login('usuario@email.com', 'senha123', selectedAppId);
+}
 
-// Users
-userApi.getAllGlobal() / getByAppId(appId)
-userApi.create(payload)                     // payload inclui emailHtml para envio automático
-userApi.update(id, payload)
-userApi.resetPassword(id, emailHtml?)
-userApi.delete(id)
+// Obter dados do usuário logado
+const user = authApi.getUser();
 ```
 
 ---
 
 ## 🎨 UI (Admin Dashboard)
 
-URL: [`https://loginhub.astralwavelabel.com/login`](https://loginhub.astralwavelabel.com/login)
+Disponível em: [`https://loginhub.astralwavelabel.com/login`](https://loginhub.astralwavelabel.com/login)
 
-Acesso restrito ao **master** (autentica via `VITE_MASTER_KEY` digitada no campo senha, qualquer e-mail). Recursos:
-
-- 📋 Listagem de aplicativos com logo, status, total de usuários
-- ➕ Criação de novo aplicativo (com upload de logo + URL do bot)
-- ✏️ Edição inline de dados do app
-- 👥 Gestão de usuários por app
-- 📨 **Convite com pré-visualização do e-mail** (iframe com template renderizado antes do envio)
-- 🔑 Reset de senha com modal de confirmação bonito (sem `alert()` nativo)
-- 🎨 Tailwind + Heroicons em todo lugar
+- 📊 Dashboard de métricas e status dos aplicativos e usuários cadastrados.
+- 🏢 Gestão de Apps (suporte a upload/resize de logos, `bot_url` e `platform_url`).
+- 👥 Gestão de Usuários por Tenant (criação, edição, alternância de status, exclusão).
+- 📨 Visualização prévia de e-mail de convite renderizado dinamicamente antes do envio.
+- 🧛 **Dracula Dark Mode**: Chaveador de tema escuro/claro integrado.
+- 📱 **PWA**: Instalável como aplicativo nativo em desktops e dispositivos móveis.
 
 ---
 
-## 🔒 Regras de segurança aplicadas
+## 🔒 Segurança Aplicada
 
-| Regra | Implementação |
-|---|---|
-| Senhas hashed | `bcryptjs` com salt rounds = 10 |
-| JWT expira em 24h | `jsonwebtoken` `expiresIn: '24h'` |
-| Refresh tem grace de 7 dias | `ignoreExpiration: true` + diff manual |
-| Body limit | `express.json({ limit: '5mb' })` — comporta logos base64 |
-| Helmet ativo | `app.use(helmet())` |
-| CORS | Permitido em prod (configurável via `corsMiddleware`) |
-| Rotas admin protegidas | `adminMiddleware` checa `x-api-key` |
-| Rotas autenticadas protegidas | `authMiddleware` valida JWT + status do app |
-| App suspenso bloqueia acesso | Verificação em login E refresh |
-
-### ⚠️ Pontos de atenção
-
-- Não há **rate limiting** nas rotas de login — vulnerável a brute force.
-- Não há fluxo de **forgot-password** público — só admin reseta hoje.
-- Coluna `vencimento` ainda existe no DB (não usada) — pode ser dropada com segurança.
-
----
-
-## 🐛 Troubleshooting
-
-<details>
-<summary><b>Build local quebra com "Cannot find module '@loginhub/schema'"</b></summary>
-
-O `npm run build` na raiz já roda em ordem topológica. Se mesmo assim quebrar, limpe os builds anteriores:
-```bash
-rm -rf apps/*/dist packages/*/dist
-npm run build
-```
-</details>
-
-<details>
-<summary><b>Login com master key não funciona</b></summary>
-
-O login mestre é **client-side**: o `api-client` compara `password === VITE_MASTER_KEY` direto no browser. Se o `VITE_MASTER_KEY` não está embutido no bundle, verifique se o symlink `apps/ui/.env → ../../.env` existe — sem ele o Vite não consegue interpolar a variável no build do Docker.
-
-```bash
-ls -la apps/ui/.env   # deve mostrar o link simbólico
-```
-</details>
-
-<details>
-<summary><b>E-mail não chega no destinatário</b></summary>
-
-1. Confirme que `SMTP_HOST` (e não `SMTP_SERVER`) está no `.env`
-2. Cheque os logs: `docker logs server_loginhub_backend | grep -i email`
-3. Verifique a pasta **Spam** do destinatário (ProtonMail é especialmente filtrador)
-4. Configure SPF/DKIM no DNS do `astralwavelabel.com` autorizando o Hostinger
-</details>
-
-<details>
-<summary><b>Container UI não pega novo bundle após rebuild</b></summary>
-
-Hard-refresh no browser (Ctrl+Shift+R) ou limpe cache do Cloudflare:
-```bash
-/mnt/docker-services/documentacao/scripts/cleancachecloudflare.sh
-```
-</details>
-
----
-
-## 🗺️ Roadmap
-
-- [ ] Rate limiting em `/auth/login`
-- [ ] `POST /auth/forgot-password` público (usuário esqueceu a senha)
-- [ ] `GET /auth/me` — perfil do usuário logado
-- [ ] Validação de força de senha no backend
-- [ ] Invalidação de tokens antigos ao trocar senha (forçar relogin em todos os devices)
-- [ ] Auditoria de eventos (login, mudanças, deletes)
-- [ ] Soft-delete de usuário (`status: 'inativo'` em vez de DELETE)
+- **Criptografia de Senhas**: Bcrypt com salt rounds = 10.
+- **Tokens Temporais**: JWT com validade de 24 horas para sessão e 1 hora para Magic Links.
+- **Proteção de Magic Links**: Tokens de primeiro acesso/reset possuem validação de uso único (`senha_padrao`).
+- **Body Limit**: Express configurado com `5mb` para suportar upload de logos base64 otimizadas.
+- **Proteção HTTP**: Middlewares `helmet()` e CORS configurados.
 
 ---
 
 <div align="center">
 
-**Construído com excelência pela Astral Wave Label** ⚡
-
-<img src="https://skillicons.dev/icons?i=ts,nodejs,react,postgres,docker" />
+**Desenvolvido com excelência pela Astral Wave Label** ⚡
 
 </div>
