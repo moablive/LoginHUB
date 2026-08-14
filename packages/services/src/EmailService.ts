@@ -23,10 +23,33 @@ export class EmailService {
     }
 
     public async sendEmail(to: string, subject: string, htmlContent: string): Promise<boolean> {
+        let finalHtml = htmlContent;
+        const attachments: any[] = [];
+        
+        const base64Regex = /src="(data:image\/([^;]+);base64,([^"]+))"/g;
+        let match;
+        let imgIndex = 0;
+
+        while ((match = base64Regex.exec(htmlContent)) !== null) {
+            const fullMatch = match[1];
+            const extension = match[2];
+            const base64Data = match[3];
+            const cid = `img_${imgIndex}`;
+            
+            attachments.push({
+                filename: `image_${imgIndex}.${extension}`,
+                content: Buffer.from(base64Data, 'base64'),
+                cid: cid
+            });
+
+            finalHtml = finalHtml.replace(fullMatch, `cid:${cid}`);
+            imgIndex++;
+        }
+
         if (!this.transporter) {
             console.log(`[EmailService] (Simulated) Sending email to: ${to}`);
             console.log(`[EmailService] Subject: ${subject}`);
-            console.log(`[EmailService] HTML Content: \n${htmlContent}`);
+            console.log(`[EmailService] HTML Content: \n${finalHtml}`);
             return false;
         }
 
@@ -35,7 +58,8 @@ export class EmailService {
                 from: process.env.SMTP_USER,
                 to,
                 subject,
-                html: htmlContent,
+                html: finalHtml,
+                attachments,
             });
             console.log(`[EmailService] Email sent successfully to ${to}`);
             return true;
