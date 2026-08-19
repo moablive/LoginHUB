@@ -49,6 +49,8 @@ Todo o ciclo de vida da conta — convite por e-mail, primeiro acesso via **Magi
 | 🎨 Dracula Dark Mode & Light Mode | ✅ | Alternância dinâmica de tema na UI com suporte nativo ao Dracula Theme. |
 | 📱 PWA Funcional | ✅ | Frontend instalável como Progressive Web App (Service Worker + Web App Manifest). |
 | 🚢 Script de Deploy Automatizado | ✅ | Script `./redeploy.sh` na raiz para deploy interativo ou via CLI com Docker Compose. |
+| 🤝 Convite com Provisionamento no App | ✅ | Apps que guardam dados próprios do usuário (CPF, comissão) criam o cadastro deles e o acesso no hub numa operação só. Ver fluxo 5️⃣. |
+| 🔥 Hot Reload no Docker | ✅ | O código vem do host por bind mount: salvar um arquivo reflete no container, sem rebuild. |
 
 ---
 
@@ -193,6 +195,24 @@ do host serve só para debug direto na máquina.
 
 #### Troubleshooting
 
+**O painel não reflete as alterações / continua com a versão antiga**
+
+Antes desta mudança a UI era um bundle estático servido por nginx, e o
+`vite-plugin-pwa` registrou um **service worker** no browser de quem já usava o
+painel. Esse service worker continua no controle da página e serve o app do
+cache — o HMR não alcança uma aba que sequer está falando com o dev server.
+
+É de uma vez só, na primeira visita depois da troca nginx→vite:
+
+```
+Ctrl+Shift+R  (ou Cmd+Shift+R no Mac)
+```
+
+Se persistir, DevTools → Application → Service Workers → *Unregister*, e recarregue.
+
+> Vale para **qualquer pessoa** que já usava o painel, não só para quem está
+> desenvolvendo. Se alguém relatar "o painel não atualizou", é isto.
+
 **403 `Blocked request. This host is not allowed.` no domínio público**
 
 O Vite recarrega o próprio config quando o `vite.config.ts` muda (basta o mtime
@@ -288,6 +308,11 @@ O LoginHUB disponibiliza o utilitário `./redeploy.sh` na raiz para simplificar 
 
 O arquivo `.env` deve ser mantido na **raiz** do projeto.
 
+> ℹ️ As `VITE_*` **não são mais build args**. Com o dev server, o Vite lê o `.env`
+> da raiz em runtime (`envDir` do `vite.config.ts`) e também o `process.env` que
+> vem do `env_file` do compose. Mudou uma `VITE_*`? Basta reiniciar o serviço
+> (`docker compose --env-file .env restart login-hub-ui`) — sem rebuild.
+
 ```env
 # ====================
 # Servidor (API)
@@ -317,6 +342,14 @@ VITE_MASTER_KEY='***'           # Chave mestra exposta para o build da UI
 API_PUBLIC_URL=https://loginhub.astralwavelabel.com
 UI_PUBLIC_URL=https://loginhub.astralwavelabel.com
 VITE_API_URL=https://loginhub.astralwavelabel.com/api
+
+# ====================
+# Apps com provisionamento próprio (opcional)
+# ====================
+# Sobrescreve a URL base da API da Sul Alimentos usada pelo convite de vendedor
+# (ver fluxo 5️⃣ e apps/ui/src/config/provisioning.ts). Sem esta linha vale o
+# padrão de produção embutido no código.
+# VITE_SUL_ALIMENTOS_API_URL=https://sul-api.astralwavelabel.com/api
 
 # ====================
 # Serviço de E-mail (SMTP Hostinger)
@@ -466,6 +499,74 @@ Authorization: Bearer <token-jwt>
 
 ---
 
+### 5️⃣ Fluxo de Convite com Provisionamento no App
+
+O fluxo padrão (2️⃣) resolve tudo dentro do LoginHUB. Alguns apps, porém, guardam
+dados do usuário que o hub não conhece — CPF, comissão, contrato. Convidar só
+pelo hub deixaria a pessoa com **login válido e sem cadastro no app**.
+
+Para esses apps o fluxo **inverte**: o modal de convite chama o endpoint do
+próprio app, e é ele quem cria o usuário no LoginHUB (via M2M) e a linha na base
+dele — numa operação só, sem meio-caminho.
+
+```
+ ┌─────────────────────────────────────────────────────────────────────────┐
+ │ 1. Admin abre "Convidar Usuário" num app provisionado                   │
+ │    - A UI consulta config/provisioning.ts pelo app_id.                   │
+ │    - O modal ganha o papel do app ("Vendedor") + os campos extras.       │
+ └────────────────────────────────────┬────────────────────────────────────┘
+                                      │
+                                      ▼
+ ┌─────────────────────────────────────────────────────────────────────────┐
+ │ 2. UI faz POST direto no endpoint do APP (não no LoginHUB)              │
+ │    - Ex: POST https://sul-api.../api/vendedor                            │
+ └────────────────────────────────────┬────────────────────────────────────┘
+                                      │
+                                      ▼
+ ┌─────────────────────────────────────────────────────────────────────────┐
+ │ 3. O app cria o usuário no LoginHUB via M2M e grava o cadastro dele     │
+ │    - Dispara o e-mail de convite com o template do próprio app.          │
+ └────────────────────────────────────┬────────────────────────────────────┘
+                                      │
+                                      ▼
+ ┌─────────────────────────────────────────────────────────────────────────┐
+ │ 4. Daqui em diante é o Magic Link normal (fluxo 2️⃣)                     │
+ └─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Onde se configura:** [`apps/ui/src/config/provisioning.ts`](apps/ui/src/config/provisioning.ts).
+A chave é o `app_id` no LoginHUB. Um app **sem entrada** ali segue no fluxo
+padrão — não é preciso mexer em mais nada para desativar.
+
+```ts
+export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
+  "2": {                              // Sul Alimentos
+    roleLabel: "Vendedor",
+    endpoint: `${SUL_ALIMENTOS_API}/vendedor`,
+    fields: [ /* cpf, phone, commissionRate */ ],
+    buildPayload: (base, extra) => ({ /* formato que o app espera */ }),
+  },
+};
+```
+
+Pontos que valem atenção ao adicionar um app novo:
+
+- **Só o papel provisionado passa pelo endpoint do app.** Admin, suporte e
+  usuário padrão continuam no fluxo normal do LoginHUB — senão não haveria como
+  convidar um administrador para um app provisionado.
+- **Não há etapa de pré-visualização** nesse caminho: quem monta e envia o
+  e-mail é o app, com o template dele.
+- **Máscara ≠ número.** Campos com `mask` vão sem formatação para a API; campos
+  numéricos não passam por `unmask`, senão `"7.5"` viraria `"75"`.
+- **Erros por campo**: se o app responder `{ fields: { cpf: "Já cadastrado" } }`,
+  a mensagem aparece no input correspondente. Sem isso, o modal cai em mensagens
+  por status (401/403 = sessão sem permissão, sem resposta = app fora do ar).
+- A URL base da Sul Alimentos pode ser sobrescrita por
+  `VITE_SUL_ALIMENTOS_API_URL` no `.env`; sem ela vale o padrão de produção
+  embutido no código.
+
+---
+
 ## 🔌 Integração em um App Cliente (ex: MoneyAPP)
 
 ### Fluxo de Login com Suporte a Desambiguação (TypeScript)
@@ -585,6 +686,8 @@ Disponível em: [`https://loginhub.astralwavelabel.com/login`](https://loginhub.
 - 🏢 Gestão de Apps (suporte a upload/resize de logos, `bot_url` e `platform_url`).
 - 👥 Gestão de Usuários por Tenant (criação, edição, alternância de status, exclusão).
 - 📨 Visualização prévia de e-mail de convite renderizado dinamicamente antes do envio.
+- 🤝 Convite com provisionamento: em apps configurados em `config/provisioning.ts`, o modal
+  pede os campos que o app exige (CPF, comissão...) e delega a criação a ele. Ver fluxo 5️⃣.
 - 🧛 **Dracula Dark Mode**: Chaveador de tema escuro/claro integrado.
 - 📱 **PWA**: Instalável como aplicativo nativo em desktops e dispositivos móveis.
 
