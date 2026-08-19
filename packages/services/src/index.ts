@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { buildInviteEmail } from './templates/inviteEmail';
 import jwt from 'jsonwebtoken';
 import { db } from '@loginhub/database';
 import { aplicativos, usuarios, niveisAcesso } from '@loginhub/schema';
@@ -440,18 +441,45 @@ export class UserService {
             }
 
             let emailSent = false;
-            if (data.emailHtml && magicLinkToken) {
-                const appRow = await db.select({ nome: aplicativos.nome }).from(aplicativos).where(eq(aplicativos.id, Number(data.app_id))).limit(1);
-                const appName = appRow.length > 0 ? appRow[0].nome : 'nosso sistema';
+            if (magicLinkToken) {
+                const appRow = await db
+                    .select({ nome: aplicativos.nome, logo: aplicativos.logo, platformUrl: aplicativos.platformUrl })
+                    .from(aplicativos)
+                    .where(eq(aplicativos.id, Number(data.app_id)))
+                    .limit(1);
+                const app = appRow[0];
+                const appName = app?.nome || 'nosso sistema';
 
-                // Substitui o placeholder pelo token real antes de enviar
-                const finalHtml = data.emailHtml.replace(/__MAGIC_LINK__/g, magicLinkToken);
+                // Quem manda `emailHtml` continua mandando (é o caso da UI, que
+                // renderiza os templates React dela). Sem isso, o convite usa o
+                // template padrão daqui — antes o e-mail simplesmente não saía.
+                const html = data.emailHtml
+                    || (app?.platformUrl
+                        ? buildInviteEmail({
+                            appName,
+                            platformUrl: app.platformUrl,
+                            appLogo: app.logo,
+                            nome: data.nome,
+                        })
+                        : null);
 
-                emailSent = await emailService.sendEmail(
-                    data.email,
-                    `Seu acesso ao ${appName} foi liberado!`,
-                    finalHtml
-                );
+                if (!html) {
+                    // Sem platform_url não há para onde apontar o botão. Avisar alto
+                    // é melhor que enviar um convite com link quebrado.
+                    console.warn(
+                        `[UserService] Convite de ${data.email} criado sem e-mail: ` +
+                        `o app ${data.app_id} não tem platform_url cadastrada.`
+                    );
+                } else {
+                    // Substitui o placeholder pelo token real antes de enviar
+                    const finalHtml = html.replace(/__MAGIC_LINK__/g, magicLinkToken);
+
+                    emailSent = await emailService.sendEmail(
+                        data.email,
+                        `Seu acesso ao ${appName} foi liberado!`,
+                        finalHtml
+                    );
+                }
             }
 
             // Só devolve o magic link ao admin se o e-mail não saiu (fallback de emergência)
