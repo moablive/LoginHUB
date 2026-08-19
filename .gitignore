@@ -14,6 +14,9 @@ node_modules/
 # --- Build de Produção ---
 dist/
 dist-ssr/
+# Service worker gerado pelo vite-plugin-pwa em modo dev (devOptions.enabled).
+# Surgiu quando o stack passou a rodar o dev server em vez do bundle estático.
+dev-dist/
 build/
 out/
 .next/
