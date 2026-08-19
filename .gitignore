@@ -75,8 +75,8 @@ coverage/
 .nyc_output/
 
 # --- Docker ---
+# .dockerignore é versionado: sem ele o build copia node_modules do host.
 docker-compose.override.yml
-.dockerignore
 
 # --- Caches e Arquivos Temporários ---
 .eslintcache

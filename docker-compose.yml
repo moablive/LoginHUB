@@ -1,37 +1,95 @@
-version: '3.8'
+# =============================================================================
+# LoginHUB — stack com hot reload.
+#
+# O código NÃO vem da imagem: vem do host, por bind mount (`.:/app`). Salvar um
+# arquivo no editor recompila e recarrega dentro do container, sem rebuild.
+#
+#   login-hub-packages → tsc -w dos packages/* (schema, database, api-client,
+#                        services, middlewares). É quem alimenta os outros dois.
+#   login-hub-api      → ts-node-dev --respawn (reinicia o express a cada save)
+#   login-hub-ui       → vite dev server (HMR no browser)
+#
+# Todos usam a mesma imagem `loginhub-base`, construída pelo Dockerfile da raiz.
+# =============================================================================
+
+# Bloco reutilizado pelos três serviços.
+#
+# Cada node_modules vira volume anônimo para NÃO ser encoberto pelo do host: o
+# host é glibc (rollup-linux-x64-gnu) e o container é Alpine/musl
+# (rollup-linux-x64-musl) — misturar os dois quebra o vite no boot.
+#
+# `packages/*/dist` de propósito NÃO está mascarado: é por ele que o watcher do
+# serviço `packages` publica o build para a api e a ui (e para o tsc do host).
+x-monorepo-volumes: &monorepo-volumes
+  - .:/app
+  - /app/node_modules
+  - /app/apps/api/node_modules
+  - /app/apps/ui/node_modules
+  - /app/packages/api-client/node_modules
+  - /app/packages/database/node_modules
+  - /app/packages/middlewares/node_modules
+  - /app/packages/schema/node_modules
+  - /app/packages/services/node_modules
 
 services:
-  login-hub-api:
-    container_name: server_loginhub_backend
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
+  # --- Watchers dos pacotes compartilhados -----------------------------------
+  # Os packages/* compilam para dist/ (main: dist/index.js), então nem a api nem
+  # a ui enxergam uma alteração em packages/*/src antes do tsc rodar. Este
+  # serviço faz o build inicial, marca /tmp/packages-ready (o healthcheck que
+  # segura api e ui) e fica em watch.
+  login-hub-packages:
+    build: .
+    image: loginhub-base
+    container_name: server_loginhub_packages
     restart: always
+    command: sh -c "npm run build:packages && touch /tmp/packages-ready && npm run watch:packages"
+    volumes: *monorepo-volumes
+    networks:
+      - awl_network
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/packages-ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 10s
 
-    # Mapeia porta apenas se quiser testar via IP local (ex: http://IP:3005)
-    # O tráfego real virá pelo Cloudflare via rede interna.
+  # --- Backend ---------------------------------------------------------------
+  login-hub-api:
+    build: .
+    image: loginhub-base
+    container_name: server_loginhub_backend
+    restart: always
+    command: npm run dev -w api
+
+    # Porta do host só para debug direto (http://IP:3005/api). O tráfego real
+    # entra pelo túnel Cloudflare, que resolve server_loginhub_backend:3000
+    # dentro da awl_network.
     ports:
       - "3005:3000"
 
-    # --- INJEÇÃO DE VARIÁVEIS DE AMBIENTE ---
-    # Aqui garantimos que o Node.js receba os valores corretos
     environment:
+      # Continua 'production' de propósito: o container é público (túnel
+      # Cloudflare) e o handler padrão do express vaza stack trace quando
+      # NODE_ENV != production. O hot reload não depende disso.
       - NODE_ENV=production
       - TZ=America/Sao_Paulo
       - PORT=3000
-      
+
       # Conexão de Banco (Forçando a rede interna Docker)
       - DB_HOST=server_db_postgres
       - DB_PORT=5432
       - DB_NAME=login_hub
       - DB_USER=admin_root
-      
-      # Segredos (Puxando do arquivo .env carregado abaixo)
-      # Removido DB_PASS, JWT_SECRET e MASTER_KEY explícitos para não injetar vazio
-      
-    # Carrega o arquivo para ler os segredos (${DB_PASS}, etc)
+
+    # Carrega o arquivo para ler os segredos (${DB_PASSWORD}, JWT_SECRET, SMTP...)
     env_file:
       - .env
+
+    volumes: *monorepo-volumes
+
+    depends_on:
+      login-hub-packages:
+        condition: service_healthy
 
     networks:
       - awl_network
@@ -41,23 +99,55 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      # ts-node-dev transpila na primeira subida; sem folga o container é
+      # marcado unhealthy antes do express escutar.
+      start_period: 60s
 
+  # --- Frontend --------------------------------------------------------------
   login-hub-ui:
+    build: .
+    image: loginhub-base
     container_name: server_loginhub_frontend
-    build:
-      context: .
-      dockerfile: apps/ui/Dockerfile
-      args:
-        VITE_API_URL: ${VITE_API_URL}
-        VITE_MASTER_KEY: ${VITE_MASTER_KEY}
-    
-    env_file:
-      - .env
-
     restart: always
+
+    # O vite escuta na 80 dentro do container — a MESMA porta que o nginx usava.
+    # Assim a rota do túnel (server_loginhub_frontend:80) e o mapeamento 3006
+    # continuam valendo sem mexer no painel da Cloudflare.
+    # --strictPort: se a 80 estiver ocupada o serviço falha alto, em vez de
+    # subir silenciosamente na 81 e devolver 502 no túnel.
+    command: npm run dev -w ui -- --host 0.0.0.0 --port 80 --strictPort
 
     ports:
       - "3006:80"
+
+    environment:
+      - TZ=America/Sao_Paulo
+
+      # As VITE_* (VITE_API_URL, VITE_MASTER_KEY, VITE_SUL_ALIMENTOS_API_URL...)
+      # não são mais build args: o vite lê o .env da raiz em runtime
+      # (envDir do vite.config.ts) e também o process.env vindo do env_file
+      # abaixo. Basta editar o .env e reiniciar o serviço — sem rebuild.
+
+      # O proxy /api do dev server substitui o que o nginx fazia
+      # (apps/ui/nginx.conf): painel e API dividem o mesmo hostname público.
+      - API_PROXY_TARGET=http://server_loginhub_backend:3000
+
+      # HMR atrás do túnel: o browser fala HTTPS/443 com a Cloudflare, não a 80
+      # interna do vite. Sem isto o client tenta wss://<host>:80 e o hot reload
+      # nunca conecta (a página funciona, mas exige F5).
+      - VITE_HMR_CLIENT_PORT=443
+      - VITE_HMR_PROTOCOL=wss
+
+    env_file:
+      - .env
+
+    volumes: *monorepo-volumes
+
+    depends_on:
+      login-hub-packages:
+        condition: service_healthy
+      login-hub-api:
+        condition: service_started
 
     networks:
       - awl_network
