@@ -1,0 +1,12 @@
+# node_modules do host é glibc; o container é Alpine/musl. Nunca entra na
+# imagem — o `npm install` do Dockerfile resolve os binários certos.
+**/node_modules
+**/dist
+npm-debug.log
+.git
+.DS_Store
+
+# Segredos: nunca entram na imagem.
+# Em runtime o .env chega pelo bind mount (.:/app) e pelo `env_file` do compose.
+.env
+.env.*

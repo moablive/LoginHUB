@@ -54,7 +54,7 @@ Todo o ciclo de vida da conta — convite por e-mail, primeiro acesso via **Magi
 
 ## 🧱 Arquitetura
 
-A API e a UI do LoginHUB rodam em containers Docker na rede interna `awl_network`. O Nginx da UI atua como proxy reverso servindo as requisições de frontend e roteando chamadas `/api` para o backend.
+A API e a UI do LoginHUB rodam em containers Docker na rede interna `awl_network`, **com hot reload**: o código vem do host por bind mount, não da imagem. O dev server do Vite serve o painel e atua como proxy reverso, roteando as chamadas `/api` para o backend (papel que era do Nginx). Um terceiro container mantém os `packages/*` em `tsc --watch`, alimentando os outros dois.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -66,10 +66,10 @@ A API e a UI do LoginHUB rodam em containers Docker na rede interna `awl_network
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           LOGINHUB FRONTEND (UI)                            │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │ React + Vite + Tailwind + PWA + Dracula Theme                         │  │
+│  │ React + Vite (dev server, HMR) + Tailwind + PWA + Dracula Theme       │  │
 │  │ (Dashboard, Gestão de Tenants, Usuários, Convites & Magic Links)      │  │
 │  └───────────────────────────────────┬───────────────────────────────────┘  │
-│                                      │ /api (Nginx Reverse Proxy)           │
+│                                      │ /api (Proxy do Vite dev server)      │
 │                                      ▼                                      │
 │                           LOGINHUB BACKEND (API)                            │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
@@ -133,19 +133,63 @@ LoginHUB/
 - Rede Docker `awl_network` criada (`docker network create awl_network`)
 - Banco PostgreSQL acessível em `server_db_postgres` na rede `awl_network`
 
-### Execução via Docker (Produção / Homologação)
+### 🔥 Hot Reload (stack padrão)
 
-Para subir todos os serviços utilizando o compose principal da raiz:
+O `docker-compose.yml` da raiz sobe o projeto **com hot reload**. O código não
+vem da imagem: vem do host, por bind mount (`.:/app`). Salvar um arquivo no
+editor já reflete no container — sem `--build`, sem restart manual.
 
 ```bash
 docker compose --env-file .env up -d --build
 ```
 
-Ou utilize o script de gerenciamento:
+São três serviços, todos a partir da mesma imagem `loginhub-base` (Dockerfile da raiz):
 
-```bash
-./redeploy.sh
-```
+| Serviço              | Container                   | O que roda                          | Reage a                       |
+|----------------------|-----------------------------|-------------------------------------|-------------------------------|
+| `login-hub-packages` | `server_loginhub_packages`  | `tsc --watch` dos 5 packages        | `packages/*/src`              |
+| `login-hub-api`      | `server_loginhub_backend`   | `ts-node-dev --respawn`             | `apps/api/src`, `packages/*/dist` |
+| `login-hub-ui`       | `server_loginhub_frontend`  | `vite` dev server (HMR no browser)  | `apps/ui/src`, `packages/*/dist` |
+
+Por que o serviço de packages existe: os `packages/*` publicam `dist/`
+(`main: dist/index.js`), então nem a API nem a UI enxergam uma alteração em
+`packages/*/src` antes do `tsc` rodar. Ele faz o build inicial, marca
+`/tmp/packages-ready` — o healthcheck que segura o `depends_on` dos outros dois
+— e fica em watch.
+
+#### Portas
+
+A URL do túnel Cloudflare usa o **nome do container + porta interna**; a porta
+do host serve só para debug direto na máquina.
+
+| Container                  | Porta interna (túnel) | Porta do host (debug) |
+|----------------------------|-----------------------|------------------------|
+| `server_loginhub_backend`  | **3000**              | 3005                   |
+| `server_loginhub_frontend` | **80**                | 3006                   |
+
+> O Vite escuta na **80** de propósito: é a mesma porta que o Nginx usava, então
+> a rota do túnel (`server_loginhub_frontend:80`) continua valendo sem mexer no
+> painel da Cloudflare.
+
+#### Detalhes que fazem o hot reload funcionar
+
+- **`node_modules` como volume anônimo.** O host é glibc (Manjaro) e o container
+  é Alpine/musl. Se o `node_modules` do host cobrisse o do container, o binário
+  nativo do rollup seria o errado e o Vite morreria no boot. Por isso o
+  `docker-compose.yml` declara um volume anônimo para cada `node_modules` e o
+  `Dockerfile` remove o `package-lock.json` antes do `npm install`.
+- **Trocou dependência? Recrie os volumes.** Volume anônimo sobrevive a
+  `up -d`. Depois de mexer em qualquer `package.json`:
+  ```bash
+  npm run docker:rebuild
+  ```
+- **HMR atrás do túnel.** O browser fala HTTPS/443 com a Cloudflare, não a 80
+  interna do Vite. As variáveis `VITE_HMR_CLIENT_PORT=443` e
+  `VITE_HMR_PROTOCOL=wss` (definidas no compose) informam isso ao client de HMR.
+  Sem elas a página funciona, mas exige F5 a cada alteração.
+- **Proxy `/api`.** Painel e API dividem o mesmo hostname
+  (`VITE_API_URL=<host>/api`). O desvio, que era do `apps/ui/nginx.conf`, agora
+  é `server.proxy` em `apps/ui/vite.config.ts`.
 
 ### Build Local (Desenvolvimento sem Docker)
 
@@ -153,11 +197,36 @@ Ou utilize o script de gerenciamento:
 # 1. Instalar dependências de todos os workspaces
 npm install
 
-# 2. Build em ordem topológica de dependências
+# 2. Subir packages (watch) + API + UI num terminal só
+npm run dev
+```
+
+> `npm run dev` na raiz roda os três em paralelo via `concurrently`. Fora do
+> Docker, o proxy `/api` do Vite aponta para `http://localhost:3000` — ajuste com
+> `API_PROXY_TARGET` se a API estiver em outro endereço.
+
+Para gerar os artefatos compilados (o que o build de produção faz):
+
+```bash
 npm run build
 ```
 
-> ⚠️ **Atenção**: O comando `npm run build` na raiz executa os builds na sequência de dependência correta. Não utilize `npm run build --workspaces` diretamente para evitar falhas de compilação por referência cruzada.
+> ⚠️ **Atenção**: O comando `npm run build` na raiz executa os builds na sequência
+> de dependência correta (`schema → database → api-client → middlewares →
+> services → api → ui`). Não utilize `npm run build --workspaces` diretamente
+> para evitar falhas de compilação por referência cruzada.
+
+### Voltando para imagem imutável (sem bind mount)
+
+Os Dockerfiles de produção continuam versionados e **não** são usados pelo
+compose atual:
+
+- `apps/api/Dockerfile` — API compilada, `node dist/server.js`
+- `apps/ui/Dockerfile` + `apps/ui/nginx.conf` — bundle estático servido por Nginx
+
+Para reusá-los, aponte o `build.dockerfile` de cada serviço no
+`docker-compose.yml` e remova a linha `.env` do `.dockerignore` (o Dockerfile da
+UI faz `COPY .env`).
 
 ---
 
@@ -166,10 +235,11 @@ npm run build
 O LoginHUB disponibiliza o utilitário `./redeploy.sh` na raiz para simplificar o gerenciamento dos containers em produção:
 
 ```bash
-# Menu interativo (exibe opções para escolher api, ui ou ambos)
+# Menu interativo (exibe opções para escolher packages, api, ui ou todos)
 ./redeploy.sh
 
 # Republicar apenas um serviço específico
+./redeploy.sh packages
 ./redeploy.sh api
 ./redeploy.sh ui
 
@@ -177,6 +247,8 @@ O LoginHUB disponibiliza o utilitário `./redeploy.sh` na raiz para simplificar 
 ./redeploy.sh --no-build api ui
 
 # Derrubar containers antigos e recriar do zero
+# (o -v embutido remove os volumes anônimos de node_modules — é o que usar
+#  quando alguma dependência mudou)
 ./redeploy.sh --down
 
 # Atualizar imagens base e limpar imagens dangling

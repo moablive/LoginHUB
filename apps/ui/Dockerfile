@@ -1,3 +1,14 @@
+# =============================================================================
+# Build de PRODUÇÃO da UI (bundle estático servido por nginx).
+#
+# NÃO é usado pelo docker-compose.yml da raiz — o stack padrão hoje roda o vite
+# dev server com hot reload, e o proxy /api que estava no nginx.conf virou
+# `server.proxy` no apps/ui/vite.config.ts.
+#
+# Para reusar este Dockerfile: o `COPY .env` abaixo exige remover a linha `.env`
+# do .dockerignore (de propósito ela está lá, para segredo não virar camada de
+# imagem no fluxo padrão).
+# =============================================================================
 # ===================================
 # ESTÁGIO 1: BUILD (Node.js)
 # ===================================
@@ -17,9 +28,14 @@ RUN npm install
 # --- INJEÇÃO DE VARIÁVEIS (VITE) ---
 ARG VITE_API_URL
 ARG VITE_MASTER_KEY
+# Opcional: sobrescreve a URL da API da Sul Alimentos usada pelo convite de
+# vendedor (ver apps/ui/src/config/provisioning.ts). Sem isso vale o padrão
+# de produção embutido no código.
+ARG VITE_SUL_ALIMENTOS_API_URL
 
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_MASTER_KEY=$VITE_MASTER_KEY
+ENV VITE_SUL_ALIMENTOS_API_URL=$VITE_SUL_ALIMENTOS_API_URL
 
 # Builda as dependências locais na ordem correta
 RUN npm run build -w @loginhub/schema

@@ -70,8 +70,9 @@ command -v docker >/dev/null 2>&1 || { err "docker não encontrado no PATH."; ex
 docker compose version >/dev/null 2>&1 || { err "'docker compose' (v2) não disponível."; exit 1; }
 
 # --- Serviços Disponíveis ----------------------------------------------------
-# No LoginHUB temos serviços definidos no docker-compose.yml raiz
-ALL_SERVICES=("login-hub-api" "login-hub-ui")
+# No LoginHUB temos serviços definidos no docker-compose.yml raiz.
+# 'packages' vem primeiro: api e ui dependem do healthcheck dele (depends_on).
+ALL_SERVICES=("login-hub-packages" "login-hub-api" "login-hub-ui")
 
 if [[ $JUST_LIST -eq 1 ]]; then
   log "Serviços disponíveis em ${C_BOLD}$ROOT_DIR${C_RESET}:"

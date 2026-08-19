@@ -7,8 +7,17 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspaces",
-    "build": "npm run build -w @loginhub/schema && npm run build -w @loginhub/database && npm run build -w @loginhub/api-client && npm run build -w @loginhub/middlewares && npm run build -w @loginhub/services && npm run build -w api && npm run build -w ui",
-    "lint": "npm run lint --workspaces"
+    "dev": "concurrently -n PKGS,API,UI -c magenta,blue,green \"npm run dev:packages\" \"npm run dev -w api\" \"npm run dev -w ui\"",
+    "dev:packages": "npm run build:packages && npm run watch:packages",
+    "build:packages": "npm run build -w @loginhub/schema && npm run build -w @loginhub/database && npm run build -w @loginhub/api-client && npm run build -w @loginhub/middlewares && npm run build -w @loginhub/services",
+    "watch:packages": "concurrently -n schema,database,api-client,middlewares,services -c magenta,cyan,yellow,blue,green \"npm run build -w @loginhub/schema -- --watch --preserveWatchOutput\" \"npm run build -w @loginhub/database -- --watch --preserveWatchOutput\" \"npm run build -w @loginhub/api-client -- --watch --preserveWatchOutput\" \"npm run build -w @loginhub/middlewares -- --watch --preserveWatchOutput\" \"npm run build -w @loginhub/services -- --watch --preserveWatchOutput\"",
+    "build": "npm run build:packages && npm run build -w api && npm run build -w ui",
+    "lint": "npm run lint --workspaces",
+    "docker:dev": "docker compose --env-file .env up",
+    "docker:deploy": "docker compose --env-file .env up -d --build",
+    "docker:rebuild": "docker compose --env-file .env down -v && docker compose --env-file .env up -d --build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }
