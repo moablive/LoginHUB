@@ -39,8 +39,11 @@ export const buildInviteEmail = ({ appName, platformUrl, appLogo, nome }: Invite
     const base = platformUrl.replace(/\/+$/, '');
     const saudacao = nome ? `Olá, <strong>${escapeHtml(nome)}</strong>!` : 'Olá!';
 
+    // `height` como ATRIBUTO, nao so em CSS: o Outlook usa o motor do Word e
+    // ignora max-height, esticando a imagem no tamanho original. Largura fica
+    // automatica porque o logo de cada app tem uma proporcao diferente.
     const logo = appLogo
-        ? `<img src="${escapeHtml(appLogo)}" alt="${app}" style="max-height:44px;margin-bottom:8px;" />`
+        ? `<img src="${escapeHtml(appLogo)}" alt="${app}" height="80" style="height:80px;width:auto;display:block;margin:0 auto 12px;border:0;" />`
         : '';
 
     return `
@@ -52,13 +55,19 @@ export const buildInviteEmail = ({ appName, platformUrl, appLogo, nome }: Invite
         <td align="center">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:12px;overflow:hidden;">
             <tr>
-              <td style="background:#2563eb;padding:24px;text-align:center;">
+              <td style="background:#2563eb;height:4px;line-height:4px;font-size:0;">&nbsp;</td>
+            </tr>
+            <tr>
+              <!-- Cabecalho claro de proposito: o logo e de cada app e a maioria
+                   e desenhada para fundo branco. Sobre uma faixa colorida fixa,
+                   marca dourada/clara desaparece e transparencia fica suja. -->
+              <td style="background:#ffffff;padding:28px 24px 8px;text-align:center;">
                 ${logo}
-                <h1 style="margin:0;color:#ffffff;font-size:20px;">${app}</h1>
+                <h1 style="margin:0;color:#0f172a;font-size:20px;">${app}</h1>
               </td>
             </tr>
             <tr>
-              <td style="padding:32px 28px;color:#334155;font-size:15px;line-height:1.6;">
+              <td style="padding:20px 28px 32px;color:#334155;font-size:15px;line-height:1.6;">
                 <p style="margin:0 0 16px;">${saudacao}</p>
                 <p style="margin:0 0 24px;">
                   Seu acesso ao <strong>${app}</strong> foi criado. Clique no botão
