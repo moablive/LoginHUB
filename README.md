@@ -191,6 +191,33 @@ do host serve só para debug direto na máquina.
   (`VITE_API_URL=<host>/api`). O desvio, que era do `apps/ui/nginx.conf`, agora
   é `server.proxy` em `apps/ui/vite.config.ts`.
 
+#### Troubleshooting
+
+**403 `Blocked request. This host is not allowed.` no domínio público**
+
+O Vite recarrega o próprio config quando o `vite.config.ts` muda (basta o mtime
+mudar — um `tsc -b --force` já provoca isso) e loga `server restarted`. Foi
+observado **uma vez** o servidor voltar desse restart sem aplicar o
+`allowedHosts: true`, caindo no default `[]` e passando a responder 403 para o
+domínio público — enquanto `http://IP:3006` continuava 200, porque o Vite não
+faz host check para localhost/IP.
+
+Sintoma e correção:
+
+```bash
+# confirma: local responde, público não
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:3006/
+curl -s -o /dev/null -w '%{http_code}\n' https://loginhub.astralwavelabel.com/
+
+# correção — restart limpo do container recarrega o config corretamente
+docker restart server_loginhub_frontend
+```
+
+Não foi possível reproduzir depois (restart por `touch` e por `tsc -b --force`
+voltaram corretos), então a causa raiz segue em aberto. A variável
+`__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS` **não** resolve — foi testada no estado
+degradado e o 403 permanece.
+
 ### Build Local (Desenvolvimento sem Docker)
 
 ```bash
