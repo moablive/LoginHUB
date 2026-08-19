@@ -220,8 +220,11 @@ export const CreateUserModal = ({
           `Não foi possível falar com ${appName || "o aplicativo"}. Verifique se o sistema está no ar e tente de novo.`,
         );
       } else if (response.status === 401 || response.status === 403) {
+        // Sessão master aberta antes da correção do login não tem token no
+        // localStorage; só um logout/login novo passa a guardá-lo.
         setError(
-          `Sua sessão não tem permissão para cadastrar em ${appName || "este aplicativo"}. Entre novamente e repita.`,
+          `Sua sessão não foi aceita por ${appName || "este aplicativo"}. ` +
+          `Saia e entre de novo no painel para renovar o acesso, e repita o convite.`,
         );
       } else {
         setError("Ocorreu um erro ao convidar o usuário.");

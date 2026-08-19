@@ -2,9 +2,9 @@
  * Apps que fazem o próprio provisionamento de usuário.
  *
  * Normalmente o convite nasce aqui: o LoginHUB cria o usuário e manda o Magic
- * Link. Alguns apps, porém, guardam dados do usuário que o LoginHUB não conhece
- * (CPF, comissão, contrato...) — convidar só pelo hub deixaria a pessoa com
- * login válido e sem cadastro do lado do app.
+ * Link. Alguns apps, porém, mantêm um cadastro próprio que o LoginHUB não
+ * conhece — convidar só pelo hub deixaria a pessoa com login válido e sem
+ * cadastro do lado do app.
  *
  * Para esses apps o fluxo inverte: o modal de convite chama o endpoint do
  * próprio app, e é ele quem cria o usuário no LoginHUB (via M2M) e a linha na
@@ -50,27 +50,13 @@ const SUL_ALIMENTOS_API =
 
 /** Chave = id do aplicativo no LoginHUB. */
 export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
-  // Sul Alimentos — o convite vira um vendedor com CPF e comissão.
+  // Sul Alimentos — o convite cria o vendedor; ele completa os dados pelo link.
   "2": {
     roleLabel: "Vendedor",
     roleDescription:
-      "Acessa o portal do vendedor da Sul Alimentos para registrar vendas.",
+      "Acessa o portal do vendedor da Sul Alimentos. CPF e telefone são informados pelo próprio vendedor ao abrir o convite.",
     endpoint: `${SUL_ALIMENTOS_API}/vendedor`,
     fields: [
-      {
-        name: "cpf",
-        label: "CPF",
-        placeholder: "000.000.000-00",
-        required: true,
-        mask: "cpf",
-        help: "Usado no financeiro e no contrato do vendedor.",
-      },
-      {
-        name: "phone",
-        label: "Telefone",
-        placeholder: "(00) 00000-0000",
-        mask: "phone",
-      },
       {
         name: "commissionRate",
         label: "Taxa de comissão",
@@ -78,15 +64,15 @@ export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
         defaultValue: "0",
         suffix: "%",
         required: true,
+        help: "Definida por você. Os dados pessoais quem informa é o vendedor.",
       },
     ],
+    // CPF e telefone não entram aqui: o vendedor preenche os próprios dados ao
+    // abrir o Magic Link, na tela de definição de senha da Sul Alimentos.
     buildPayload: (base, extra) => ({
       name: base.nome,
       email: base.email,
-      cpf: extra.cpf ?? "",
-      phone: extra.phone || null,
       commissionRate: extra.commissionRate || "0",
-      active: true,
     }),
   },
 };
