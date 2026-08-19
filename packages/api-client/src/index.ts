@@ -29,10 +29,17 @@ api.interceptors.request.use(
 
     const token = localStorage.getItem('awl_token');
     const masterKey = (import.meta as any).env.VITE_MASTER_KEY;
+    const isSuperAdmin = sessionStorage.getItem('is_super_admin') === 'true';
 
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`;
-    } else if (masterKey) {
+    }
+
+    // Os dois headers convivem de propósito: o `adminMiddleware` do LoginHUB
+    // aceita SÓ `x-api-key`, enquanto integrações externas (ex.: o convite de
+    // vendedor da Sul Alimentos) exigem um Bearer de verdade. Mandar apenas um
+    // dos dois quebra metade das chamadas da sessão master.
+    if (masterKey && (isSuperAdmin || !token)) {
       config.headers['x-api-key'] = masterKey;
     }
 
@@ -44,6 +51,9 @@ api.interceptors.request.use(
 // ==========================================
 // REFRESH TOKEN HELPER
 // ==========================================
+/** E-mail que o login master do backend exige (packages/services). */
+const MASTER_LOGIN_EMAIL = 'master@infra.local';
+
 // Coordena refreshes concorrentes: se várias requests caem em 401 ao mesmo tempo,
 // só dispara UM refresh — as outras aguardam o mesmo Promise.
 let refreshInFlight: Promise<string | null> | null = null;
@@ -139,7 +149,18 @@ export const authApi = {
     const masterKey = (import.meta as any).env.VITE_MASTER_KEY;
 
     if (masterKey && password === masterKey) {
+      // A sessão master já foi puramente client-side: marcava a flag e não
+      // guardava token nenhum. Quem só falava com o próprio hub não sentia
+      // (o x-api-key resolvia), mas qualquer chamada a uma API externa saía
+      // sem `Authorization` e voltava 401. O backend tem um login master que
+      // devolve JWT de verdade (app_id "0", role admin) — é ele que usamos.
+      const { data } = await api.post<LoginResponse>('/auth/login', {
+        email: MASTER_LOGIN_EMAIL,
+        password: masterKey,
+      });
+
       sessionStorage.setItem('is_super_admin', 'true');
+      localStorage.setItem('awl_token', data.token);
 
       const adminUser: User = {
         id: 'master-root-id',
