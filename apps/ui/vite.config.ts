@@ -63,6 +63,18 @@ export default defineConfig({
     // responde "Blocked request. This host is not allowed."
     allowedHosts: true,
     hmr,
+    // Quem decide o CORS de /api é o backend (corsMiddleware, que já libera
+    // *.astralwavelabel.com) — era assim quando o nginx fazia o desvio.
+    //
+    // Desde o vite 6 o dev server traz CORS próprio e restritivo (só localhost)
+    // e responde o preflight ele mesmo, 204 e sem Access-Control-Allow-Origin,
+    // ANTES de chegar no proxy. Era o que barrava o /auth/setup-password vindo
+    // de sul-alimentos.astralwavelabel.com. Desligado aqui, o OPTIONS segue
+    // para o upstream e o backend responde como sempre respondeu.
+    //
+    // Seguro porque o painel é servido pela mesma origem do dev server: nada
+    // aqui depende de header de CORS emitido pelo vite.
+    cors: false,
     // Painel e API dividem o mesmo hostname (VITE_API_URL = <host>/api). Quem
     // fazia esse desvio era o nginx (apps/ui/nginx.conf); com o dev server no
     // lugar dele, o proxy é aqui. A API monta tudo sob /api
