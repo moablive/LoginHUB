@@ -1,8 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
-import { XMarkIcon, UserPlusIcon, EnvelopeIcon, ArrowLeftIcon, PaperAirplaneIcon, InformationCircleIcon } from "@heroicons/react/24/outline";
+import { XMarkIcon, UserPlusIcon, EnvelopeIcon, ArrowLeftIcon, PaperAirplaneIcon, InformationCircleIcon, BriefcaseIcon } from "@heroicons/react/24/outline";
 import { userApi } from "@loginhub/api-client";
+import axios from "axios";
 import ReactDOMServer from "react-dom/server";
 import { InviteEmailTemplate, MoneyAppInviteEmail } from "../../../templates/emails";
+import { getProvisionedApp } from "../../../config/provisioning";
+import { masks } from "../../../utils/masks";
 import type { UserRole } from "@loginhub/schema";
 
 const ROLE_OPTIONS: { value: Exclude<UserRole, "master">; label: string; description: string }[] = [
@@ -24,6 +27,9 @@ export interface CreateUserModalProps {
 
 type Step = "form" | "preview";
 
+/** Valor sentinela do select quando o convite deve criar o cadastro no app. */
+const PROVISION_ROLE = "__provision__";
+
 const MAGIC_LINK_PLACEHOLDER = "__MAGIC_LINK__";
 const PREVIEW_FAKE_TOKEN = "preview-token-xyz";
 
@@ -37,22 +43,45 @@ export const CreateUserModal = ({
   appPlatformUrl,
   appLogo,
 }: CreateUserModalProps) => {
+  // Apps com provisionamento próprio (ver config/provisioning.ts) invertem o
+  // fluxo: quem cria o usuário aqui no hub é o endpoint do próprio app, junto
+  // com o cadastro dele — sem isso a pessoa ficaria com login e sem cadastro.
+  const provisioned = getProvisionedApp(appId);
+  const defaultRole = provisioned ? PROVISION_ROLE : "user";
+
   const [step, setStep] = useState<Step>("form");
   const [formData, setFormData] = useState({
     nome: "",
     email: "",
-    role: "user",
+    role: defaultRole,
   });
+  const [extraData, setExtraData] = useState<Record<string, string>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const blankExtras = useMemo(
+    () =>
+      Object.fromEntries(
+        (provisioned?.fields ?? []).map((f) => [f.name, f.defaultValue ?? ""]),
+      ),
+    [provisioned],
+  );
+
   useEffect(() => {
     if (isOpen) {
-      setFormData({ nome: "", email: "", role: "user" });
+      setFormData({ nome: "", email: "", role: defaultRole });
+      setExtraData(blankExtras);
+      setFieldErrors({});
       setStep("form");
       setError(null);
     }
-  }, [isOpen]);
+  }, [isOpen, blankExtras, defaultRole]);
+
+  // Só o papel provisionado passa pelo endpoint do app. Os demais níveis
+  // (admin, suporte...) continuam no fluxo normal do LoginHUB — sem isso não
+  // haveria como convidar um administrador para um app provisionado.
+  const provisionMode = !!provisioned && formData.role === PROVISION_ROLE;
 
   const isMoneyApp = appName?.toLowerCase().includes("money");
 
@@ -88,6 +117,18 @@ export const CreateUserModal = ({
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    // O app responde os erros com o nome do campo dele ("name"), não "nome".
+    const apiField = name === "nome" ? "name" : name;
+    setFieldErrors((prev) => (prev[apiField] ? { ...prev, [apiField]: "" } : prev));
+  };
+
+  const handleExtraChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    mask?: "cpf" | "phone",
+  ) => {
+    const { name, value } = e.target;
+    setExtraData((prev) => ({ ...prev, [name]: mask ? masks[mask](value) : value }));
+    setFieldErrors((prev) => (prev[name] ? { ...prev, [name]: "" } : prev));
   };
 
   const handleAdvance = (e: React.FormEvent) => {
@@ -96,8 +137,98 @@ export const CreateUserModal = ({
       setError("Preencha nome e e-mail.");
       return;
     }
+
+    if (provisionMode) {
+      const missing = provisioned!.fields.filter(
+        (f) => f.required && !String(extraData[f.name] ?? "").trim(),
+      );
+      if (missing.length) {
+        setFieldErrors(Object.fromEntries(missing.map((f) => [f.name, "Campo obrigatório"])));
+        setError(`Preencha ${missing.map((f) => f.label).join(", ")}.`);
+        return;
+      }
+      setError(null);
+      // O e-mail é montado e enviado pelo próprio app, então não há o que
+      // pré-visualizar aqui — o convite sai direto.
+      void handleSendProvisioned();
+      return;
+    }
+
     setError(null);
     setStep("preview");
+  };
+
+  /**
+   * Convite para app com provisionamento: um POST só no endpoint do app, que
+   * cria o usuário aqui no LoginHUB (via M2M), grava o cadastro dele e dispara
+   * o e-mail com o template do próprio app.
+   */
+  const handleSendProvisioned = async () => {
+    if (!provisioned) return;
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Só campos com máscara perdem a formatação. Passar o número da comissão
+      // por `unmask` transformaria "7.5" em "75".
+      const extras = Object.fromEntries(
+        provisioned.fields.map((field) => {
+          const raw = String(extraData[field.name] ?? "").trim();
+          return [field.name, field.mask ? masks.unmask(raw) : raw];
+        }),
+      );
+
+      const payload = provisioned.buildPayload(
+        { nome: formData.nome.trim(), email: formData.email.trim() },
+        extras,
+      );
+
+      const token = localStorage.getItem("awl_token");
+      const { data } = await axios.post(provisioned.endpoint, payload, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        timeout: 20000,
+      });
+
+      onSuccess({
+        email: formData.email.trim(),
+        emailSent: data?.invite?.emailSent ?? true,
+        magicLinkToken: data?.invite?.magicLinkToken ?? undefined,
+      });
+      onClose();
+    } catch (err: unknown) {
+      console.error(err);
+      const response = axios.isAxiosError(err) ? err.response : undefined;
+      const body = response?.data as { error?: string; fields?: Record<string, unknown> } | undefined;
+
+      if (body?.fields) {
+        setFieldErrors(
+          Object.fromEntries(
+            Object.entries(body.fields)
+              .filter(([, v]) => v === true || (typeof v === "string" && v))
+              .map(([k, v]) => [k, v === true ? "Já cadastrado" : String(v)]),
+          ),
+        );
+      }
+
+      if (body?.error) {
+        setError(body.error);
+      } else if (!response) {
+        setError(
+          `Não foi possível falar com ${appName || "o aplicativo"}. Verifique se o sistema está no ar e tente de novo.`,
+        );
+      } else if (response.status === 401 || response.status === 403) {
+        setError(
+          `Sua sessão não tem permissão para cadastrar em ${appName || "este aplicativo"}. Entre novamente e repita.`,
+        );
+      } else {
+        setError("Ocorreu um erro ao convidar o usuário.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSend = async () => {
@@ -158,6 +289,13 @@ export const CreateUserModal = ({
 
   if (!isOpen) return null;
 
+  const inputClass = (field: string) =>
+    `mt-1 block w-full rounded-lg shadow-sm sm:text-sm py-2 px-3 border ${
+      fieldErrors[field]
+        ? "border-red-400 focus:border-red-500 focus:ring-red-500"
+        : "border-input focus:border-blue-500 focus:ring-blue-500"
+    }`;
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
       <div className="flex min-h-screen items-center justify-center p-4 text-center sm:p-0">
@@ -178,7 +316,9 @@ export const CreateUserModal = ({
                   ) : (
                     <UserPlusIcon className="h-5 w-5 text-primary" />
                   )}
-                  Convidar Usuário
+                  {provisionMode
+                    ? `Convidar ${provisioned!.roleLabel}${appName ? ` — ${appName}` : ""}`
+                    : "Convidar Usuário"}
                 </>
               ) : (
                 <>
@@ -207,6 +347,22 @@ export const CreateUserModal = ({
                   </div>
                 )}
 
+                {/* Deixa explícito, antes de qualquer campo, o que a pessoa vira no app. */}
+                {provisionMode && (
+                  <div className="flex items-start gap-2 rounded-md bg-primary/10 border border-blue-200 px-3 py-2">
+                    <BriefcaseIcon className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-primary leading-snug">
+                      <strong>
+                        Este convite cria um {provisioned!.roleLabel.toLowerCase()}
+                        {appName ? ` da ${appName}` : ""}.
+                      </strong>{" "}
+                      {provisioned!.roleDescription} O cadastro no{" "}
+                      {appName || "aplicativo"} e o acesso aqui no LoginHUB são criados de uma vez só,
+                      e o e-mail de convite sai com o template do próprio {appName || "aplicativo"}.
+                    </p>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Nome Completo</label>
                   <input
@@ -215,9 +371,12 @@ export const CreateUserModal = ({
                     required
                     value={formData.nome}
                     onChange={handleChange}
-                    className="mt-1 block w-full rounded-lg border-input shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+                    className={inputClass("name")}
                     placeholder="Ex: João Silva"
                   />
+                  {fieldErrors.name && (
+                    <p className="mt-1 text-xs text-danger">{fieldErrors.name}</p>
+                  )}
                 </div>
 
                 <div>
@@ -228,9 +387,12 @@ export const CreateUserModal = ({
                     required
                     value={formData.email}
                     onChange={handleChange}
-                    className="mt-1 block w-full rounded-lg border-input shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+                    className={inputClass("email")}
                     placeholder="usuario@aplicativo.com"
                   />
+                  {fieldErrors.email && (
+                    <p className="mt-1 text-xs text-danger">{fieldErrors.email}</p>
+                  )}
                   <div className="mt-2 flex items-start gap-2 rounded-md bg-primary/10 border border-blue-200 px-3 py-2">
                     <InformationCircleIcon className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
                     <p className="text-xs text-primary leading-snug">
@@ -238,6 +400,41 @@ export const CreateUserModal = ({
                     </p>
                   </div>
                 </div>
+
+                {/* Campos que o app exige além de nome/e-mail (CPF, comissão...) */}
+                {provisionMode && provisioned!.fields.map((field) => (
+                  <div key={field.name}>
+                    <label className="block text-sm font-medium text-gray-700">
+                      {field.label}
+                      {!field.required && (
+                        <span className="ml-1 font-normal text-muted-foreground">(opcional)</span>
+                      )}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={field.type === "number" ? "number" : "text"}
+                        name={field.name}
+                        step={field.type === "number" ? "0.01" : undefined}
+                        value={extraData[field.name] ?? ""}
+                        onChange={(e) => handleExtraChange(e, field.mask)}
+                        className={`${inputClass(field.name)}${field.suffix ? " pr-9" : ""}`}
+                        placeholder={field.placeholder}
+                      />
+                      {field.suffix && (
+                        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-semibold text-muted-foreground">
+                          {field.suffix}
+                        </span>
+                      )}
+                    </div>
+                    {fieldErrors[field.name] ? (
+                      <p className="mt-1 text-xs text-danger">{fieldErrors[field.name]}</p>
+                    ) : (
+                      field.help && (
+                        <p className="mt-1 text-xs text-muted-foreground">{field.help}</p>
+                      )
+                    )}
+                  </div>
+                ))}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Nível de Acesso</label>
@@ -247,6 +444,12 @@ export const CreateUserModal = ({
                     onChange={handleChange}
                     className="mt-1 block w-full rounded-lg border-input shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border bg-card text-card-foreground"
                   >
+                    {provisioned && (
+                      <option value={PROVISION_ROLE}>
+                        {provisioned.roleLabel}
+                        {appName ? ` da ${appName}` : ""}
+                      </option>
+                    )}
                     {ROLE_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>
                         {opt.label}
@@ -254,7 +457,9 @@ export const CreateUserModal = ({
                     ))}
                   </select>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {ROLE_OPTIONS.find((opt) => opt.value === formData.role)?.description}
+                    {provisionMode
+                      ? provisioned!.roleDescription
+                      : ROLE_OPTIONS.find((opt) => opt.value === formData.role)?.description}
                   </p>
                 </div>
               </div>
@@ -262,14 +467,29 @@ export const CreateUserModal = ({
               <div className="bg-muted/50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
                 <button
                   type="submit"
-                  className="inline-flex w-full justify-center items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 sm:w-auto transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  disabled={isLoading}
+                  className="inline-flex w-full justify-center items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                 >
-                  Pré-visualizar
-                  <EnvelopeIcon className="h-4 w-4" />
+                  {provisionMode ? (
+                    isLoading ? (
+                      "Enviando..."
+                    ) : (
+                      <>
+                        <PaperAirplaneIcon className="h-4 w-4" />
+                        Enviar Convite
+                      </>
+                    )
+                  ) : (
+                    <>
+                      Pré-visualizar
+                      <EnvelopeIcon className="h-4 w-4" />
+                    </>
+                  )}
                 </button>
                 <button
                   type="button"
-                  className="mt-3 inline-flex w-full justify-center rounded-lg bg-card text-card-foreground px-4 py-2 text-sm font-semibold text-foreground shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-muted/50 sm:mt-0 sm:w-auto transition-colors"
+                  disabled={isLoading}
+                  className="mt-3 inline-flex w-full justify-center rounded-lg bg-card text-card-foreground px-4 py-2 text-sm font-semibold text-foreground shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-muted/50 disabled:opacity-50 sm:mt-0 sm:w-auto transition-colors"
                   onClick={onClose}
                 >
                   Cancelar
