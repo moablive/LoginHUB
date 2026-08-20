@@ -222,6 +222,37 @@ export const rateLimitGestao2FA = criarRateLimit({
 // Novos apps em *.astralwavelabel.com não precisam ser adicionados manualmente.
 const ASTRALWAVE_ORIGIN_RE = /^https:\/\/([\w-]+\.)*astralwavelabel\.com$/;
 
+/**
+ * Origens permitidas fora de astralwavelabel.com, via `CORS_EXTRA_ORIGINS`.
+ *
+ * Nem todo app cliente mora num subdomínio nosso: a Sul Alimentos serve o painel
+ * em app.sulalimentos.com e o login dela batia em preflight bloqueado, porque a
+ * regex acima só cobre a nossa zona.
+ *
+ * Aceita a origem exata (`https://app.exemplo.com`) ou a curinga de domínio
+ * (`*.exemplo.com`, que cobre o apex e os subdomínios). Só https — em texto
+ * claro nenhum painel deveria estar falando com o hub.
+ */
+const origensExtras = (): string[] =>
+    (process.env.CORS_EXTRA_ORIGINS || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+const casaComPadrao = (origin: string, padrao: string): boolean => {
+    if (padrao === origin) return true;
+    if (!padrao.startsWith('*.')) return false;
+
+    const base = padrao.slice(2);
+    try {
+        const url = new URL(origin);
+        if (url.protocol !== 'https:') return false;
+        return url.hostname === base || url.hostname.endsWith(`.${base}`);
+    } catch {
+        return false;
+    }
+};
+
 const corsOptions: CorsOptions = {
     origin: (origin, callback) => {
         // 1. Permitir requisições sem 'origin' (Postman, cURL, Server-to-Server)
@@ -239,7 +270,13 @@ const corsOptions: CorsOptions = {
             return callback(null, true);
         }
 
-        // 4. Bloquear resto
+        // 4. Permitir as origens declaradas em CORS_EXTRA_ORIGINS
+        if (origensExtras().some((padrao) => casaComPadrao(origin, padrao))) {
+            return callback(null, true);
+        }
+
+        // 5. Bloquear resto
+        console.warn(`[CORS] Origem recusada: ${origin}`);
         return callback(new Error('Bloqueado por CORS: Origem não permitida.'));
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],

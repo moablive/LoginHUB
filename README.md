@@ -351,6 +351,16 @@ TWOFA_ENC_KEY=***
 TWOFA_APPS_HABILITADOS=
 
 # ====================
+# CORS
+# ====================
+# Origens permitidas ALÉM de *.astralwavelabel.com, separadas por vírgula.
+# Aceita origem exata (https://app.exemplo.com) ou curinga (*.exemplo.com,
+# que cobre o apex e os subdomínios). Só https.
+# Um app cliente fora da nossa zona — app.sulalimentos.com, por exemplo —
+# leva "blocked by CORS policy" no preflight do login sem estar declarado aqui.
+CORS_EXTRA_ORIGINS=*.exemplo.com
+
+# ====================
 # URLs Públicas
 # ====================
 API_PUBLIC_URL=https://loginhub.astralwavelabel.com
@@ -679,6 +689,20 @@ docker compose --env-file .env up -d login-hub-api
   então não comporta 2FA nesta versão. Ele segue protegido só pela `MASTER_API_KEY`.
 - **Reset de senha não desativa o 2FA.** Quem perder o celular precisa de um código
   de recuperação; sem nenhum, um admin tem de limpar a linha em `usuarios_2fa`.
+
+#### Ativando pelo terminal
+
+Não há tela de usuário no painel do hub (ele é só do master), então o enrolamento
+sai por [`scripts/2fa-enroll.sh`](scripts/2fa-enroll.sh) — que fala direto com a
+API e por isso não esbarra em CORS:
+
+```bash
+./scripts/2fa-enroll.sh voce@exemplo.com 8
+```
+
+Ele autentica, gera o secret, desenha o QR no terminal (se houver `qrencode`;
+senão mostra a chave para digitação manual), pede o código e imprime os códigos
+de recuperação.
 
 #### Testando pelo curl
 
