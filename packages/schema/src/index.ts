@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, integer, timestamp, boolean, text, unique } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, integer, timestamp, text, unique } from 'drizzle-orm/pg-core';
 
 // ==========================================
 // USER MODELS
@@ -19,7 +19,6 @@ export interface User {
     created_at?: Date;
     senha_hash?: string;
     nivel_acesso_id?: string;
-    senha_padrao?: boolean;
 }
 
 export interface CreateUserDTO {
@@ -72,7 +71,6 @@ export interface AmbiguousLoginResponse {
 export interface LoginResponse {
     token: string;
     expiresIn?: number;
-    requirePasswordChange?: boolean;
     usuario: User;
     app?: {
         id: string;
@@ -84,7 +82,6 @@ export interface LoginResponse {
 export interface LoginResponseDTO {
     token: string;
     expiresIn: number;
-    requirePasswordChange: boolean;
     usuario: {
         id: string;
         nome: string;
@@ -96,18 +93,6 @@ export interface LoginResponseDTO {
         nome: string;
         status: string;
     };
-}
-
-export interface UserLoginQueryResult {
-    id: string;
-    nome: string;
-    email: string;
-    senha_hash: string;
-    app_id: string;
-    app_nome: string;
-    app_status: string; 
-    role_nome: string;
-    senha_padrao: boolean;
 }
 
 export interface JWTPayload {
@@ -254,7 +239,6 @@ export const usuarios = pgTable('usuarios', {
     // E-mail é único por aplicativo, não global. O mesmo e-mail pode existir em apps diferentes.
     email: varchar('email', { length: 255 }).notNull(),
     senhaHash: varchar('senha_hash', { length: 255 }).notNull(),
-    senhaPadrao: boolean('senha_padrao').default(true).notNull(),
     telefone: varchar('telefone', { length: 20 }),
     status: varchar('status', { length: 20 }).default('ativo'),
     ultimoAcesso: timestamp('ultimo_acesso'),

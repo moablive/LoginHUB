@@ -203,11 +203,6 @@ export const authApi = {
     window.location.href = '/login';
   },
 
-  changePassword: async (novaSenha: string): Promise<{ message: string }> => {
-    const { data } = await api.post<{ message: string }>('/auth/change-password', { novaSenha });
-    return data;
-  },
-
   setupPassword: async (token: string, novaSenha: string): Promise<{ message: string }> => {
     const { data } = await api.post<{ message: string }>('/auth/setup-password', { token, novaSenha });
     return data;
@@ -224,7 +219,6 @@ export const authApi = {
     return {
       token: newToken,
       expiresIn: 86400,
-      requirePasswordChange: false,
       usuario: JSON.parse(localStorage.getItem('awl_user') || 'null'),
       app: JSON.parse(localStorage.getItem('awl_app') || 'null'),
     };

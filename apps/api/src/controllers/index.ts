@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
 import { AuthService, AppService, UserService } from '@loginhub/services';
-import * as jwt from 'jsonwebtoken';
 import { LoginInputDTO, CreateAppDTO, UpdateAppDTO, CreateUserDTO, UpdateUserDTO, DbError } from '@loginhub/schema';
 
 const authService = new AuthService();
@@ -96,41 +95,25 @@ export class AuthController {
                 return res.status(400).json({ error: 'Dados incompletos', message: 'O token e a nova senha são obrigatórios.' });
             }
 
-            const jwtSecret = process.env.JWT_SECRET;
-            if (!jwtSecret) {
-                return res.status(500).json({ error: 'Configuração', message: 'JWT_SECRET não configurado.' });
-            }
-
-            let decoded: any;
-            try {
-                decoded = jwt.verify(token, jwtSecret);
-            } catch (err) {
-                return res.status(401).json({ error: 'Token Inválido', message: 'O link de acesso é inválido ou expirou.' });
-            }
-
-            if (decoded.action !== 'setup-password') {
-                return res.status(401).json({ error: 'Token Inválido', message: 'O link de acesso não é válido para esta ação.' });
-            }
-
-            // Ensure the link is single-use by checking if the user still has senhaPadrao
-            const userService = new UserService();
-            const users = await userService.getAllUsersGlobal();
-            const user = users.find(u => String(u.id) === String(decoded.sub));
-
-            if (!user) {
-                return res.status(404).json({ error: 'Não Encontrado', message: 'Usuário não encontrado.' });
-            }
-
-            if (!user.senha_padrao) {
-                return res.status(401).json({ error: 'Token Inválido', message: 'Este link de acesso já foi utilizado.' });
-            }
-
-            await authService.changePassword(decoded.sub, novaSenha);
+            await authService.setupPasswordFromMagicLink(token, novaSenha);
             return res.status(200).json({ message: 'Senha definida com sucesso.' });
         } catch (err: unknown) {
             const error = err as Error;
-            console.error('[AuthController] setupPassword:', error.message);
-            return res.status(500).json({ error: 'Erro Interno', message: 'Erro ao definir a senha.' });
+            switch (error.message) {
+                case 'ERRO_INTERNO':
+                    return res.status(500).json({ error: 'Configuração', message: 'JWT_SECRET não configurado.' });
+                case 'TOKEN_INVALIDO':
+                    return res.status(401).json({ error: 'Token Inválido', message: 'O link de acesso é inválido ou expirou.' });
+                case 'ACAO_INVALIDA':
+                    return res.status(401).json({ error: 'Token Inválido', message: 'O link de acesso não é válido para esta ação.' });
+                case 'USUARIO_NAO_ENCONTRADO':
+                    return res.status(404).json({ error: 'Não Encontrado', message: 'Usuário não encontrado.' });
+                case 'LINK_JA_UTILIZADO':
+                    return res.status(401).json({ error: 'Token Inválido', message: 'Este link de acesso já foi utilizado.' });
+                default:
+                    console.error('[AuthController] setupPassword:', error.message);
+                    return res.status(500).json({ error: 'Erro Interno', message: 'Erro ao definir a senha.' });
+            }
         }
     }
 }

@@ -39,7 +39,7 @@ Todo o ciclo de vida da conta — convite por e-mail, primeiro acesso via **Magi
 |---|---|---|
 | 🔑 Login com E-mail + Senha (JWT 24h) | ✅ | Autenticação centralizada com emissão de token JWT válido por 24 horas. |
 | 🔀 Desambiguação Multi-Tenant | ✅ | E-mail único por aplicativo. Se um e-mail existir em múltiplos apps, a API orienta a escolha do app ou desambigua pela senha (`AMBIGUOUS_EMAIL`). |
-| 🪄 Magic Link (1º Acesso & Reset) | ✅ | Criação de conta e reset de senha utilizam Magic Link seguro de uso único (JWT 1h) em substituição a senhas temporárias. |
+| 🪄 Magic Link (1º Acesso & Reset) | ✅ | Criação de conta e reset de senha utilizam Magic Link de uso único (JWT 24h, autoinvalidado pelo claim `pwf`) em substituição a senhas temporárias. |
 | 🔄 Refresh Session (Sliding 7d) | ✅ | Renovação contínua do JWT com grace period de até 7 dias após a expiração. |
 | 👥 Multi-Tenant Isolado | ✅ | Cada aplicativo possui seus próprios usuários, configurações, logos e URLs de integração. |
 | 🛡️ 4 Níveis de Acesso | ✅ | Níveis padronizados: `master` / `admin` / `user` / `suporte`. |
@@ -450,8 +450,8 @@ O LoginHUB não gera senhas temporárias. Toda a inclusão de novos usuários ut
 ```
  ┌─────────────────────────────────────────────────────────────────────────┐
  │ 1. Admin cria usuário no LoginHUB UI (POST /admin/users)                │
- │    - Backend cria registro com `senha_padrao = true`.                   │
- │    - Backend assina JWT (1h, `action: 'setup-password'`).               │
+ │    - Backend grava um hash placeholder (CSPRNG) como senha inicial.     │
+ │    - Backend assina JWT (24h, `action: 'setup-password'`, claim `pwf`). │
  │    - SMTP envia o e-mail contendo o Magic Link ao usuário.              │
  └────────────────────────────────────┬────────────────────────────────────┘
                                       │
@@ -463,9 +463,9 @@ O LoginHUB não gera senhas temporárias. Toda a inclusão de novos usuários ut
                                       ▼
  ┌─────────────────────────────────────────────────────────────────────────┐
  │ 3. UI chama POST /auth/setup-password { token, novaSenha }              │
- │    - Backend valida o JWT.                                              │
- │    - Verifica se `senha_padrao === true` (garante uso único).           │
- │    - Grava o hash da nova senha e atualiza `senha_padrao = false`.       │
+ │    - Backend valida o JWT e a `action`.                                 │
+ │    - Confere o claim `pwf` contra o `senha_hash` atual (uso único).     │
+ │    - Grava o hash da nova senha — o que mata o próprio link.            │
  └────────────────────────────────────┬────────────────────────────────────┘
                                       │
                                       ▼
@@ -476,12 +476,19 @@ O LoginHUB não gera senhas temporárias. Toda a inclusão de novos usuários ut
 
 > ℹ️ **Fallback de E-mail**: Se o SMTP falhar ao enviar o e-mail, a API retorna `{ emailSent: false, magicLinkToken: "..." }`. A UI exibe o link gerado para que o administrador possa enviá-lo manualmente ao usuário.
 
+> 🔐 **Uso único sem coluna de controle**: o token carrega em `pwf` uma impressão
+> digital (SHA-256, 16 hex) do `senha_hash` vigente na emissão. Definida a senha,
+> o hash muda, a impressão deixa de bater e o link morre — sem estado no banco.
+> Isso substituiu a flag `senha_padrao`, que era do *usuário* e não do *token*:
+> dois links abertos dividiam o mesmo estado e um reset ressuscitava um convite
+> anterior ainda não expirado. Token sem `pwf` é recusado (fail closed).
+
 ---
 
 ### 3️⃣ Fluxo de Redefinição de Senha (Reset)
 
 1. O administrador aciona **"Resetar Senha"** no painel de usuários (`POST /admin/users/:id/reset-password`).
-2. O backend marca a conta com `senha_padrao = true` e gera um novo Magic Link token (expiração 1h).
+2. O backend substitui a senha por um valor aleatório do CSPRNG (ninguém o conhece) e gera um novo Magic Link token (expiração 24h), já com o `pwf` do novo hash — o que invalida qualquer link emitido antes.
 3. O e-mail de redefinição é disparado. Ao acessar o link, o usuário define sua nova senha e conclui o processo.
 
 ---
@@ -631,7 +638,6 @@ Se o aplicativo cliente utilizar a biblioteca `@loginhub/api-client`, o intercep
 | `nome` | `varchar(255)` | Nome completo do usuário. |
 | `email` | `varchar(255)` | E-mail do usuário. *(Único por aplicativo)*. |
 | `senha_hash` | `varchar(255)` | Hash bcrypt da senha (cost factor 10). |
-| `senha_padrao` | `boolean` | Flag que indica se a senha ainda não foi personalizada (controla uso do Magic Link). |
 | `telefone` | `varchar(20)` | Telefone de contato do usuário. |
 | `status` | `varchar(20)` | Situação da conta: `'ativo'`, `'inativo'` ou `'bloqueado'`. |
 | `ultimo_acesso` | `timestamp` | Timestamp atualizado a cada login com sucesso. |
@@ -696,8 +702,9 @@ Disponível em: [`https://loginhub.astralwavelabel.com/login`](https://loginhub.
 ## 🔒 Segurança Aplicada
 
 - **Criptografia de Senhas**: Bcrypt com salt rounds = 10.
-- **Tokens Temporais**: JWT com validade de 24 horas para sessão e 1 hora para Magic Links.
-- **Proteção de Magic Links**: Tokens de primeiro acesso/reset possuem validação de uso único (`senha_padrao`).
+- **Tokens Temporais**: JWT com validade de 24 horas para sessão e 24 horas para Magic Links.
+- **Proteção de Magic Links**: Uso único garantido pelo claim `pwf` (impressão digital do `senha_hash` na emissão) — o link se autoinvalida assim que a senha muda. Tokens sem `pwf` são recusados.
+- **Senhas Placeholder**: contas criadas por convite e contas resetadas recebem um valor de `crypto.randomBytes(32)` até o usuário definir a própria senha.
 - **Body Limit**: Express configurado com `5mb` para suportar upload de logos base64 otimizadas.
 - **Proteção HTTP**: Middlewares `helmet()` e CORS configurados.
 

@@ -80,7 +80,7 @@ export const buildInviteEmail = ({ appName, platformUrl, appLogo, nome }: Invite
                   </a>
                 </p>
                 <p style="margin:0;color:#64748b;font-size:13px;">
-                  Este link é de uso único e expira em 1 hora. Se você não esperava
+                  Este link é de uso único e expira em 24 horas. Se você não esperava
                   este e-mail, pode ignorá-lo com segurança.
                 </p>
               </td>

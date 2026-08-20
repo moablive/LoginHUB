@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { buildInviteEmail } from './templates/inviteEmail';
 import jwt from 'jsonwebtoken';
 import { db } from '@loginhub/database';
@@ -16,6 +17,33 @@ import {
     UpdateUserDTO,
     User as UserResponse
 } from '@loginhub/schema';
+
+// ==========================================
+// MAGIC LINK
+// ==========================================
+
+/**
+ * Validade do Magic Link (convite e reset).
+ *
+ * Era 1h — curto demais na prática: convite enviado à noite chegava morto pela
+ * manhã. O link continua sendo de uso único (ver `passwordFingerprint`), então
+ * esticar o prazo não afrouxa a garantia, só para de queimar convite.
+ */
+const MAGIC_LINK_TTL = '24h';
+
+/**
+ * Impressão digital do hash da senha, embutida no Magic Link como claim `pwf`.
+ *
+ * É o que garante o uso único: assim que a senha é definida o `senha_hash` muda,
+ * a impressão para de bater e o link morre sozinho — sem coluna de controle e
+ * sem escrita extra no banco.
+ *
+ * Substitui a flag `senha_padrao`, que era do *usuário* e não do *token*: dois
+ * links abertos dividiam o mesmo estado, e um reset devolvia a flag para `true`,
+ * ressuscitando um convite anterior que ainda não tinha expirado.
+ */
+const passwordFingerprint = (senhaHash: string): string =>
+    crypto.createHash('sha256').update(senhaHash).digest('hex').slice(0, 16);
 
 // ==========================================
 // 1. AUTH SERVICE
@@ -65,7 +93,6 @@ export class AuthService {
             return {
                 token,
                 expiresIn: 86400,
-                requirePasswordChange: false,
                 usuario: {
                     id: "0",
                     nome: "Super Admin",
@@ -137,7 +164,6 @@ export class AuthService {
         return {
             token,
             expiresIn: 86400,
-            requirePasswordChange: false, // fluxo senha_padrao removido — convite é feito via magic link
             usuario: {
                 id: user.id.toString(),
                 nome: user.nome,
@@ -211,7 +237,6 @@ export class AuthService {
         return {
             token,
             expiresIn: 86400,
-            requirePasswordChange: false, // fluxo senha_padrao removido — convite é feito via magic link
             usuario: {
                 id: user.id.toString(),
                 nome: user.nome,
@@ -234,8 +259,47 @@ export class AuthService {
         const senhaHash = await bcrypt.hash(novaSenha, salt);
         
         await db.update(usuarios)
-            .set({ senhaHash, senhaPadrao: false })
+            .set({ senhaHash })
             .where(eq(usuarios.id, Number(userId)));
+    }
+
+    /**
+     * Consome um Magic Link e define a senha do usuário.
+     *
+     * O uso único vem da impressão digital do `senha_hash` que o token carrega
+     * (`pwf`): ela precisa continuar batendo com o hash vigente. Token sem `pwf`
+     * é recusado — os links do formato antigo tinham 1h de validade, então
+     * nenhum deles sobrevive a este deploy.
+     */
+    public async setupPasswordFromMagicLink(token: string, novaSenha: string): Promise<void> {
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+            console.error("JWT_SECRET missing in .env");
+            throw new Error('ERRO_INTERNO');
+        }
+
+        let decoded: { sub?: string | number; action?: string; pwf?: string };
+        try {
+            decoded = jwt.verify(token, jwtSecret) as typeof decoded;
+        } catch {
+            throw new Error('TOKEN_INVALIDO');
+        }
+
+        if (decoded.action !== 'setup-password') throw new Error('ACAO_INVALIDA');
+
+        const rows = await db.select({ senhaHash: usuarios.senhaHash })
+            .from(usuarios)
+            .where(eq(usuarios.id, Number(decoded.sub)))
+            .limit(1);
+
+        const user = rows[0];
+        if (!user) throw new Error('USUARIO_NAO_ENCONTRADO');
+
+        if (!decoded.pwf || decoded.pwf !== passwordFingerprint(user.senhaHash)) {
+            throw new Error('LINK_JA_UTILIZADO');
+        }
+
+        await this.changePassword(String(decoded.sub), novaSenha);
     }
 }
 
@@ -411,8 +475,10 @@ export class UserService {
 
         if (!passwordToHash) {
             isGeneratingMagicLink = true;
-            // Provide a random placeholder hash since they will define it via magic link
-            passwordToHash = Math.random().toString(36).slice(-8);
+            // Placeholder: a senha real é definida pelo usuário via magic link.
+            // Ainda assim é uma senha válida da conta até lá, então vem do CSPRNG
+            // — `Math.random()` não serve para credencial.
+            passwordToHash = crypto.randomBytes(32).toString('hex');
         }
 
         const salt = await bcrypt.genSalt(10);
@@ -425,7 +491,6 @@ export class UserService {
                 nome: data.nome || '',
                 email: data.email,
                 senhaHash: passwordHash,
-                senhaPadrao: isGeneratingMagicLink ? true : false,
                 telefone: data.telefone || null
             }).returning({ id: usuarios.id });
 
@@ -437,7 +502,11 @@ export class UserService {
                 if (!jwtSecret) {
                     console.error("JWT_SECRET missing in .env");
                 }
-                magicLinkToken = jwt.sign({ sub: newUserId, action: 'setup-password', email: data.email }, jwtSecret || 'secret', { expiresIn: '1h' });
+                magicLinkToken = jwt.sign(
+                    { sub: newUserId, action: 'setup-password', email: data.email, pwf: passwordFingerprint(passwordHash) },
+                    jwtSecret || 'secret',
+                    { expiresIn: MAGIC_LINK_TTL },
+                );
             }
 
             let emailSent = false;
@@ -500,7 +569,6 @@ export class UserService {
             telefone: usuarios.telefone,
             role: niveisAcesso.nome,
             status: usuarios.status,
-            senha_padrao: usuarios.senhaPadrao,
         })
         .from(usuarios)
         .leftJoin(niveisAcesso, eq(usuarios.nivelAcessoId, niveisAcesso.id));
@@ -517,7 +585,6 @@ export class UserService {
             telefone: usuarios.telefone,
             role: niveisAcesso.nome,
             status: usuarios.status,
-            senha_padrao: usuarios.senhaPadrao,
         })
         .from(usuarios)
         .leftJoin(niveisAcesso, eq(usuarios.nivelAcessoId, niveisAcesso.id))
@@ -634,19 +701,25 @@ export class UserService {
             throw error;
         }
 
-        const randomPassword = Math.random().toString(36).slice(-8);
+        // Invalida a senha atual com um valor que ninguém conhece; o usuário
+        // define a nova pelo magic link abaixo.
+        const randomPassword = crypto.randomBytes(32).toString('hex');
         const salt = await bcrypt.genSalt(10);
         const senhaHash = await bcrypt.hash(randomPassword, salt);
 
         await db.update(usuarios)
-            .set({ senhaHash, senhaPadrao: true })
+            .set({ senhaHash })
             .where(eq(usuarios.id, Number(id)));
 
         const jwtSecret = process.env.JWT_SECRET;
         if (!jwtSecret) {
             console.error("JWT_SECRET missing in .env");
         }
-        const magicLinkToken = jwt.sign({ sub: id, action: 'setup-password', email: userRes[0].email }, jwtSecret || 'secret', { expiresIn: '1h' });
+        const magicLinkToken = jwt.sign(
+            { sub: id, action: 'setup-password', email: userRes[0].email, pwf: passwordFingerprint(senhaHash) },
+            jwtSecret || 'secret',
+            { expiresIn: MAGIC_LINK_TTL },
+        );
 
         let emailSent = false;
         if (emailHtml) {
