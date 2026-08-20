@@ -29,14 +29,6 @@ export interface CreateUserDTO {
     role?: UserRole | string;    
     telefone?: string | null; 
     emailHtml?: string;
-    /**
-     * Exige 2FA neste convite: o convidado define a senha e, na mesma tela,
-     * escaneia o QR. Sem concluir, a conta não abre sessão.
-     *
-     * O app precisa estar em `TWOFA_APPS_HABILITADOS` — senão o convite é
-     * recusado, em vez de criar uma conta que ninguém consegue usar.
-     */
-    exigir2FA?: boolean;
 }
 
 export interface UpdateUserDTO {

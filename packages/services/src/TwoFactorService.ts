@@ -176,28 +176,6 @@ const hmacBackupCode = (codigo: string): string =>
     crypto.createHmac('sha256', chave()).update(normalizarBackupCode(codigo)).digest('hex');
 
 // ==========================================
-// TENANTS HABILITADOS
-// ==========================================
-/**
- * Apps liberados para 2FA, por id, em `TWOFA_APPS_HABILITADOS` (ex.: "2,8").
- *
- * Existe por causa de um risco concreto de contrato: quando o 2FA está ativo o
- * `/auth/login` devolve um challenge no lugar do `token`, e todo app cliente
- * que ainda não conhece esse formato lê `token` como `undefined` e trava o
- * usuário numa sessão inválida — sem mensagem de erro.
- *
- * Fail closed: sem a variável, ninguém ativa. Habilite um app só depois de
- * atualizar o cliente dele.
- */
-const appsHabilitados = (): Set<string> =>
-    new Set(
-        (process.env.TWOFA_APPS_HABILITADOS || '')
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean),
-    );
-
-// ==========================================
 // SERVICE
 // ==========================================
 export class TwoFactorService {
@@ -211,7 +189,6 @@ export class TwoFactorService {
      */
     public async iniciarSetup(usuarioId: string): Promise<TwoFactorSetupResponse> {
         const conta = await this.carregarConta(usuarioId);
-        this.assertTenantPronto(conta.appId);
 
         const atual = await this.carregarConfig(usuarioId);
         if (atual?.ativo) throw new Error('JA_ATIVO');
@@ -387,21 +364,13 @@ export class TwoFactorService {
         return config?.sessoesValidasDesde ?? null;
     }
 
-    /** O app está liberado para 2FA? Checável antes de existir usuário. */
-    public tenantHabilitado(appId: string | number | null | undefined): boolean {
-        return !!appId && appsHabilitados().has(String(appId));
-    }
-
     /**
-     * Marca a conta como obrigada a ter 2FA, no ato do convite.
+     * Marca a conta como obrigada a ter 2FA.
      *
      * Cria a linha sem secret: ela existe só para registrar a exigência. O
      * segredo aparece quando a pessoa abre o convite e escaneia o QR.
      */
     public async marcarObrigatorio(usuarioId: string): Promise<void> {
-        const conta = await this.carregarConta(usuarioId);
-        this.assertTenantPronto(conta.appId);
-
         const atual = await this.carregarConfig(usuarioId);
         if (atual) {
             await db.update(usuarios2fa)
@@ -461,10 +430,6 @@ export class TwoFactorService {
         const conta = linhas[0];
         if (!conta) throw new Error('USUARIO_NAO_ENCONTRADO');
         return conta;
-    }
-
-    private assertTenantPronto(appId: number | null): void {
-        if (!appId || !appsHabilitados().has(String(appId))) throw new Error('TENANT_NAO_HABILITADO');
     }
 
     private async contarBackupCodes(usuarioId: string): Promise<number> {

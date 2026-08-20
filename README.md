@@ -346,9 +346,6 @@ VITE_MASTER_KEY='***'           # Chave mestra exposta para o build da UI
 # entregaria as aspas como parte do valor.
 # ⚠️ Trocar esta chave torna ilegíveis TODOS os secrets e backup codes gravados.
 TWOFA_ENC_KEY=***
-# Ids dos apps liberados a ATIVAR 2FA, separados por vírgula (ex.: 2,8).
-# Vazio = ninguém ativa (fail closed) — ver "Por que existe a lista" no fluxo 6️⃣.
-TWOFA_APPS_HABILITADOS=
 
 # ====================
 # CORS
@@ -686,21 +683,19 @@ do `/auth/login` continua idêntica byte a byte.
    200 { token, expiresIn: 86400, usuario, app }   ← sessão normal de 24h
 ```
 
-#### Por que existe a lista `TWOFA_APPS_HABILITADOS`
+#### 2FA é exigido de todas as contas
 
-Todo app cliente hoje assume que `200` no login significa token na mão. Com 2FA
-ativo o `token` vem `undefined`, e um cliente desatualizado grava a string
-`"undefined"` no storage: o usuário fica **travado numa sessão inválida, sem
-mensagem de erro**.
+Não há configuração por app: toda conta criada nasce com 2FA obrigatório, e o
+reset de senha (o caminho de reconvite das contas antigas) também passa a exigir.
 
-Por isso a ativação é recusada com `403 TENANT_NAO_HABILITADO` para app fora da
-lista. Fail closed — vazio significa que ninguém ativa. Libere um app **só depois**
-de atualizar o cliente dele, e lembre que a variável é lida na criação do
-container:
+> ⚠️ **Todo app cliente precisa tratar a resposta de desafio.** Um cliente que
+> assume `200` = token na mão vai ler `token` como `undefined` e gravar a string
+> `"undefined"` no storage — o usuário fica travado numa sessão inválida, sem
+> mensagem de erro. Atualize o cliente ANTES de reconvidar os usuários dele.
 
-```bash
-docker compose --env-file .env up -d login-hub-api
-```
+Contas que já existem e ainda não foram reconvidadas continuam entrando só com
+senha: a exigência é gravada quando a conta passa por convite ou reset, então a
+migração acontece no ritmo em que você dispara os reconvites.
 
 #### Detalhes que economizam depuração
 
@@ -718,11 +713,10 @@ docker compose --env-file .env up -d login-hub-api
 - **Reset de senha não desativa o 2FA.** Quem perder o celular precisa de um código
   de recuperação; sem nenhum, um admin tem de limpar a linha em `usuarios_2fa`.
 
-#### 2FA obrigatório no convite
+#### 2FA obrigatório
 
-O convite pode exigir o segundo fator (`exigir2FA` no `POST /admin/users`, ou o
-checkbox no modal). O convidado define a senha e escaneia o QR **na mesma tela**;
-sem concluir, a conta não abre sessão.
+Todo convite exige o segundo fator — não é opcional. O convidado define a senha
+e escaneia o QR **na mesma tela**; sem concluir, a conta não abre sessão.
 
 ```
 e-mail de convite  →  /setup-password?token=…   (magic link, como sempre)
@@ -742,8 +736,6 @@ e-mail de convite  →  /setup-password?token=…   (magic link, como sempre)
 
 Detalhes:
 
-- **Convite recusado (`422`)** se o app não estiver em `TWOFA_APPS_HABILITADOS` —
-  a validação vem antes do INSERT, então não sobra usuário órfão.
 - **Quem abandona no meio** (senha definida, 2FA não configurado) recebe no login
   `{ require2FASetup, setupToken }` — uma sessão de 10 min que só serve para
   concluir o enrolamento, em vez de ficar preso sem saída.

@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { buildInviteEmail } from './templates/inviteEmail';
 import jwt from 'jsonwebtoken';
 import { db } from '@loginhub/database';
-import { aplicativos, usuarios, niveisAcesso } from '@loginhub/schema';
+import { aplicativos, usuarios, niveisAcesso, usuarios2fa } from '@loginhub/schema';
 import { eq, and, ne, sql } from 'drizzle-orm';
 import { emailService } from './EmailService';
 import { twoFactorService } from './TwoFactorService';
@@ -517,13 +517,21 @@ export class AppService {
                          roleId = fallbackRole[0].id;
                     }
 
-                    await tx.insert(usuarios).values({
+                    const adminRes = await tx.insert(usuarios).values({
                         appId: appId,
                         nivelAcessoId: roleId,
                         nome: data.admin_nome || 'Administrador',
                         email: data.admin_email,
                         senhaHash: passwordHash,
                         telefone: data.admin_telefone || null
+                    }).returning({ id: usuarios.id });
+
+                    // Mesma regra das demais contas: 2FA exigido desde o início.
+                    await tx.insert(usuarios2fa).values({
+                        usuarioId: adminRes[0].id,
+                        secretCifrado: null,
+                        ativo: false,
+                        obrigatorio: true,
                     });
 
                     if (data.emailHtml) {
@@ -647,15 +655,6 @@ export class UserService {
         if (!data.app_id) throw Object.assign(new Error('Aplicativo é obrigatória'), { code: 'VALIDATION' });
         if (!data.email) throw Object.assign(new Error('E-mail é obrigatório'), { code: 'VALIDATION' });
 
-        // Recusa ANTES de inserir: um convite com 2FA obrigatório num app não
-        // liberado criaria uma conta que ninguém consegue usar nem enrolar.
-        if (data.exigir2FA && !twoFactorService.tenantHabilitado(data.app_id)) {
-            throw Object.assign(
-                new Error('O aplicativo não está liberado para 2FA (TWOFA_APPS_HABILITADOS).'),
-                { code: 'TENANT_NAO_HABILITADO' },
-            );
-        }
-
         const roleName = data.role || 'user';
         const roleRes = await db.select({ id: niveisAcesso.id }).from(niveisAcesso).where(eq(niveisAcesso.nome, roleName)).limit(1);
 
@@ -689,9 +688,10 @@ export class UserService {
 
             const newUserId = insertedUser[0].id;
 
-            if (data.exigir2FA) {
-                await twoFactorService.marcarObrigatorio(String(newUserId));
-            }
+            // 2FA é exigido de toda conta, sem exceção por app. A linha nasce aqui
+            // já marcando a obrigação; o secret só aparece quando a pessoa abre o
+            // convite e escaneia o QR.
+            await twoFactorService.marcarObrigatorio(String(newUserId));
 
             let magicLinkToken: string | undefined = undefined;
 
@@ -727,7 +727,6 @@ export class UserService {
                             platformUrl: app.platformUrl,
                             appLogo: app.logo,
                             nome: data.nome,
-                            exigir2FA: data.exigir2FA,
                         })
                         : null);
 
@@ -910,6 +909,10 @@ export class UserService {
         await db.update(usuarios)
             .set({ senhaHash })
             .where(eq(usuarios.id, Number(id)));
+
+        // Reset é o caminho de reconvite das contas antigas: quem passa por aqui
+        // sai com 2FA exigido, como qualquer conta nova.
+        await twoFactorService.marcarObrigatorio(id);
 
         const jwtSecret = process.env.JWT_SECRET;
         if (!jwtSecret) {

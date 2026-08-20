@@ -138,11 +138,6 @@ const responder2FA = (res: Response, erro: Error) => {
         case 'SECRET_CORROMPIDO':
             console.error('[2FA] Falha ao decifrar o secret — chave trocada ou registro adulterado.');
             return res.status(500).json({ error: 'Erro Interno', message: 'Não foi possível ler a configuração de 2FA.' });
-        case 'TENANT_NAO_HABILITADO':
-            return res.status(403).json({
-                error: 'TENANT_NAO_HABILITADO',
-                message: 'O aplicativo desta conta ainda não está liberado para 2FA.',
-            });
         case 'JA_ATIVO':
             return res.status(409).json({ error: 'JA_ATIVO', message: 'O 2FA já está ativo nesta conta.' });
         case 'SETUP_NAO_INICIADO':
@@ -409,9 +404,6 @@ export class UserController {
             }
             if (error.code === 'RELATION_ERROR') {
                 return res.status(400).json({ error: 'Dados Inválidos', message: error.message || 'A app informada não existe.' });
-            }
-            if (error.code === 'TENANT_NAO_HABILITADO') {
-                return res.status(422).json({ error: 'TENANT_NAO_HABILITADO', message: error.message });
             }
             if (error.code === 'VALIDATION') {
                 return res.status(400).json({ error: 'Dados Inválidos', message: error.message });

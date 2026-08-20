@@ -31,19 +31,10 @@ export interface InviteEmailInput {
     appLogo?: string | null;
     /** Nome de quem está sendo convidado, para a saudação. */
     nome?: string | null;
-    /**
-     * O convite exige 2FA. Muda só o TEXTO — para a pessoa abrir o link já com
-     * o celular por perto.
-     *
-     * ⚠️ Nem o secret nem o QR Code entram no e-mail, em hipótese alguma. Este
-     * mesmo e-mail carrega o magic link de senha; pôr o segundo fator aqui
-     * colocaria os dois fatores no mesmo canal e quem lesse a caixa postal teria
-     * ambos. O QR é desenhado no navegador, na tela de definição de senha.
-     */
-    exigir2FA?: boolean;
+
 }
 
-export const buildInviteEmail = ({ appName, platformUrl, appLogo, nome, exigir2FA }: InviteEmailInput): string => {
+export const buildInviteEmail = ({ appName, platformUrl, appLogo, nome }: InviteEmailInput): string => {
     const app = escapeHtml(appName);
     // Sem isto, uma platform_url com barra no fim vira ".../setup-password" duplicado.
     const base = platformUrl.replace(/\/+$/, '');
@@ -89,14 +80,12 @@ export const buildInviteEmail = ({ appName, platformUrl, appLogo, nome, exigir2F
                     Definir minha senha
                   </a>
                 </p>
-                ${exigir2FA ? `
                 <p style="margin:0 0 16px;padding:12px 16px;background:#eff6ff;border-left:3px solid #2563eb;color:#1e3a5f;font-size:13px;line-height:1.5;">
                   <strong>Tenha o celular à mão.</strong> Depois de criar a senha, esta conta
                   pede verificação em duas etapas: a própria página vai mostrar um QR Code
                   para você escanear com o app autenticador (Google Authenticator, Authy,
                   1Password ou Microsoft Authenticator). Leva menos de um minuto.
                 </p>
-                ` : ''}
                 <p style="margin:0;color:#64748b;font-size:13px;">
                   Este link é de uso único e expira em 24 horas. Se você não esperava
                   este e-mail, pode ignorá-lo com segurança.

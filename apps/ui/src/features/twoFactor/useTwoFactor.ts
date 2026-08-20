@@ -28,8 +28,6 @@ export function useTwoFactor() {
         const codigo = (e as any)?.response?.data?.error;
         const mensagem = (e as any)?.response?.data?.message;
         switch (codigo) {
-            case 'TENANT_NAO_HABILITADO':
-                return 'Este aplicativo ainda não está liberado para 2FA.';
             case 'CODIGO_INVALIDO':
                 return 'Código inválido. Confira o relógio do celular e tente o próximo.';
             case 'MUITAS_TENTATIVAS':

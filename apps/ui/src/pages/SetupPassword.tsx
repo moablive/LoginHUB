@@ -14,10 +14,10 @@ export function SetupPassword() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  // Convite marcado como "exigir 2FA": a mesma página emenda no enrolamento em
-  // vez de mandar para o login. O QR é desenhado AQUI, no navegador — nunca no
-  // e-mail, senão os dois fatores viajariam pelo mesmo canal.
-  const [exigir2FA, setExigir2FA] = useState(false);
+  // 2FA é exigido de toda conta, então a página emenda no enrolamento em vez de
+  // mandar para o login. O QR é desenhado AQUI, no navegador — nunca no e-mail,
+  // senão os dois fatores viajariam pelo mesmo canal.
+  const [precisaEnrolar, setPrecisaEnrolar] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,7 +42,7 @@ export function SetupPassword() {
     try {
       const r = await authApi.setupPassword(token, password);
       if (r.require2FASetup) {
-        setExigir2FA(true);
+        setPrecisaEnrolar(true);
         return;
       }
       setSuccess(true);
@@ -76,7 +76,7 @@ export function SetupPassword() {
     );
   }
 
-  if (exigir2FA) {
+  if (precisaEnrolar) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="bg-card text-card-foreground rounded-2xl shadow-xl max-w-md w-full p-8 border border-slate-100">
