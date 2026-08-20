@@ -382,7 +382,35 @@ SMTP_HOST=smtp.hostinger.com
 SMTP_PORT=587
 SMTP_USER=awlsrvlab@astralwavelabel.com
 SMTP_PASS='***'
+
+# ====================
+# Remetente por aplicativo (opcional)
+# ====================
+# Por padrão todo e-mail sai de SMTP_USER. As chaves seguem `aplicativos.id`:
+#   SMTP_APP_<id>_FROM / _USER / _PASS / _HOST / _PORT
+# ⚠️ Sem _USER/_PASS próprios, o envio sai pela conta padrão só trocando o
+# cabeçalho From — a maioria dos provedores recusa, e o SPF do outro domínio
+# não cobre o nosso servidor. Crie a caixa de verdade.
+#SMTP_APP_2_FROM=contato@sulalimentos.com
+#SMTP_APP_2_USER=contato@sulalimentos.com
+#SMTP_APP_2_PASS='***'
 ```
+
+### Remetente por aplicativo
+
+Um convite da Sul Alimentos saindo de `awlsrvlab@astralwavelabel.com` confunde
+quem recebe: a pessoa foi convidada para um cliente e o e-mail chega de um
+domínio que ela nunca viu. As chaves `SMTP_APP_<id>_*` resolvem isso.
+
+| Config presente | O que acontece |
+|---|---|
+| `_USER` + `_PASS` | Transporte dedicado, autenticado na caixa do cliente. **É o único caminho que passa em SPF/DKIM do domínio dele.** |
+| só `_FROM` | Reusa a conta padrão trocando o cabeçalho. A Hostinger tende a recusar remetente fora da conta autenticada; se passar, cai em spam. Serve para teste. |
+| nada | Remetente padrão do hub. |
+
+Valores de exemplo (`__DEFINIR__`, `***`, `changeme`) são tratados como ausentes
+— um placeholder ligaria um SMTP que só sabe falhar, derrubando os convites
+daquele app.
 
 ---
 
@@ -689,6 +717,38 @@ docker compose --env-file .env up -d login-hub-api
   então não comporta 2FA nesta versão. Ele segue protegido só pela `MASTER_API_KEY`.
 - **Reset de senha não desativa o 2FA.** Quem perder o celular precisa de um código
   de recuperação; sem nenhum, um admin tem de limpar a linha em `usuarios_2fa`.
+
+#### 2FA obrigatório no convite
+
+O convite pode exigir o segundo fator (`exigir2FA` no `POST /admin/users`, ou o
+checkbox no modal). O convidado define a senha e escaneia o QR **na mesma tela**;
+sem concluir, a conta não abre sessão.
+
+```
+e-mail de convite  →  /setup-password?token=…   (magic link, como sempre)
+                          │  define a senha
+                          │  setup-password devolve sessão + require2FASetup
+                          ▼
+                     mesma página mostra o QR   ← desenhado no NAVEGADOR
+                          │  confirma o código
+                          ▼
+                     backup codes na tela
+```
+
+> 🔒 **O secret e o QR nunca entram no e-mail.** Esse mesmo e-mail carrega o magic
+> link de senha e é o canal de recuperação da conta: pôr o segundo fator ali
+> colocaria os dois fatores no mesmo lugar, e quem lesse a caixa postal teria
+> ambos. O e-mail só ganha um aviso de "tenha o celular à mão".
+
+Detalhes:
+
+- **Convite recusado (`422`)** se o app não estiver em `TWOFA_APPS_HABILITADOS` —
+  a validação vem antes do INSERT, então não sobra usuário órfão.
+- **Quem abandona no meio** (senha definida, 2FA não configurado) recebe no login
+  `{ require2FASetup, setupToken }` — uma sessão de 10 min que só serve para
+  concluir o enrolamento, em vez de ficar preso sem saída.
+- **O usuário não desativa** um 2FA imposto pelo convite: `/auth/2fa/disable`
+  devolve `403 OBRIGATORIO`. Só ação administrativa remove a exigência.
 
 #### Ativando pelo terminal
 

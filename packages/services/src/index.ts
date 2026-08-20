@@ -19,6 +19,8 @@ import {
     CreateUserDTO,
     UpdateUserDTO,
     TwoFactorChallengeResponse,
+    TwoFactorSetupRequiredResponse,
+    SetupPasswordResponse,
     User as UserResponse
 } from '@loginhub/schema';
 
@@ -62,7 +64,7 @@ const passwordFingerprint = (senhaHash: string): string =>
 // 1. AUTH SERVICE
 // ==========================================
 export class AuthService {
-    public async login(data: LoginInputDTO): Promise<LoginResponseDTO | TwoFactorChallengeResponse> {
+    public async login(data: LoginInputDTO): Promise<LoginResponseDTO | TwoFactorChallengeResponse | TwoFactorSetupRequiredResponse> {
         // Mesmo e-mail pode existir em apps diferentes (unique composto).
         // Se o cliente passa app_id, filtra direto. Senão e houver ambiguidade, devolve a lista
         // de apps disponíveis para o cliente escolher.
@@ -153,14 +155,47 @@ export class AuthService {
         if (user.app_status !== 'ativo') throw new Error('APP_BLOQUEADO');
         if (user.status !== 'ativo') throw new Error('USUARIO_BLOQUEADO');
 
-        // Senha conferiu. Se a conta tem segundo fator, o JWT de sessão NÃO sai
-        // daqui: o cliente recebe um desafio de vida curta e só troca por sessão
-        // depois de provar o segundo fator.
-        if (await twoFactorService.estaAtivo(user.id.toString())) {
-            return this.emitirChallenge(user.id.toString(), user.app_id ? user.app_id.toString() : '0');
-        }
+        // Senha conferiu — mas isso pode não bastar.
+        const estado = await twoFactorService.estadoDoLogin(user.id.toString());
+        const appId = user.app_id ? user.app_id.toString() : '0';
+
+        // 2FA ativo: o JWT de sessão NÃO sai daqui. O cliente recebe um desafio
+        // de vida curta e só troca por sessão depois de provar o segundo fator.
+        if (estado === 'desafio') return this.emitirChallenge(user.id.toString(), appId);
+
+        // 2FA exigido pelo convite e nunca configurado (alguém abandonou o
+        // convite no meio). Devolvemos uma sessão curta só para concluir o
+        // enrolamento, em vez de barrar sem saída.
+        if (estado === 'enrolar') return this.emitirTokenDeEnrolamento(user.id.toString(), user.email, appId, user.role_nome);
 
         return this.emitirSessao(user);
+    }
+
+    /**
+     * Sessão curta para concluir um enrolamento pendente.
+     *
+     * É um JWT normal, de 10 minutos. Hoje o `authMiddleware` só protege as
+     * rotas de 2FA, então na prática ele não abre mais nada — se outras rotas
+     * passarem a usá-lo, isto aqui precisa virar um token com escopo próprio.
+     */
+    private emitirTokenDeEnrolamento(
+        usuarioId: string,
+        email: string,
+        appId: string,
+        role: string | null,
+    ): TwoFactorSetupRequiredResponse {
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+            console.error("JWT_SECRET missing in .env");
+            throw new Error('ERRO_INTERNO');
+        }
+
+        const payload: JWTPayload = { sub: usuarioId, email, app_id: appId, role: role || 'user' };
+        return {
+            require2FASetup: true,
+            setupToken: jwt.sign(payload, jwtSecret, { expiresIn: 600 }),
+            expiresIn: 600,
+        };
     }
 
     /**
@@ -389,7 +424,7 @@ export class AuthService {
      * é recusado — os links do formato antigo tinham 1h de validade, então
      * nenhum deles sobrevive a este deploy.
      */
-    public async setupPasswordFromMagicLink(token: string, novaSenha: string): Promise<void> {
+    public async setupPasswordFromMagicLink(token: string, novaSenha: string): Promise<SetupPasswordResponse> {
         const jwtSecret = process.env.JWT_SECRET;
         if (!jwtSecret) {
             console.error("JWT_SECRET missing in .env");
@@ -418,6 +453,36 @@ export class AuthService {
         }
 
         await this.changePassword(String(decoded.sub), novaSenha);
+
+        // Devolve sessão para a página seguir direto no enrolamento de 2FA sem
+        // pedir login de novo. Quem acabou de usar o magic link já controla a
+        // conta, então isto não concede nada que ele ainda não tivesse.
+        const linhas = await db.select({
+            id: usuarios.id,
+            nome: usuarios.nome,
+            email: usuarios.email,
+            app_id: usuarios.appId,
+            app_nome: aplicativos.nome,
+            app_status: aplicativos.status,
+            role_nome: niveisAcesso.nome,
+        })
+        .from(usuarios)
+        .innerJoin(aplicativos, eq(usuarios.appId, aplicativos.id))
+        .innerJoin(niveisAcesso, eq(usuarios.nivelAcessoId, niveisAcesso.id))
+        .where(eq(usuarios.id, Number(decoded.sub)))
+        .limit(1);
+
+        const conta = linhas[0];
+        if (!conta) throw new Error('USUARIO_NAO_ENCONTRADO');
+
+        const sessao = await this.emitirSessao(conta);
+
+        return {
+            message: 'Senha definida com sucesso.',
+            token: sessao.token,
+            expiresIn: sessao.expiresIn,
+            require2FASetup: await twoFactorService.exigeEnrolamento(String(decoded.sub)),
+        };
     }
 }
 
@@ -465,7 +530,8 @@ export class AppService {
                         await emailService.sendEmail(
                             data.admin_email,
                             `Boas-vindas ao ${data.nome}`,
-                            data.emailHtml
+                            data.emailHtml,
+                            { appId, appNome: data.nome },
                         );
                     }
                 }
@@ -581,6 +647,15 @@ export class UserService {
         if (!data.app_id) throw Object.assign(new Error('Aplicativo é obrigatória'), { code: 'VALIDATION' });
         if (!data.email) throw Object.assign(new Error('E-mail é obrigatório'), { code: 'VALIDATION' });
 
+        // Recusa ANTES de inserir: um convite com 2FA obrigatório num app não
+        // liberado criaria uma conta que ninguém consegue usar nem enrolar.
+        if (data.exigir2FA && !twoFactorService.tenantHabilitado(data.app_id)) {
+            throw Object.assign(
+                new Error('O aplicativo não está liberado para 2FA (TWOFA_APPS_HABILITADOS).'),
+                { code: 'TENANT_NAO_HABILITADO' },
+            );
+        }
+
         const roleName = data.role || 'user';
         const roleRes = await db.select({ id: niveisAcesso.id }).from(niveisAcesso).where(eq(niveisAcesso.nome, roleName)).limit(1);
 
@@ -613,6 +688,11 @@ export class UserService {
             }).returning({ id: usuarios.id });
 
             const newUserId = insertedUser[0].id;
+
+            if (data.exigir2FA) {
+                await twoFactorService.marcarObrigatorio(String(newUserId));
+            }
+
             let magicLinkToken: string | undefined = undefined;
 
             if (isGeneratingMagicLink) {
@@ -647,6 +727,7 @@ export class UserService {
                             platformUrl: app.platformUrl,
                             appLogo: app.logo,
                             nome: data.nome,
+                            exigir2FA: data.exigir2FA,
                         })
                         : null);
 
@@ -664,7 +745,8 @@ export class UserService {
                     emailSent = await emailService.sendEmail(
                         data.email,
                         `Seu acesso ao ${appName} foi liberado!`,
-                        finalHtml
+                        finalHtml,
+                        { appId: data.app_id, appNome: appName },
                     );
                 }
             }
@@ -852,7 +934,8 @@ export class UserService {
             emailSent = await emailService.sendEmail(
                 userRes[0].email,
                 `Sua senha do ${appName} foi redefinida!`,
-                finalHtml
+                finalHtml,
+                { appId: userRes[0].app_id, appNome: appName },
             );
         }
 

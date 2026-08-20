@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { authApi } from '@loginhub/api-client';
 import { ShieldCheckIcon } from '@heroicons/react/24/outline';
+import { TwoFactorSetup } from '../features/twoFactor/TwoFactorSetup';
 
 export function SetupPassword() {
   const [searchParams] = useSearchParams();
@@ -13,6 +14,10 @@ export function SetupPassword() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  // Convite marcado como "exigir 2FA": a mesma página emenda no enrolamento em
+  // vez de mandar para o login. O QR é desenhado AQUI, no navegador — nunca no
+  // e-mail, senão os dois fatores viajariam pelo mesmo canal.
+  const [exigir2FA, setExigir2FA] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,7 +40,11 @@ export function SetupPassword() {
     setError(null);
 
     try {
-      await authApi.setupPassword(token, password);
+      const r = await authApi.setupPassword(token, password);
+      if (r.require2FASetup) {
+        setExigir2FA(true);
+        return;
+      }
       setSuccess(true);
       setTimeout(() => {
         navigate('/login');
@@ -62,6 +71,25 @@ export function SetupPassword() {
           >
             Ir para o Login
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (exigir2FA) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="bg-card text-card-foreground rounded-2xl shadow-xl max-w-md w-full p-8 border border-slate-100">
+          <div className="text-center mb-6">
+            <div className="mx-auto w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mb-4">
+              <ShieldCheckIcon className="w-8 h-8 text-primary" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-800">Senha definida. Falta um passo.</h2>
+            <p className="text-slate-500 mt-2 text-sm">
+              Este convite exige verificação em duas etapas. Tenha o celular à mão.
+            </p>
+          </div>
+          <TwoFactorSetup />
         </div>
       </div>
     );

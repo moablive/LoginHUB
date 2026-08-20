@@ -95,8 +95,8 @@ export class AuthController {
                 return res.status(400).json({ error: 'Dados incompletos', message: 'O token e a nova senha são obrigatórios.' });
             }
 
-            await authService.setupPasswordFromMagicLink(token, novaSenha);
-            return res.status(200).json({ message: 'Senha definida com sucesso.' });
+            const resultado = await authService.setupPasswordFromMagicLink(token, novaSenha);
+            return res.status(200).json(resultado);
         } catch (err: unknown) {
             const error = err as Error;
             switch (error.message) {
@@ -149,6 +149,11 @@ const responder2FA = (res: Response, erro: Error) => {
             return res.status(409).json({ error: 'SETUP_NAO_INICIADO', message: 'Inicie o setup antes de confirmar.' });
         case 'NAO_ATIVO':
             return res.status(409).json({ error: 'NAO_ATIVO', message: 'Esta conta não tem 2FA ativo.' });
+        case 'OBRIGATORIO':
+            return res.status(403).json({
+                error: 'OBRIGATORIO',
+                message: 'O 2FA é obrigatório nesta conta e não pode ser desativado por você. Fale com um administrador.',
+            });
         case 'CODIGO_AUSENTE':
             return res.status(400).json({ error: 'Dados incompletos', message: 'Informe o código.' });
         case 'CHALLENGE_INVALIDO':
@@ -404,6 +409,12 @@ export class UserController {
             }
             if (error.code === 'RELATION_ERROR') {
                 return res.status(400).json({ error: 'Dados Inválidos', message: error.message || 'A app informada não existe.' });
+            }
+            if (error.code === 'TENANT_NAO_HABILITADO') {
+                return res.status(422).json({ error: 'TENANT_NAO_HABILITADO', message: error.message });
+            }
+            if (error.code === 'VALIDATION') {
+                return res.status(400).json({ error: 'Dados Inválidos', message: error.message });
             }
             return res.status(500).json({ error: 'Erro Interno' });
         }

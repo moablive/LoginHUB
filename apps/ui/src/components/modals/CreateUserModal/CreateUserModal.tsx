@@ -55,6 +55,9 @@ export const CreateUserModal = ({
     email: "",
     role: defaultRole,
   });
+  // Convite com 2FA obrigatório: o convidado define a senha e escaneia o QR na
+  // mesma tela. Só aparece para app liberado — ver getAppIntegration/2FA no .env.
+  const [exigir2FA, setExigir2FA] = useState(false);
   const [extraData, setExtraData] = useState<Record<string, string>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
@@ -269,6 +272,7 @@ export const CreateUserModal = ({
         role: formData.role as UserRole,
         telefone: undefined,
         emailHtml,
+        exigir2FA,
       });
 
       onSuccess({ email: formData.email, emailSent: res.emailSent, magicLinkToken: res.magicLinkToken });
@@ -279,6 +283,12 @@ export const CreateUserModal = ({
         // 409 = e-mail já cadastrado em outro aplicativo
         if (err.message.includes("409") || err.message.toLowerCase().includes("conflito") || err.message.toLowerCase().includes("já está em uso") || err.message.toLowerCase().includes("duplicate")) {
           setError(`O e-mail "${formData.email}" já está cadastrado em outro aplicativo do sistema. Cada e-mail só pode ser usado uma vez. Use um e-mail diferente.`);
+        } else if (err.message.includes("422") || err.message.includes("TENANT_NAO_HABILITADO")) {
+          setError(
+            "Este aplicativo ainda não está liberado para 2FA. " +
+            "Adicione o id dele em TWOFA_APPS_HABILITADOS no .env e recrie a API, " +
+            "ou desmarque a exigência.",
+          );
         } else {
           setError(err.message);
         }
@@ -464,6 +474,25 @@ export const CreateUserModal = ({
                       ? provisioned!.roleDescription
                       : ROLE_OPTIONS.find((opt) => opt.value === formData.role)?.description}
                   </p>
+                </div>
+
+                <div className="rounded-lg border border-border p-3">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={exigir2FA}
+                      onChange={(e) => setExigir2FA(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-input text-primary focus:ring-primary"
+                    />
+                    <span className="text-sm">
+                      <span className="font-medium text-foreground">Exigir verificação em duas etapas</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        Ao abrir o convite, a pessoa define a senha e escaneia o QR Code na
+                        mesma tela. Sem concluir, a conta não abre sessão — então ela precisa
+                        estar com o celular à mão. O QR aparece no navegador, nunca no e-mail.
+                      </span>
+                    </span>
+                  </label>
                 </div>
               </div>
 

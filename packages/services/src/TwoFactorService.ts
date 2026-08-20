@@ -220,6 +220,8 @@ export class TwoFactorService {
         const cifrado = cifrar(secret);
 
         if (atual) {
+            // Pode ser um reenrolamento OU a linha vazia que o convite obrigatório
+            // criou. Nos dois casos o secret anterior (se havia) é descartado.
             await db.update(usuarios2fa)
                 .set({ secretCifrado: cifrado, ultimoStep: null, confirmadoEm: null })
                 .where(eq(usuarios2fa.usuarioId, Number(usuarioId)));
@@ -252,7 +254,7 @@ export class TwoFactorService {
      */
     public async confirmarSetup(usuarioId: string, codigo: string): Promise<TwoFactorActivationResponse> {
         const config = await this.carregarConfig(usuarioId);
-        if (!config) throw new Error('SETUP_NAO_INICIADO');
+        if (!config?.secretCifrado) throw new Error('SETUP_NAO_INICIADO');
         if (config.ativo) throw new Error('JA_ATIVO');
 
         const step = verificarTotp(decifrar(config.secretCifrado), codigo);
@@ -274,6 +276,21 @@ export class TwoFactorService {
     }
 
     /**
+     * O que o login deve fazer com esta conta. Uma consulta só — é caminho
+     * crítico, percorrido em toda autenticação.
+     *
+     *   'sessao'     → segue direto, sem segundo fator
+     *   'desafio'    → 2FA ativo, exige código
+     *   'enrolar'    → 2FA exigido pelo convite e ainda não configurado
+     */
+    public async estadoDoLogin(usuarioId: string): Promise<'sessao' | 'desafio' | 'enrolar'> {
+        const config = await this.carregarConfig(usuarioId);
+        if (!config) return 'sessao';
+        if (config.ativo) return 'desafio';
+        return config.obrigatorio ? 'enrolar' : 'sessao';
+    }
+
+    /**
      * Valida um código TOTP de conta já ativa e queima o step usado.
      *
      * O `ultimoStep` é o que impede replay: um código interceptado não vale uma
@@ -281,7 +298,7 @@ export class TwoFactorService {
      */
     public async verificarCodigo(usuarioId: string, codigo: string): Promise<void> {
         const config = await this.carregarConfig(usuarioId);
-        if (!config?.ativo) throw new Error('NAO_ATIVO');
+        if (!config?.ativo || !config.secretCifrado) throw new Error('NAO_ATIVO');
 
         const step = verificarTotp(decifrar(config.secretCifrado), codigo);
         if (step === null) throw new Error('CODIGO_INVALIDO');
@@ -338,6 +355,9 @@ export class TwoFactorService {
     public async desativar(usuarioId: string): Promise<void> {
         const config = await this.carregarConfig(usuarioId);
         if (!config?.ativo) throw new Error('NAO_ATIVO');
+        // Exigência veio do convite: só um admin pode remover, não o próprio
+        // usuário — senão "obrigatório" seria só uma sugestão.
+        if (config.obrigatorio) throw new Error('OBRIGATORIO');
 
         await db.update(usuarios2fa)
             .set({ ativo: false, confirmadoEm: null, ultimoStep: null })
@@ -349,9 +369,10 @@ export class TwoFactorService {
 
     public async status(usuarioId: string): Promise<TwoFactorStatus> {
         const config = await this.carregarConfig(usuarioId);
-        if (!config) return { ativo: false, backupCodesRestantes: 0 };
+        if (!config) return { ativo: false, obrigatorio: false, backupCodesRestantes: 0 };
         return {
             ativo: config.ativo,
+            obrigatorio: config.obrigatorio,
             confirmadoEm: config.confirmadoEm ? config.confirmadoEm.toISOString() : null,
             backupCodesRestantes: config.ativo ? await this.contarBackupCodes(usuarioId) : 0,
         };
@@ -364,6 +385,56 @@ export class TwoFactorService {
     public async sessoesValidasDesde(usuarioId: string): Promise<Date | null> {
         const config = await this.carregarConfig(usuarioId);
         return config?.sessoesValidasDesde ?? null;
+    }
+
+    /** O app está liberado para 2FA? Checável antes de existir usuário. */
+    public tenantHabilitado(appId: string | number | null | undefined): boolean {
+        return !!appId && appsHabilitados().has(String(appId));
+    }
+
+    /**
+     * Marca a conta como obrigada a ter 2FA, no ato do convite.
+     *
+     * Cria a linha sem secret: ela existe só para registrar a exigência. O
+     * segredo aparece quando a pessoa abre o convite e escaneia o QR.
+     */
+    public async marcarObrigatorio(usuarioId: string): Promise<void> {
+        const conta = await this.carregarConta(usuarioId);
+        this.assertTenantPronto(conta.appId);
+
+        const atual = await this.carregarConfig(usuarioId);
+        if (atual) {
+            await db.update(usuarios2fa)
+                .set({ obrigatorio: true })
+                .where(eq(usuarios2fa.usuarioId, Number(usuarioId)));
+            return;
+        }
+
+        await db.insert(usuarios2fa).values({
+            usuarioId: Number(usuarioId),
+            secretCifrado: null,
+            ativo: false,
+            obrigatorio: true,
+        });
+    }
+
+    /** Remove a exigência (ação administrativa — ver `desativar`). */
+    public async removerObrigatoriedade(usuarioId: string): Promise<void> {
+        await db.update(usuarios2fa)
+            .set({ obrigatorio: false })
+            .where(eq(usuarios2fa.usuarioId, Number(usuarioId)));
+    }
+
+    /**
+     * `true` quando o 2FA é exigido e o enrolamento ainda não terminou.
+     *
+     * É o caso de quem abandonou o convite no meio: senha definida, exigência
+     * registrada, nenhum segundo fator. O login trata isso à parte para não
+     * deixar a pessoa presa sem caminho de saída.
+     */
+    public async exigeEnrolamento(usuarioId: string): Promise<boolean> {
+        const config = await this.carregarConfig(usuarioId);
+        return !!config?.obrigatorio && !config.ativo;
     }
 
     // ---------- internos ----------

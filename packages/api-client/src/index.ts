@@ -3,6 +3,8 @@ import type {
   User,
   LoginResponse,
   TwoFactorChallengeResponse,
+  TwoFactorSetupRequiredResponse,
+  SetupPasswordResponse,
   TwoFactorSetupResponse,
   TwoFactorActivationResponse,
   TwoFactorStatus,
@@ -187,7 +189,14 @@ export const authApi = {
     const payload: { email: string; password: string; app_id?: string } = { email, password };
     if (appId) payload.app_id = appId;
 
-    const { data } = await api.post<LoginResponse | TwoFactorChallengeResponse>('/auth/login', payload);
+    const { data } = await api.post<LoginResponse | TwoFactorChallengeResponse | TwoFactorSetupRequiredResponse>('/auth/login', payload);
+
+    // Convite exigiu 2FA e o enrolamento ficou pela metade. A sessão curta que
+    // vem aqui só serve para concluí-lo.
+    if ('require2FASetup' in data && data.require2FASetup) {
+      localStorage.setItem('awl_token', data.setupToken);
+      return { redirect: '/2fa/setup', require2FASetup: true };
+    }
 
     // Conta com 2FA: a senha conferiu, mas a sessão ainda não existe. Nada é
     // gravado aqui — quem fecha o login é `twoFactorApi.verify`.
@@ -220,8 +229,16 @@ export const authApi = {
     window.location.href = '/login';
   },
 
-  setupPassword: async (token: string, novaSenha: string): Promise<{ message: string }> => {
-    const { data } = await api.post<{ message: string }>('/auth/setup-password', { token, novaSenha });
+  /**
+   * Define a senha pelo magic link.
+   *
+   * Devolve uma sessão junto: quando `require2FASetup` vem `true`, a página deve
+   * emendar direto no enrolamento de 2FA (o convite exigiu) em vez de mandar o
+   * usuário para o login. A sessão é salva aqui para as chamadas seguintes.
+   */
+  setupPassword: async (token: string, novaSenha: string): Promise<SetupPasswordResponse> => {
+    const { data } = await api.post<SetupPasswordResponse>('/auth/setup-password', { token, novaSenha });
+    if (data.token) localStorage.setItem('awl_token', data.token);
     return data;
   },
 

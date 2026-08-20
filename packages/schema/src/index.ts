@@ -29,6 +29,14 @@ export interface CreateUserDTO {
     role?: UserRole | string;    
     telefone?: string | null; 
     emailHtml?: string;
+    /**
+     * Exige 2FA neste convite: o convidado define a senha e, na mesma tela,
+     * escaneia o QR. Sem concluir, a conta não abre sessão.
+     *
+     * O app precisa estar em `TWOFA_APPS_HABILITADOS` — senão o convite é
+     * recusado, em vez de criar uma conta que ninguém consegue usar.
+     */
+    exigir2FA?: boolean;
 }
 
 export interface UpdateUserDTO {
@@ -104,6 +112,21 @@ export interface JWTPayload {
     exp?: number;
 }
 
+/**
+ * Resposta do `/auth/setup-password`.
+ *
+ * Devolve uma sessão de verdade para a página emendar direto no enrolamento de
+ * 2FA sem pedir login de novo. Não é concessão de segurança: quem acabou de usar
+ * o magic link já controla a conta naquele instante.
+ */
+export interface SetupPasswordResponse {
+    message: string;
+    token: string;
+    expiresIn: number;
+    /** `true` quando o convite exigiu 2FA e o enrolamento ainda falta. */
+    require2FASetup: boolean;
+}
+
 // ==========================================
 // 2FA MODELS
 // ==========================================
@@ -127,6 +150,19 @@ export interface TwoFactorChallengeResponse {
     methods: Array<'totp' | 'backup'>;
 }
 
+/**
+ * Login de conta com 2FA obrigatório e enrolamento pendente.
+ *
+ * Acontece quando alguém abandona o convite no meio: a senha já existe, a
+ * exigência também, mas não há segundo fator. Em vez de barrar sem saída, o
+ * backend devolve uma sessão curta que só serve para concluir o enrolamento.
+ */
+export interface TwoFactorSetupRequiredResponse {
+    require2FASetup: true;
+    setupToken: string;
+    expiresIn: number;
+}
+
 export interface TwoFactorSetupResponse {
     /** Secret em Base32 (RFC 4648, sem padding) para digitação manual. */
     secret: string;
@@ -147,6 +183,8 @@ export interface TwoFactorActivationResponse {
 
 export interface TwoFactorStatus {
     ativo: boolean;
+    /** O convite exigiu 2FA: sem enrolamento a conta não abre sessão. */
+    obrigatorio?: boolean;
     confirmadoEm?: string | null;
     /** Quantos códigos de recuperação ainda não foram usados. */
     backupCodesRestantes: number;
@@ -260,6 +298,8 @@ export interface AuthResult {
   /** Segundos de validade do `challengeToken`. */
   challengeExpiresIn?: number;
   methods?: Array<'totp' | 'backup'>;
+  /** Enrolamento de 2FA pendente e obrigatório: conclua antes de seguir. */
+  require2FASetup?: boolean;
 }
 
 export interface SuperAdminSession {
@@ -321,8 +361,12 @@ export const usuarios = pgTable('usuarios', {
 export const usuarios2fa = pgTable('usuarios_2fa', {
     usuarioId: integer('usuario_id').primaryKey().references(() => usuarios.id, { onDelete: 'cascade' }),
     // AES-256-GCM, formato "v1:<iv>:<tag>:<ciphertext>" em base64. Nunca em claro.
-    secretCifrado: text('secret_cifrado').notNull(),
+    // NULL enquanto o enrolamento não começou: um convite que exige 2FA já cria
+    // a linha para registrar a exigência, antes de existir qualquer secret.
+    secretCifrado: text('secret_cifrado'),
     ativo: boolean('ativo').default(false).notNull(),
+    // Convite exigiu 2FA — a conta não abre sessão até o enrolamento concluir.
+    obrigatorio: boolean('obrigatorio').default(false).notNull(),
     // Maior step TOTP já aceito. Impede replay do mesmo código dentro da janela.
     ultimoStep: integer('ultimo_step'),
     // Piso de validade das sessões: JWT com `iat` anterior a isto é recusado.
