@@ -193,7 +193,10 @@ export class AuthService {
         const payload: JWTPayload = { sub: usuarioId, email, app_id: appId, role: role || 'user' };
         return {
             require2FASetup: true,
-            setupToken: jwt.sign(payload, jwtSecret, { expiresIn: 600 }),
+            // `action` marca o passe como de etapa única: o `authMiddleware` (que
+            // guarda as rotas de 2FA) ignora a claim, mas o `/auth/refresh` a
+            // recusa — senão dez minutos de enrolamento viravam 24h de sessão.
+            setupToken: jwt.sign({ ...payload, action: '2fa-setup' }, jwtSecret, { expiresIn: 600 }),
             expiresIn: 600,
         };
     }
@@ -375,10 +378,19 @@ export class AuthService {
         }
 
         // Aceita tokens válidos OU recém-expirados (grace period de 7 dias)
-        let decoded: JWTPayload & { exp?: number };
+        let decoded: JWTPayload & { exp?: number; iat?: number; action?: string };
         try {
-            decoded = jwt.verify(oldToken, jwtSecret, { ignoreExpiration: true }) as JWTPayload & { exp?: number };
+            decoded = jwt.verify(oldToken, jwtSecret, { ignoreExpiration: true }) as typeof decoded;
         } catch {
+            throw new Error('TOKEN_INVALIDO');
+        }
+
+        // Só SESSÃO se renova. Todo token com `action` é passe de etapa única —
+        // magic link (`setup-password`), desafio de 2FA (`2fa-challenge`),
+        // enrolamento (`2fa-setup`) — e trocá-lo por sessão aqui anularia a
+        // etapa que ele estava guardando: no caso do desafio, seria bypass do
+        // segundo fator; no do magic link, sessão sem nunca definir a senha.
+        if (decoded.action) {
             throw new Error('TOKEN_INVALIDO');
         }
 
@@ -386,6 +398,19 @@ export class AuthService {
         const now = Math.floor(Date.now() / 1000);
         if (decoded.exp && now - decoded.exp > GRACE_SECONDS) {
             throw new Error('TOKEN_EXPIRADO');
+        }
+
+        // Piso de sessão: o `authMiddleware` já recusa token anterior ao corte,
+        // mas o refresh não passa por ele. Sem esta checagem uma sessão revogada
+        // pela ativação do 2FA se lavaria aqui, virando token novo e limpo.
+        const doisFatoresRows = await db.select({ sessoesValidasDesde: usuarios2fa.sessoesValidasDesde })
+            .from(usuarios2fa)
+            .where(eq(usuarios2fa.usuarioId, Number(decoded.sub)))
+            .limit(1);
+
+        const piso = doisFatoresRows[0]?.sessoesValidasDesde;
+        if (piso && decoded.iat && decoded.iat < Math.floor(piso.getTime() / 1000)) {
+            throw new Error('SESSAO_REVOGADA');
         }
 
         // Revalida usuário e status do app
@@ -472,27 +497,14 @@ export class AuthService {
 
         if (decoded.action !== 'setup-password') throw new Error('ACAO_INVALIDA');
 
-        const rows = await db.select({ senhaHash: usuarios.senhaHash })
-            .from(usuarios)
-            .where(eq(usuarios.id, Number(decoded.sub)))
-            .limit(1);
-
-        const user = rows[0];
-        if (!user) throw new Error('USUARIO_NAO_ENCONTRADO');
-
-        if (!decoded.pwf || decoded.pwf !== passwordFingerprint(user.senhaHash)) {
-            throw new Error('LINK_JA_UTILIZADO');
-        }
-
-        await this.changePassword(String(decoded.sub), novaSenha);
-
-        // Devolve sessão para a página seguir direto no enrolamento de 2FA sem
-        // pedir login de novo. Quem acabou de usar o magic link já controla a
-        // conta, então isto não concede nada que ele ainda não tivesse.
+        // Tudo o que pode falhar acontece ANTES de gravar a senha. A gravação
+        // mata o link (o `pwf` deixa de bater), então um erro depois dela deixa
+        // a pessoa sem senha nova E sem link — sem retentativa possível.
         const linhas = await db.select({
             id: usuarios.id,
             nome: usuarios.nome,
             email: usuarios.email,
+            senha_hash: usuarios.senhaHash,
             app_id: usuarios.appId,
             app_nome: aplicativos.nome,
             app_status: aplicativos.status,
@@ -507,13 +519,26 @@ export class AuthService {
         const conta = linhas[0];
         if (!conta) throw new Error('USUARIO_NAO_ENCONTRADO');
 
+        if (!decoded.pwf || decoded.pwf !== passwordFingerprint(conta.senha_hash)) {
+            throw new Error('LINK_JA_UTILIZADO');
+        }
+
+        // Lido antes da troca: o estado do 2FA não muda com a senha, e assim a
+        // consulta não fica no trecho onde uma falha já custaria o link.
+        const require2FASetup = await twoFactorService.exigeEnrolamento(String(decoded.sub));
+
+        await this.changePassword(String(decoded.sub), novaSenha);
+
+        // Devolve sessão para a página seguir direto no enrolamento de 2FA sem
+        // pedir login de novo. Quem acabou de usar o magic link já controla a
+        // conta, então isto não concede nada que ele ainda não tivesse.
         const sessao = await this.emitirSessao(conta);
 
         return {
             message: 'Senha definida com sucesso.',
             token: sessao.token,
             expiresIn: sessao.expiresIn,
-            require2FASetup: await twoFactorService.exigeEnrolamento(String(decoded.sub)),
+            require2FASetup,
         };
     }
 }

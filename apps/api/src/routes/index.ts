@@ -21,7 +21,9 @@ const authRouter = Router();
 authRouter.post('/login', AuthController.login);
 authRouter.post('/logout', AuthController.logout);
 authRouter.post('/refresh', AuthController.refresh);
-authRouter.post('/change-password', AuthController.setupPassword as any);
+// /change-password saiu de novo: como alias de `setupPassword` ele só produzia
+// 400 (o cliente antigo manda `Authorization` + `{ novaSenha }`, e aqui se exige
+// `{ token, novaSenha }`). Senha se define pelo magic link, e ponto.
 authRouter.post('/setup-password', AuthController.setupPassword as any);
 
 // -- 2FA (TOTP)

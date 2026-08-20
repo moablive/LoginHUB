@@ -74,6 +74,8 @@ export class AuthController {
                     return res.status(401).json({ error: 'TOKEN_INVALIDO', message: 'Token inválido. Faça login novamente.' });
                 case 'TOKEN_EXPIRADO':
                     return res.status(401).json({ error: 'TOKEN_EXPIRADO', message: 'Sessão expirada. Faça login novamente.' });
+                case 'SESSAO_REVOGADA':
+                    return res.status(401).json({ error: 'SESSAO_REVOGADA', message: 'Sessão encerrada por alteração de segurança. Faça login novamente.' });
                 case 'USUARIO_INVALIDO':
                     return res.status(401).json({ error: 'USUARIO_INVALIDO', message: 'Usuário não encontrado.' });
                 case 'APP_BLOQUEADO':

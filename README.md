@@ -426,7 +426,6 @@ daquele app.
 | `POST` | `/auth/login` | Público | Autentica e emite JWT 24h. Aceita `email`, `password` e `app_id` (opcional). |
 | `POST` | `/auth/refresh` | Bearer Token (válido ou grace 7d) | Renova o token JWT por mais 24h. |
 | `POST` | `/auth/setup-password` | Público (via Magic Link Token) | Define a senha do usuário no 1º acesso ou reset (invalida o Magic Link). |
-| `POST` | `/auth/change-password` | Público (via Magic Link Token) | Alias de compatibilidade para `setup-password`. |
 | `POST` | `/auth/logout` | Público | Retorna orientação para o cliente limpar o storage local. |
 
 #### 2FA (`/auth/2fa`)
@@ -574,6 +573,12 @@ Authorization: Bearer <token-jwt>
 ```
 
 - Valida o token atual (aceita tokens expirados há **até 7 dias** — Grace Period).
+- **Recusa qualquer token com a claim `action`** — magic link (`setup-password`),
+  desafio de 2FA (`2fa-challenge`) e passe de enrolamento (`2fa-setup`) são
+  passes de etapa única. Trocá-los por sessão aqui anularia a etapa que eles
+  guardam (no caso do desafio, seria bypass do segundo fator).
+- Respeita o **piso de sessão** (`sessoes_validas_desde`): token emitido antes da
+  ativação do 2FA não se renova — devolve `SESSAO_REVOGADA`.
 - Checa se o usuário e o aplicativo continuam com status `ativo` no banco de dados.
 - Emite um novo token JWT com validade renovada de 24 horas.
 
