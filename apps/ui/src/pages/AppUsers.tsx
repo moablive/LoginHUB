@@ -27,6 +27,8 @@ import { CreateUserModal } from '../components/modals/CreateUserModal/CreateUser
 import { AlertModal } from '../components/modals/AlertModal/AlertModal';
 import { EditUserModal } from '../components/modals/EditModals/EditUserModal';
 import { ConfirmModal } from '../components/modals/ConfirmModal/ConfirmModal';
+import { IntegrationLink } from '../components/Integration/IntegrationLink';
+import { getAppIntegration } from '../config/integrations';
 
 export const AppUsers = () => {
   const { id: appId } = useParams<{ id: string }>(); 
@@ -233,6 +235,14 @@ export const AppUsers = () => {
           Convidar Usuário
         </button>
       </div>
+
+      {/* Vínculo com a API do próprio app, quando existe. Aqui o convite pode não
+          nascer no hub: quem cria o usuário é o backend do app. */}
+      {getAppIntegration(appId) && (
+        <div className="max-w-7xl mx-auto -mt-2">
+          <IntegrationLink appId={appId} appName={app?.nome} />
+        </div>
+      )}
 
       {/* TABELA */}
       <div className="max-w-7xl mx-auto">

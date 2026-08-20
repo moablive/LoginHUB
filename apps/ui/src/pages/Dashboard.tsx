@@ -7,13 +7,15 @@ import {
   ArrowRightOnRectangleIcon,
   TrashIcon,
   MagnifyingGlassIcon,
-  PencilSquareIcon
+  PencilSquareIcon,
+  LinkIcon
 } from '@heroicons/react/24/outline';
 
 import { appApi } from '@loginhub/api-client';
 import { authApi } from '@loginhub/api-client';
 import { masks } from '../utils/masks';
 import type { App } from '@loginhub/schema';
+import { getAppIntegration } from '../config/integrations';
 
 // Componentes Shared
 import { LogoutModal } from '../components/modals/LogoutModal/LogoutModal';
@@ -21,6 +23,7 @@ import { DeleteModal } from '../components/modals/DeleteModal/DeleteModal';
 import { StatusButton } from '../components/modals/StatusButton';
 import { EditAppModal } from '../components/modals/EditModals/EditAppModal';
 import { AlertModal } from '../components/modals/AlertModal/AlertModal';
+import { IntegrationBadge } from '../components/Integration/IntegrationBadge';
 
 export const Dashboard = () => {
   const navigate = useNavigate();
@@ -116,6 +119,8 @@ export const Dashboard = () => {
   };
 
   const activeApps = apps.filter(c => c.status === 'ativo').length;
+  // Apps que mantêm uma API conversando com o hub (ver config/integrations.ts).
+  const integratedApps = apps.filter(c => getAppIntegration(c.id)).length;
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -163,6 +168,17 @@ export const Dashboard = () => {
           <div>
             <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Total Cadastrado</p>
             <p className="text-3xl font-bold text-foreground">{apps.length}</p>
+          </div>
+        </div>
+
+        <div className="bg-card text-card-foreground p-6 rounded-2xl shadow-sm border border-border flex items-center gap-5 transition hover:shadow-md">
+          <div className="p-4 bg-violet-500/10 rounded-xl">
+            <LinkIcon className="h-8 w-8 text-violet-500" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">APIs Vinculadas</p>
+            <p className="text-3xl font-bold text-foreground">{integratedApps}</p>
+            <p className="text-xs text-muted-foreground">Apps que falam com o hub por trás</p>
           </div>
         </div>
       </div>
@@ -230,8 +246,9 @@ export const Dashboard = () => {
                           </div>
                         )}
                         <div className="ml-4">
-                          <div className="text-base font-semibold text-foreground group-hover:text-primary transition-colors">
+                          <div className="text-base font-semibold text-foreground group-hover:text-primary transition-colors flex items-center gap-2">
                             {app.nome}
+                            <IntegrationBadge appId={app.id} />
                           </div>
                           <div className="text-sm text-muted-foreground">{app.email}</div>
                         </div>
