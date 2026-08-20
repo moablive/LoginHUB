@@ -40,6 +40,7 @@ Todo o ciclo de vida da conta — convite por e-mail, primeiro acesso via **Magi
 | 🔑 Login com E-mail + Senha (JWT 24h) | ✅ | Autenticação centralizada com emissão de token JWT válido por 24 horas. |
 | 🔀 Desambiguação Multi-Tenant | ✅ | E-mail único por aplicativo. Se um e-mail existir em múltiplos apps, a API orienta a escolha do app ou desambigua pela senha (`AMBIGUOUS_EMAIL`). |
 | 🪄 Magic Link (1º Acesso & Reset) | ✅ | Criação de conta e reset de senha utilizam Magic Link de uso único (JWT 24h, autoinvalidado pelo claim `pwf`) em substituição a senhas temporárias. |
+| 🔐 2FA por TOTP | ✅ | Segundo fator compatível com Google Authenticator, Authy, 1Password e Microsoft Authenticator. Secret cifrado em AES-256-GCM, 10 códigos de recuperação, rate limit por conta e corte de sessões na ativação. Ver fluxo 6️⃣. |
 | 🔄 Refresh Session (Sliding 7d) | ✅ | Renovação contínua do JWT com grace period de até 7 dias após a expiração. |
 | 👥 Multi-Tenant Isolado | ✅ | Cada aplicativo possui seus próprios usuários, configurações, logos e URLs de integração. |
 | 🛡️ 4 Níveis de Acesso | ✅ | Níveis padronizados: `master` / `admin` / `user` / `suporte`. |
@@ -337,6 +338,19 @@ MASTER_API_KEY='***'            # Chave de administrador mestre para chamadas /a
 VITE_MASTER_KEY='***'           # Chave mestra exposta para o build da UI
 
 # ====================
+# 2FA (TOTP)
+# ====================
+# Chave de 32 bytes em HEX (64 chars). Gere com: openssl rand -hex 32
+# Cifra o secret TOTP (AES-256-GCM) e é o pepper do HMAC dos códigos de
+# recuperação. SEM ASPAS: hex não tem caractere especial, e o env_file
+# entregaria as aspas como parte do valor.
+# ⚠️ Trocar esta chave torna ilegíveis TODOS os secrets e backup codes gravados.
+TWOFA_ENC_KEY=***
+# Ids dos apps liberados a ATIVAR 2FA, separados por vírgula (ex.: 2,8).
+# Vazio = ninguém ativa (fail closed) — ver "Por que existe a lista" no fluxo 6️⃣.
+TWOFA_APPS_HABILITADOS=
+
+# ====================
 # URLs Públicas
 # ====================
 API_PUBLIC_URL=https://loginhub.astralwavelabel.com
@@ -379,6 +393,30 @@ SMTP_PASS='***'
 | `POST` | `/auth/setup-password` | Público (via Magic Link Token) | Define a senha do usuário no 1º acesso ou reset (invalida o Magic Link). |
 | `POST` | `/auth/change-password` | Público (via Magic Link Token) | Alias de compatibilidade para `setup-password`. |
 | `POST` | `/auth/logout` | Público | Retorna orientação para o cliente limpar o storage local. |
+
+#### 2FA (`/auth/2fa`)
+
+| Método | Path | Autenticação | Descrição |
+|---|---|---|---|
+| `POST` | `/auth/2fa/verify` | `challengeToken` no corpo | Fecha o login com o código do autenticador. Devolve a sessão de 24h. |
+| `POST` | `/auth/2fa/verify-backup` | `challengeToken` no corpo | Idem, com um código de recuperação (uso único). |
+| `GET` | `/auth/2fa/status` | Bearer Token | Se o 2FA está ativo e quantos códigos de recuperação restam. |
+| `POST` | `/auth/2fa/setup` | Bearer Token | Gera o secret e a URI `otpauth://`. Ainda não ativa nada. |
+| `POST` | `/auth/2fa/verify-setup` | Bearer Token | Confirma a ativação com um código. Devolve os códigos de recuperação **uma única vez** e encerra as demais sessões. |
+| `POST` | `/auth/2fa/disable` | Bearer Token | Desativa. Exige `codigo` (TOTP) **ou** `backupCode`. |
+| `POST` | `/auth/2fa/backup-codes` | Bearer Token | Regenera os códigos (exige `codigo` TOTP). Invalida os anteriores. |
+| `GET` | `/auth/2fa/backup-codes` | Bearer Token | Mesmo handler, código em `?code=`. Existe por compatibilidade — **prefira o POST**: na query string o código para em log de acesso e histórico do navegador. |
+
+**Limites de tentativa** — em memória, por processo, por CONTA (não por IP: as APIs
+dos tenants chegam todas pelo mesmo gateway da rede interna):
+
+| Rotas | Limite |
+|---|---|
+| `verify`, `verify-backup` | 5 por 15 min |
+| `setup`, `verify-setup`, `disable`, `backup-codes`, `status` | 10 por 15 min |
+
+Ao estourar: `429` com `Retry-After` em segundos. O contador zera a cada restart
+da API — é aceitável para travar força bruta, mas não sobreviveria a réplicas.
 
 ---
 
@@ -574,6 +612,102 @@ Pontos que valem atenção ao adicionar um app novo:
 
 ---
 
+### 6️⃣ Fluxo de 2FA (TOTP)
+
+Opt-in, por conta. Quem não ativou **não percebe diferença nenhuma**: a resposta
+do `/auth/login` continua idêntica byte a byte.
+
+#### Ativação
+
+```
+[ POST /auth/2fa/setup ]  Bearer <jwt>
+          │  gera secret (160 bits), grava CIFRADO como pendente
+          ▼
+   { secret, otpauthUri, label, issuer }
+          │  o cliente desenha o QR a partir da otpauthUri
+          ▼
+[ POST /auth/2fa/verify-setup ]  { codigo: "123456" }
+          │  confere o código, marca ativo
+          ├─► gera 10 códigos de recuperação  ── exibidos UMA vez
+          └─► carimba sessoes_validas_desde    ── derruba as sessões anteriores
+```
+
+#### Login com 2FA ativo
+
+```
+[ POST /auth/login ]  { email, password }
+          │  senha OK, mas a conta tem 2FA
+          ▼
+   200 { requires2FA: true, challengeToken, expiresIn: 300, methods: [...] }
+          │  ⚠️ NÃO há `token` aqui
+          ▼
+[ POST /auth/2fa/verify ]  { challengeToken, codigo }
+   ou
+[ POST /auth/2fa/verify-backup ]  { challengeToken, backupCode }
+          ▼
+   200 { token, expiresIn: 86400, usuario, app }   ← sessão normal de 24h
+```
+
+#### Por que existe a lista `TWOFA_APPS_HABILITADOS`
+
+Todo app cliente hoje assume que `200` no login significa token na mão. Com 2FA
+ativo o `token` vem `undefined`, e um cliente desatualizado grava a string
+`"undefined"` no storage: o usuário fica **travado numa sessão inválida, sem
+mensagem de erro**.
+
+Por isso a ativação é recusada com `403 TENANT_NAO_HABILITADO` para app fora da
+lista. Fail closed — vazio significa que ninguém ativa. Libere um app **só depois**
+de atualizar o cliente dele, e lembre que a variável é lida na criação do
+container:
+
+```bash
+docker compose --env-file .env up -d login-hub-api
+```
+
+#### Detalhes que economizam depuração
+
+- **Código de uso único de verdade.** `ultimo_step` guarda o maior step aceito, então
+  o mesmo código não passa duas vezes nem dentro dos 30s em que continua
+  matematicamente válido. Consequência prática: ativar o 2FA e logar no mesmo
+  intervalo de 30s exige esperar o próximo código. GitHub e Google se comportam igual.
+- **Tolerância de relógio de ±1 step** (30s para cada lado). Celular muito
+  dessincronizado falha — o ajuste é no relógio do aparelho.
+- **Multi-tenant.** O 2FA é por linha de `usuarios`. Quem tem o mesmo e-mail em
+  vários apps enrola uma vez por app; o `label` da URI carrega o nome do app
+  (`LoginHUB:MoneyAPP (fulano@x.com)`), senão o autenticador mostra N entradas idênticas.
+- **O master está fora.** O login master não tem linha em `usuarios` (`sub: "0"`),
+  então não comporta 2FA nesta versão. Ele segue protegido só pela `MASTER_API_KEY`.
+- **Reset de senha não desativa o 2FA.** Quem perder o celular precisa de um código
+  de recuperação; sem nenhum, um admin tem de limpar a linha em `usuarios_2fa`.
+
+#### Testando pelo curl
+
+```bash
+API=https://loginhub.astralwavelabel.com/api
+
+# 1. login -> challenge
+curl -s -X POST $API/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"voce@exemplo.com","password":"...","app_id":"8"}'
+
+# 2. segunda etapa
+curl -s -X POST $API/auth/2fa/verify -H 'Content-Type: application/json' \
+  -d '{"challengeToken":"<do passo 1>","codigo":"123456"}'
+
+# 3. ativação (com uma sessão já aberta)
+curl -s -X POST $API/auth/2fa/setup -H "Authorization: Bearer $JWT"
+curl -s -X POST $API/auth/2fa/verify-setup -H "Authorization: Bearer $JWT" \
+  -H 'Content-Type: application/json' -d '{"codigo":"123456"}'
+```
+
+**Componentes de referência** para o app cliente copiar (ficam em `apps/ui` para o
+TypeScript do monorepo validá-los a cada build, mas não estão ligados a rota
+nenhuma — o painel do hub é só do master):
+[`useTwoFactor.ts`](apps/ui/src/features/twoFactor/useTwoFactor.ts),
+[`TwoFactorSetup.tsx`](apps/ui/src/features/twoFactor/TwoFactorSetup.tsx),
+[`TwoFactorChallenge.tsx`](apps/ui/src/features/twoFactor/TwoFactorChallenge.tsx).
+
+---
+
 ## 🔌 Integração em um App Cliente (ex: MoneyAPP)
 
 ### Fluxo de Login com Suporte a Desambiguação (TypeScript)
@@ -658,6 +792,36 @@ Se o aplicativo cliente utilizar a biblioteca `@loginhub/api-client`, o intercep
 
 ---
 
+### Tabelas de 2FA
+
+`usuarios_2fa` — uma linha por linha de `usuarios` (por conta, não por e-mail):
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `usuario_id` | `integer` (PK, FK) | Referência para `usuarios.id`, cascata no delete. |
+| `secret_cifrado` | `text` | Secret TOTP em AES-256-GCM: `v1:<iv>:<tag>:<ciphertext>` em base64. Nunca em claro. |
+| `ativo` | `boolean` | `false` enquanto o enrolamento não é confirmado. |
+| `ultimo_step` | `integer` | Maior step TOTP já aceito — bloqueia replay dentro dos 30s. |
+| `sessoes_validas_desde` | `timestamp` | Piso de validade: JWT com `iat` anterior é recusado. |
+| `confirmado_em` | `timestamp` | Quando o 2FA foi ativado. |
+
+> A linha **não é apagada** ao desativar (só `ativo = false`): `sessoes_validas_desde`
+> precisa sobreviver, senão desativar o 2FA ressuscitaria as sessões que a ativação derrubou.
+
+`usuarios_2fa_backup_codes` — 10 por usuário, HMAC-SHA256 com `TWOFA_ENC_KEY` de pepper:
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `id` | `serial` (PK) | — |
+| `usuario_id` | `integer` (FK) | Cascata no delete. |
+| `codigo_hmac` | `varchar(64)` | HMAC do código normalizado (maiúsculas, sem hífen). |
+| `usado_em` | `timestamp` | `NULL` enquanto não gasto. Uso único. |
+
+DDL em [`db/001_2fa.sql`](db/001_2fa.sql) — dois `CREATE TABLE`, nenhum `ALTER` em
+`usuarios`. Rollback é derrubar as duas tabelas.
+
+---
+
 ## 🧰 Pacote `@loginhub/api-client`
 
 SDK em TypeScript para integração rápida de aplicações clientes com a API do LoginHUB:
@@ -705,6 +869,8 @@ Disponível em: [`https://loginhub.astralwavelabel.com/login`](https://loginhub.
 - **Tokens Temporais**: JWT com validade de 24 horas para sessão e 24 horas para Magic Links.
 - **Proteção de Magic Links**: Uso único garantido pelo claim `pwf` (impressão digital do `senha_hash` na emissão) — o link se autoinvalida assim que a senha muda. Tokens sem `pwf` são recusados.
 - **Senhas Placeholder**: contas criadas por convite e contas resetadas recebem um valor de `crypto.randomBytes(32)` até o usuário definir a própria senha.
+- **2FA (TOTP)**: secret cifrado em AES-256-GCM (nunca em claro), replay bloqueado por `ultimo_step`, códigos de recuperação em HMAC-SHA256, rate limit por conta e corte de sessões na ativação.
+- **TOTP sem dependência externa**: RFC 6238 sobre `crypto` nativo, validado contra os 6 vetores de teste oficiais da RFC (inclusive `T=20000000000`, que exige contador de 64 bits).
 - **Body Limit**: Express configurado com `5mb` para suportar upload de logos base64 otimizadas.
 - **Proteção HTTP**: Middlewares `helmet()` e CORS configurados.
 

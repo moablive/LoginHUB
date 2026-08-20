@@ -1,7 +1,7 @@
 import { RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
 import { db } from '@loginhub/database';
-import { aplicativos, JWTPayload } from '@loginhub/schema';
+import { aplicativos, usuarios2fa, JWTPayload } from '@loginhub/schema';
 import { eq } from 'drizzle-orm';
 import cors, { CorsOptions } from 'cors';
 import client from 'prom-client';
@@ -66,9 +66,18 @@ export const authMiddleware: RequestHandler = async (req, res, next) => {
         // Agora ambos são strings garantidas
         const decoded = jwt.verify(token, secretKey) as unknown as JWTPayload;
 
-        const result = await db.select({ status: aplicativos.status }).from(aplicativos).where(eq(aplicativos.id, Number(decoded.app_id)));
+        // As duas checagens são independentes — uma ida só ao banco.
+        const [appRows, doisFatoresRows] = await Promise.all([
+            db.select({ status: aplicativos.status })
+              .from(aplicativos)
+              .where(eq(aplicativos.id, Number(decoded.app_id))),
+            db.select({ sessoesValidasDesde: usuarios2fa.sessoesValidasDesde })
+              .from(usuarios2fa)
+              .where(eq(usuarios2fa.usuarioId, Number(decoded.sub)))
+              .limit(1),
+        ]);
 
-        const app = result[0];
+        const app = appRows[0];
 
         if (!app) {
             return res.status(401).json({ error: 'Aplicativo vinculada não encontrada.' });
@@ -78,6 +87,17 @@ export const authMiddleware: RequestHandler = async (req, res, next) => {
             return res.status(403).json({ 
                 error: 'Acesso Bloqueado',
                 message: 'O acesso da sua organização foi suspenso.' 
+            });
+        }
+
+        // Piso de sessão: ativar 2FA carimba um instante a partir do qual só
+        // valem tokens novos. Sem isto, um JWT emitido antes da ativação seguiria
+        // válido por 24h — e renovável por mais 7 dias pelo grace do /auth/refresh.
+        const piso = doisFatoresRows[0]?.sessoesValidasDesde;
+        if (piso && decoded.iat && decoded.iat * 1000 < piso.getTime()) {
+            return res.status(401).json({
+                error: 'SESSAO_REVOGADA',
+                message: 'Sessão encerrada por alteração de segurança. Faça login novamente.',
             });
         }
 
@@ -93,7 +113,110 @@ export const authMiddleware: RequestHandler = async (req, res, next) => {
 };
 
 // ==========================================
-// 3. CORS MIDDLEWARE
+// 3. RATE LIMIT
+// ==========================================
+/**
+ * Limitador em memória, por processo.
+ *
+ * A stack roda um container de API só, então um Map resolve. Duas consequências
+ * assumidas: o contador zera a cada restart (e o `ts-node-dev --respawn` faz
+ * isso a cada save em dev), e ele não serve para escalar horizontalmente — se
+ * um dia houver réplica, isto vira Redis.
+ *
+ * A chave NUNCA é só o IP nas rotas de 2FA: as APIs dos tenants falam com o hub
+ * pela rede interna e chegam todas pelo mesmo gateway. Limitar por IP puro
+ * trataria todos os apps como um cliente só.
+ */
+interface Balde { contador: number; expiraEm: number; }
+const baldes = new Map<string, Balde>();
+
+const varrerExpirados = (agora: number): void => {
+    for (const [k, v] of baldes) if (v.expiraEm <= agora) baldes.delete(k);
+};
+
+export interface RateLimitOpcoes {
+    /** Prefixo do balde — separa as contagens de rotas diferentes. */
+    nome: string;
+    janelaMs: number;
+    max: number;
+    /** Identidade a limitar. Padrão: IP. */
+    chave?: (req: Parameters<RequestHandler>[0]) => string;
+}
+
+export const criarRateLimit = (opcoes: RateLimitOpcoes): RequestHandler => {
+    const { nome, janelaMs, max, chave } = opcoes;
+
+    return (req, res, next) => {
+        const agora = Date.now();
+        if (baldes.size > 1000) varrerExpirados(agora);
+
+        const id = `${nome}:${chave ? chave(req) : (req.ip || 'sem-ip')}`;
+        const balde = baldes.get(id);
+
+        if (!balde || balde.expiraEm <= agora) {
+            baldes.set(id, { contador: 1, expiraEm: agora + janelaMs });
+            return next();
+        }
+
+        balde.contador += 1;
+        if (balde.contador > max) {
+            const retryApos = Math.ceil((balde.expiraEm - agora) / 1000);
+            res.setHeader('Retry-After', String(retryApos));
+            return res.status(429).json({
+                error: 'MUITAS_TENTATIVAS',
+                message: `Limite de tentativas excedido. Tente novamente em ${retryApos}s.`,
+            });
+        }
+
+        return next();
+    };
+};
+
+/**
+ * Chave derivada do `sub` do token de desafio (corpo `challengeToken`), com o
+ * IP como reserva. Assim o limite é por CONTA em disputa, e não por origem —
+ * que é o que importa contra força bruta de 6 dígitos.
+ */
+export const chaveDoChallenge = (req: any): string => {
+    const bruto = req.body?.challengeToken;
+    if (typeof bruto === 'string') {
+        try {
+            const payload = JSON.parse(
+                Buffer.from(bruto.split('.')[1] ?? '', 'base64').toString('utf8'),
+            );
+            if (payload?.sub) return `u${payload.sub}`;
+        } catch {
+            // token ilegível: cai no IP
+        }
+    }
+    return req.ip || 'sem-ip';
+};
+
+/** Chave para rotas já autenticadas: o usuário do JWT. */
+export const chaveDoUsuario = (req: any): string =>
+    req.user?.sub ? `u${req.user.sub}` : (req.ip || 'sem-ip');
+
+/**
+ * 6 dígitos = 1 milhão de combinações. Com 5 tentativas por 15 min por conta, a
+ * chance de acerto por força bruta em 24h fica na ordem de 1 em 2 mil.
+ */
+export const rateLimitVerificacao2FA = criarRateLimit({
+    nome: '2fa-verify',
+    janelaMs: 15 * 60 * 1000,
+    max: 5,
+    chave: chaveDoChallenge,
+});
+
+/** Rotas de gestão (setup, disable, backup codes) — já exigem sessão válida. */
+export const rateLimitGestao2FA = criarRateLimit({
+    nome: '2fa-gestao',
+    janelaMs: 15 * 60 * 1000,
+    max: 10,
+    chave: chaveDoUsuario,
+});
+
+// ==========================================
+// 4. CORS MIDDLEWARE
 // ==========================================
 // Aceita qualquer subdomínio de astralwavelabel.com automaticamente.
 // Novos apps em *.astralwavelabel.com não precisam ser adicionados manualmente.
@@ -135,7 +258,7 @@ const corsOptions: CorsOptions = {
 export const corsMiddleware = cors(corsOptions);
 
 // ==========================================
-// 4. MONITORING MIDDLEWARE
+// 5. MONITORING MIDDLEWARE
 // ==========================================
 const register = new client.Registry();
 client.collectDefaultMetrics({ register });

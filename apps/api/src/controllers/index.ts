@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { AuthService, AppService, UserService } from '@loginhub/services';
+import { AuthService, AppService, UserService, twoFactorService } from '@loginhub/services';
 import { LoginInputDTO, CreateAppDTO, UpdateAppDTO, CreateUserDTO, UpdateUserDTO, DbError } from '@loginhub/schema';
 
 const authService = new AuthService();
@@ -114,6 +114,169 @@ export class AuthController {
                     console.error('[AuthController] setupPassword:', error.message);
                     return res.status(500).json({ error: 'Erro Interno', message: 'Erro ao definir a senha.' });
             }
+        }
+    }
+}
+
+// ==========================================
+// 2FA CONTROLLER
+// ==========================================
+
+/**
+ * Traduz os erros do domínio de 2FA em HTTP.
+ *
+ * Códigos errados, reutilizados e de conta sem 2FA saem todos como 401 com a
+ * MESMA mensagem de propósito: distinguir "código inválido" de "essa conta nem
+ * tem 2FA" entregaria de graça, a quem tem só a senha, a informação de quais
+ * contas valem a pena atacar.
+ */
+const responder2FA = (res: Response, erro: Error) => {
+    switch (erro.message) {
+        case 'TWOFA_NAO_CONFIGURADO':
+            console.error('[2FA] TWOFA_ENC_KEY ausente ou fora do formato (32 bytes em hex ou base64).');
+            return res.status(500).json({ error: 'Configuração', message: '2FA não está configurado neste servidor.' });
+        case 'SECRET_CORROMPIDO':
+            console.error('[2FA] Falha ao decifrar o secret — chave trocada ou registro adulterado.');
+            return res.status(500).json({ error: 'Erro Interno', message: 'Não foi possível ler a configuração de 2FA.' });
+        case 'TENANT_NAO_HABILITADO':
+            return res.status(403).json({
+                error: 'TENANT_NAO_HABILITADO',
+                message: 'O aplicativo desta conta ainda não está liberado para 2FA.',
+            });
+        case 'JA_ATIVO':
+            return res.status(409).json({ error: 'JA_ATIVO', message: 'O 2FA já está ativo nesta conta.' });
+        case 'SETUP_NAO_INICIADO':
+            return res.status(409).json({ error: 'SETUP_NAO_INICIADO', message: 'Inicie o setup antes de confirmar.' });
+        case 'NAO_ATIVO':
+            return res.status(409).json({ error: 'NAO_ATIVO', message: 'Esta conta não tem 2FA ativo.' });
+        case 'CODIGO_AUSENTE':
+            return res.status(400).json({ error: 'Dados incompletos', message: 'Informe o código.' });
+        case 'CHALLENGE_INVALIDO':
+            return res.status(401).json({ error: 'CHALLENGE_INVALIDO', message: 'Desafio inválido ou expirado. Faça login novamente.' });
+        case 'CODIGO_INVALIDO':
+        case 'CODIGO_REUTILIZADO':
+            return res.status(401).json({ error: 'CODIGO_INVALIDO', message: 'Código inválido.' });
+        case 'USUARIO_NAO_ENCONTRADO':
+        case 'USUARIO_INVALIDO':
+            return res.status(404).json({ error: 'Não Encontrado', message: 'Usuário não encontrado.' });
+        case 'APP_BLOQUEADO':
+            return res.status(403).json({ error: 'APP_BLOQUEADO', message: 'Acesso da organização suspenso.' });
+        case 'USUARIO_BLOQUEADO':
+            return res.status(403).json({ error: 'USUARIO_BLOQUEADO', message: 'Seu usuário foi desativado.' });
+        default:
+            console.error('[2FA]', erro);
+            return res.status(500).json({ error: 'Erro Interno', message: 'Falha ao processar 2FA.' });
+    }
+};
+
+const usuarioDaSessao = (req: Request): string => String((req as any).user?.sub ?? '');
+
+export class TwoFactorController {
+    /** POST /auth/2fa/setup — gera secret e a URI otpauth (cliente desenha o QR). */
+    static async setup(req: Request, res: Response) {
+        try {
+            return res.status(200).json(await twoFactorService.iniciarSetup(usuarioDaSessao(req)));
+        } catch (err) {
+            return responder2FA(res, err as Error);
+        }
+    }
+
+    /** POST /auth/2fa/verify-setup — confirma com um código e devolve os backup codes. */
+    static async verifySetup(req: Request, res: Response) {
+        try {
+            const { codigo } = req.body ?? {};
+            if (!codigo) throw new Error('CODIGO_AUSENTE');
+
+            const resultado = await twoFactorService.confirmarSetup(usuarioDaSessao(req), String(codigo));
+            return res.status(200).json({
+                ...resultado,
+                message: 'Guarde os códigos de recuperação: eles não serão exibidos de novo.',
+            });
+        } catch (err) {
+            return responder2FA(res, err as Error);
+        }
+    }
+
+    /** POST /auth/2fa/verify — troca o desafio do login por sessão de 24h. */
+    static async verify(req: Request, res: Response) {
+        try {
+            const { challengeToken, codigo } = req.body ?? {};
+            if (!challengeToken) throw new Error('CHALLENGE_INVALIDO');
+            if (!codigo) throw new Error('CODIGO_AUSENTE');
+
+            const sessao = await authService.verificarSegundoFator(String(challengeToken), { codigo: String(codigo) });
+            return res.status(200).json(sessao);
+        } catch (err) {
+            return responder2FA(res, err as Error);
+        }
+    }
+
+    /** POST /auth/2fa/verify-backup — mesma troca, usando código de recuperação. */
+    static async verifyBackup(req: Request, res: Response) {
+        try {
+            const { challengeToken, backupCode } = req.body ?? {};
+            if (!challengeToken) throw new Error('CHALLENGE_INVALIDO');
+            if (!backupCode) throw new Error('CODIGO_AUSENTE');
+
+            const sessao = await authService.verificarSegundoFator(String(challengeToken), { backupCode: String(backupCode) });
+            return res.status(200).json(sessao);
+        } catch (err) {
+            return responder2FA(res, err as Error);
+        }
+    }
+
+    /** POST /auth/2fa/disable — exige código do autenticador OU de recuperação. */
+    static async disable(req: Request, res: Response) {
+        try {
+            const usuarioId = usuarioDaSessao(req);
+            const { codigo, backupCode } = req.body ?? {};
+
+            if (backupCode) {
+                await twoFactorService.consumirBackupCode(usuarioId, String(backupCode));
+            } else if (codigo) {
+                await twoFactorService.verificarCodigo(usuarioId, String(codigo));
+            } else {
+                throw new Error('CODIGO_AUSENTE');
+            }
+
+            await twoFactorService.desativar(usuarioId);
+            return res.status(200).json({ ativo: false, message: '2FA desativado.' });
+        } catch (err) {
+            return responder2FA(res, err as Error);
+        }
+    }
+
+    /**
+     * GET|POST /auth/2fa/backup-codes — regenera os códigos, exigindo TOTP.
+     *
+     * O GET existe porque foi especificado assim, mas o código viaja na query
+     * string — que vai parar em log de acesso e histórico do navegador. Prefira
+     * o POST, que é a mesma rota com o código no corpo.
+     */
+    static async backupCodes(req: Request, res: Response) {
+        try {
+            const usuarioId = usuarioDaSessao(req);
+            const codigo = (req.body?.codigo ?? req.query?.code ?? req.query?.codigo) as string | undefined;
+            if (!codigo) throw new Error('CODIGO_AUSENTE');
+
+            await twoFactorService.verificarCodigo(usuarioId, String(codigo));
+            const backupCodes = await twoFactorService.regenerarBackupCodes(usuarioId);
+
+            return res.status(200).json({
+                backupCodes,
+                message: 'Os códigos anteriores foram invalidados.',
+            });
+        } catch (err) {
+            return responder2FA(res, err as Error);
+        }
+    }
+
+    /** GET /auth/2fa/status — se está ativo e quantos backup codes restam. */
+    static async status(req: Request, res: Response) {
+        try {
+            return res.status(200).json(await twoFactorService.status(usuarioDaSessao(req)));
+        } catch (err) {
+            return responder2FA(res, err as Error);
         }
     }
 }

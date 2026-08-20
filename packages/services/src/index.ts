@@ -6,6 +6,9 @@ import { db } from '@loginhub/database';
 import { aplicativos, usuarios, niveisAcesso } from '@loginhub/schema';
 import { eq, and, ne, sql } from 'drizzle-orm';
 import { emailService } from './EmailService';
+import { twoFactorService } from './TwoFactorService';
+
+export { TwoFactorService, twoFactorService } from './TwoFactorService';
 import {
     LoginInputDTO,
     LoginResponseDTO,
@@ -15,6 +18,7 @@ import {
     UpdateAppDTO,
     CreateUserDTO,
     UpdateUserDTO,
+    TwoFactorChallengeResponse,
     User as UserResponse
 } from '@loginhub/schema';
 
@@ -30,6 +34,15 @@ import {
  * esticar o prazo não afrouxa a garantia, só para de queimar convite.
  */
 const MAGIC_LINK_TTL = '24h';
+
+/**
+ * Validade do token de desafio emitido entre a senha e o segundo fator.
+ *
+ * Curto de propósito: ele não é sessão, é um passe para uma etapa só. Cinco
+ * minutos cobrem digitar um código de 6 dígitos com folga, inclusive procurando
+ * o celular.
+ */
+const CHALLENGE_TTL_SEGUNDOS = 300;
 
 /**
  * Impressão digital do hash da senha, embutida no Magic Link como claim `pwf`.
@@ -49,7 +62,7 @@ const passwordFingerprint = (senhaHash: string): string =>
 // 1. AUTH SERVICE
 // ==========================================
 export class AuthService {
-    public async login(data: LoginInputDTO): Promise<LoginResponseDTO> {
+    public async login(data: LoginInputDTO): Promise<LoginResponseDTO | TwoFactorChallengeResponse> {
         // Mesmo e-mail pode existir em apps diferentes (unique composto).
         // Se o cliente passa app_id, filtra direto. Senão e houver ambiguidade, devolve a lista
         // de apps disponíveis para o cliente escolher.
@@ -140,6 +153,32 @@ export class AuthService {
         if (user.app_status !== 'ativo') throw new Error('APP_BLOQUEADO');
         if (user.status !== 'ativo') throw new Error('USUARIO_BLOQUEADO');
 
+        // Senha conferiu. Se a conta tem segundo fator, o JWT de sessão NÃO sai
+        // daqui: o cliente recebe um desafio de vida curta e só troca por sessão
+        // depois de provar o segundo fator.
+        if (await twoFactorService.estaAtivo(user.id.toString())) {
+            return this.emitirChallenge(user.id.toString(), user.app_id ? user.app_id.toString() : '0');
+        }
+
+        return this.emitirSessao(user);
+    }
+
+    /**
+     * Monta o JWT de 24h e marca o acesso.
+     *
+     * `ultimo_acesso` é atualizado aqui e não na conferência da senha: com 2FA
+     * ativo, senha certa e segundo fator errado não é login nenhum, e registrar
+     * o acesso ali dentro contaria tentativa incompleta como sessão.
+     */
+    private async emitirSessao(user: {
+        id: number;
+        nome: string;
+        email: string;
+        app_id: number | null;
+        app_nome: string;
+        app_status: string | null;
+        role_nome: string | null;
+    }): Promise<LoginResponseDTO> {
         db.update(usuarios)
           .set({ ultimoAcesso: new Date() })
           .where(eq(usuarios.id, user.id))
@@ -176,6 +215,85 @@ export class AuthService {
                 status: user.app_status || 'ativo'
             }
         };
+    }
+
+    /** Passe de etapa única para a verificação de 2FA. Não abre nenhuma rota. */
+    private emitirChallenge(usuarioId: string, appId: string): TwoFactorChallengeResponse {
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+            console.error("JWT_SECRET missing in .env");
+            throw new Error('ERRO_INTERNO');
+        }
+
+        const challengeToken = jwt.sign(
+            { sub: usuarioId, app_id: appId, action: '2fa-challenge' },
+            jwtSecret,
+            { expiresIn: CHALLENGE_TTL_SEGUNDOS },
+        );
+
+        return {
+            requires2FA: true,
+            challengeToken,
+            expiresIn: CHALLENGE_TTL_SEGUNDOS,
+            methods: ['totp', 'backup'],
+        };
+    }
+
+    /**
+     * Segunda etapa: troca o desafio por sessão de verdade.
+     *
+     * Aceita código do autenticador ou código de recuperação. Os status de
+     * usuário e app são revalidados aqui — entre a senha e o segundo fator o
+     * acesso pode ter sido revogado.
+     */
+    public async verificarSegundoFator(
+        challengeToken: string,
+        entrada: { codigo?: string; backupCode?: string },
+    ): Promise<LoginResponseDTO> {
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+            console.error("JWT_SECRET missing in .env");
+            throw new Error('ERRO_INTERNO');
+        }
+
+        let decoded: { sub?: string; action?: string };
+        try {
+            decoded = jwt.verify(challengeToken, jwtSecret) as typeof decoded;
+        } catch {
+            throw new Error('CHALLENGE_INVALIDO');
+        }
+        if (decoded.action !== '2fa-challenge' || !decoded.sub) throw new Error('CHALLENGE_INVALIDO');
+
+        if (entrada.backupCode) {
+            await twoFactorService.consumirBackupCode(decoded.sub, entrada.backupCode);
+        } else if (entrada.codigo) {
+            await twoFactorService.verificarCodigo(decoded.sub, entrada.codigo);
+        } else {
+            throw new Error('CODIGO_AUSENTE');
+        }
+
+        const linhas = await db.select({
+            id: usuarios.id,
+            nome: usuarios.nome,
+            email: usuarios.email,
+            app_id: usuarios.appId,
+            app_nome: aplicativos.nome,
+            app_status: aplicativos.status,
+            status: usuarios.status,
+            role_nome: niveisAcesso.nome,
+        })
+        .from(usuarios)
+        .innerJoin(aplicativos, eq(usuarios.appId, aplicativos.id))
+        .innerJoin(niveisAcesso, eq(usuarios.nivelAcessoId, niveisAcesso.id))
+        .where(eq(usuarios.id, Number(decoded.sub)))
+        .limit(1);
+
+        const user = linhas[0];
+        if (!user) throw new Error('USUARIO_INVALIDO');
+        if (user.app_status !== 'ativo') throw new Error('APP_BLOQUEADO');
+        if (user.status !== 'ativo') throw new Error('USUARIO_BLOQUEADO');
+
+        return this.emitirSessao(user);
     }
 
     public async logout(token: string | undefined): Promise<void> {

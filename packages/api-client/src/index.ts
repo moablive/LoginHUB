@@ -2,6 +2,10 @@ import axios, { type InternalAxiosRequestConfig, type AxiosRequestHeaders } from
 import type {
   User,
   LoginResponse,
+  TwoFactorChallengeResponse,
+  TwoFactorSetupResponse,
+  TwoFactorActivationResponse,
+  TwoFactorStatus,
   App,
   CreateAppDTO,
   CreateAppResponse,
@@ -183,13 +187,26 @@ export const authApi = {
     const payload: { email: string; password: string; app_id?: string } = { email, password };
     if (appId) payload.app_id = appId;
 
-    const { data } = await api.post<LoginResponse>('/auth/login', payload);
+    const { data } = await api.post<LoginResponse | TwoFactorChallengeResponse>('/auth/login', payload);
 
-    localStorage.setItem('awl_token', data.token);
-    localStorage.setItem('awl_user', JSON.stringify(data.usuario));
+    // Conta com 2FA: a senha conferiu, mas a sessão ainda não existe. Nada é
+    // gravado aqui — quem fecha o login é `twoFactorApi.verify`.
+    if ('requires2FA' in data && data.requires2FA) {
+      return {
+        redirect: '/login/2fa',
+        requires2FA: true,
+        challengeToken: data.challengeToken,
+        challengeExpiresIn: data.expiresIn,
+        methods: data.methods,
+      };
+    }
 
-    if (data.app) {
-        localStorage.setItem('awl_app', JSON.stringify(data.app));
+    const sessao = data as LoginResponse;
+    localStorage.setItem('awl_token', sessao.token);
+    localStorage.setItem('awl_user', JSON.stringify(sessao.usuario));
+
+    if (sessao.app) {
+        localStorage.setItem('awl_app', JSON.stringify(sessao.app));
     }
 
     return { redirect: '/dashboard' };
@@ -244,6 +261,73 @@ export const authApi = {
     const user = authApi.getUser();
     return user?.role || null;
   }
+};
+
+// ==========================================
+// 2FA API
+// ==========================================
+/** Grava a sessão devolvida pela segunda etapa. */
+const salvarSessao = (data: LoginResponse): void => {
+  localStorage.setItem('awl_token', data.token);
+  localStorage.setItem('awl_user', JSON.stringify(data.usuario));
+  if (data.app) localStorage.setItem('awl_app', JSON.stringify(data.app));
+};
+
+export const twoFactorApi = {
+  /** Se a conta da sessão atual tem 2FA e quantos backup codes restam. */
+  status: async (): Promise<TwoFactorStatus> => {
+    const { data } = await api.get<TwoFactorStatus>('/auth/2fa/status');
+    return data;
+  },
+
+  /**
+   * Passo 1 do enrolamento. Devolve o secret e a URI `otpauth://` — renderize
+   * o QR a partir dela no cliente (o servidor não manda imagem de propósito:
+   * evita trafegar PNG em base64 e deixa o app escolher a biblioteca).
+   */
+  setup: async (): Promise<TwoFactorSetupResponse> => {
+    const { data } = await api.post<TwoFactorSetupResponse>('/auth/2fa/setup', {});
+    return data;
+  },
+
+  /**
+   * Passo 2: confirma com um código do autenticador.
+   *
+   * ⚠️ Os `backupCodes` da resposta são a ÚNICA vez que eles aparecem em claro.
+   * ⚠️ As demais sessões do usuário são encerradas aqui — inclusive outras abas.
+   */
+  verifySetup: async (codigo: string): Promise<TwoFactorActivationResponse> => {
+    const { data } = await api.post<TwoFactorActivationResponse>('/auth/2fa/verify-setup', { codigo });
+    return data;
+  },
+
+  /** Fecha o login com o código do autenticador. Salva a sessão em caso de sucesso. */
+  verify: async (challengeToken: string, codigo: string): Promise<LoginResponse> => {
+    const { data } = await api.post<LoginResponse>('/auth/2fa/verify', { challengeToken, codigo });
+    salvarSessao(data);
+    return data;
+  },
+
+  /** Fecha o login com um código de recuperação (uso único). */
+  verifyBackup: async (challengeToken: string, backupCode: string): Promise<LoginResponse> => {
+    const { data } = await api.post<LoginResponse>('/auth/2fa/verify-backup', { challengeToken, backupCode });
+    salvarSessao(data);
+    return data;
+  },
+
+  /** Desativa o 2FA. Exige código do autenticador OU de recuperação. */
+  disable: async (prova: { codigo?: string; backupCode?: string }): Promise<{ ativo: false }> => {
+    const { data } = await api.post<{ ativo: false }>('/auth/2fa/disable', prova);
+    return data;
+  },
+
+  /** Gera códigos de recuperação novos e invalida os anteriores. */
+  regenerateBackupCodes: async (codigo: string): Promise<{ backupCodes: string[] }> => {
+    // POST e não GET: no GET o código iria na query string, parando em log de
+    // acesso e histórico do navegador. O servidor aceita os dois.
+    const { data } = await api.post<{ backupCodes: string[] }>('/auth/2fa/backup-codes', { codigo });
+    return data;
+  },
 };
 
 // ==========================================
