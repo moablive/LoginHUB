@@ -187,9 +187,17 @@ export class TwoFactorController {
             const { codigo } = req.body ?? {};
             if (!codigo) throw new Error('CODIGO_AUSENTE');
 
-            const resultado = await twoFactorService.confirmarSetup(usuarioDaSessao(req), String(codigo));
+            const usuarioId = usuarioDaSessao(req);
+            const resultado = await twoFactorService.confirmarSetup(usuarioId, String(codigo));
+            // A ativação carimbou o piso de sessão, invalidando o token que veio
+            // nesta requisição. Emitir a nova sessão aqui evita deixar o cliente
+            // sem credencial no meio do fluxo de convite.
+            const sessao = await authService.emitirSessaoParaUsuario(usuarioId);
+
             return res.status(200).json({
                 ...resultado,
+                token: sessao.token,
+                expiresIn: sessao.expiresIn,
                 message: 'Guarde os códigos de recuperação: eles não serão exibidos de novo.',
             });
         } catch (err) {

@@ -229,7 +229,7 @@ export class TwoFactorService {
      * por 24h e ainda renovável por mais 7 dias pelo grace do `/auth/refresh` —
      * o 2FA não protegeria nada do que já estava em circulação.
      */
-    public async confirmarSetup(usuarioId: string, codigo: string): Promise<TwoFactorActivationResponse> {
+    public async confirmarSetup(usuarioId: string, codigo: string): Promise<Omit<TwoFactorActivationResponse, 'token' | 'expiresIn'>> {
         const config = await this.carregarConfig(usuarioId);
         if (!config?.secretCifrado) throw new Error('SETUP_NAO_INICIADO');
         if (config.ativo) throw new Error('JA_ATIVO');

@@ -275,6 +275,38 @@ export class AuthService {
     }
 
     /**
+     * Abre sessão para um usuário já autenticado por outro meio.
+     *
+     * Usado ao concluir o enrolamento de 2FA: o corte de sessões acabou de
+     * invalidar o token em uso, e sem um novo o cliente ficaria órfão no meio
+     * do fluxo.
+     */
+    public async emitirSessaoParaUsuario(usuarioId: string): Promise<LoginResponseDTO> {
+        const linhas = await db.select({
+            id: usuarios.id,
+            nome: usuarios.nome,
+            email: usuarios.email,
+            app_id: usuarios.appId,
+            app_nome: aplicativos.nome,
+            app_status: aplicativos.status,
+            status: usuarios.status,
+            role_nome: niveisAcesso.nome,
+        })
+        .from(usuarios)
+        .innerJoin(aplicativos, eq(usuarios.appId, aplicativos.id))
+        .innerJoin(niveisAcesso, eq(usuarios.nivelAcessoId, niveisAcesso.id))
+        .where(eq(usuarios.id, Number(usuarioId)))
+        .limit(1);
+
+        const user = linhas[0];
+        if (!user) throw new Error('USUARIO_INVALIDO');
+        if (user.app_status !== 'ativo') throw new Error('APP_BLOQUEADO');
+        if (user.status !== 'ativo') throw new Error('USUARIO_BLOQUEADO');
+
+        return this.emitirSessao(user);
+    }
+
+    /**
      * Segunda etapa: troca o desafio por sessão de verdade.
      *
      * Aceita código do autenticador ou código de recuperação. Os status de

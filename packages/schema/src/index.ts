@@ -171,6 +171,16 @@ export interface TwoFactorActivationResponse {
     backupCodes: string[];
     /** `true` se as demais sessões do usuário foram invalidadas. */
     sessoesAnterioresInvalidadas: boolean;
+    /**
+     * Sessão nova, emitida DEPOIS do corte.
+     *
+     * Sem ela o cliente ficaria sem sessão válida no exato momento em que
+     * termina o enrolamento — e no convite isso obrigaria a digitar um segundo
+     * código em seguida, que a proteção de replay recusaria se caísse na mesma
+     * janela de 30s.
+     */
+    token: string;
+    expiresIn: number;
 }
 
 export interface TwoFactorStatus {

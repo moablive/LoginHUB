@@ -94,7 +94,11 @@ export const authMiddleware: RequestHandler = async (req, res, next) => {
         // valem tokens novos. Sem isto, um JWT emitido antes da ativação seguiria
         // válido por 24h — e renovável por mais 7 dias pelo grace do /auth/refresh.
         const piso = doisFatoresRows[0]?.sessoesValidasDesde;
-        if (piso && decoded.iat && decoded.iat * 1000 < piso.getTime()) {
+        // Comparação em SEGUNDOS: `iat` do JWT é truncado para segundo, enquanto
+        // o piso tem milissegundos. Sem truncar os dois lados, um token emitido
+        // no mesmo segundo do corte cairia como "anterior" a ele — o que
+        // invalidava a própria sessão emitida ao concluir o enrolamento.
+        if (piso && decoded.iat && decoded.iat < Math.floor(piso.getTime() / 1000)) {
             return res.status(401).json({
                 error: 'SESSAO_REVOGADA',
                 message: 'Sessão encerrada por alteração de segurança. Faça login novamente.',
