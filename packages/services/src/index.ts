@@ -525,20 +525,52 @@ export class AuthService {
 
         // Lido antes da troca: o estado do 2FA não muda com a senha, e assim a
         // consulta não fica no trecho onde uma falha já custaria o link.
-        const require2FASetup = await twoFactorService.exigeEnrolamento(String(decoded.sub));
+        const estado = await twoFactorService.estadoDoLogin(String(decoded.sub));
 
         await this.changePassword(String(decoded.sub), novaSenha);
 
-        // Devolve sessão para a página seguir direto no enrolamento de 2FA sem
-        // pedir login de novo. Quem acabou de usar o magic link já controla a
-        // conta, então isto não concede nada que ele ainda não tivesse.
+        const appId = conta.app_id ? conta.app_id.toString() : '0';
+
+        // 2FA ativo: o magic link prova posse do e-mail, não do segundo fator.
+        // Emitir sessão aqui faria do reset de senha um atalho para pular o
+        // TOTP — quem controlasse a caixa de entrada (ou um admin disparando
+        // reset) entraria sem nunca tocar no autenticador. O desafio é o mesmo
+        // que o login devolve; o cliente fecha em `/auth/2fa/verify`.
+        if (estado === 'desafio') {
+            const desafio = this.emitirChallenge(String(conta.id), appId);
+            return {
+                message: 'Senha definida. Confirme o código do autenticador para entrar.',
+                expiresIn: desafio.expiresIn,
+                require2FASetup: false,
+                requires2FA: true,
+                challengeToken: desafio.challengeToken,
+                methods: desafio.methods,
+            };
+        }
+
+        // Enrolamento pendente: passe de etapa única, NÃO sessão de 24h. A
+        // página emenda direto no QR com ele, e ele não sobrevive ao
+        // `/auth/refresh` — abandonar o convite no meio não pode virar um dia
+        // de acesso (renovável por mais sete) sem segundo fator nenhum.
+        if (estado === 'enrolar') {
+            const passe = this.emitirTokenDeEnrolamento(String(conta.id), conta.email, appId, conta.role_nome);
+            return {
+                message: 'Senha definida. Falta configurar a verificação em duas etapas.',
+                token: passe.setupToken,
+                expiresIn: passe.expiresIn,
+                require2FASetup: true,
+            };
+        }
+
+        // Sem pendência de 2FA: sessão normal. Quem acabou de usar o magic link
+        // já controla a conta, então isto não concede nada que ele não tivesse.
         const sessao = await this.emitirSessao(conta);
 
         return {
             message: 'Senha definida com sucesso.',
             token: sessao.token,
             expiresIn: sessao.expiresIn,
-            require2FASetup,
+            require2FASetup: false,
         };
     }
 }
@@ -816,37 +848,71 @@ export class UserService {
         }
     }
 
-    public async getAllUsersGlobal(): Promise<UserResponse[]> {
-        const rows = await db.select({
-            id: usuarios.id,
-            app_id: usuarios.appId,
-            nome: usuarios.nome,
-            email: usuarios.email,
-            telefone: usuarios.telefone,
-            role: niveisAcesso.nome,
-            status: usuarios.status,
-        })
-        .from(usuarios)
-        .leftJoin(niveisAcesso, eq(usuarios.nivelAcessoId, niveisAcesso.id));
+    /**
+     * Colunas das listagens de usuário, incluindo o estado do segundo fator.
+     *
+     * O 2FA entra por LEFT JOIN: conta criada fora do convite não tem linha em
+     * `usuarios_2fa`, e ausência de linha significa nem exigência nem segundo
+     * fator — daí os `!!` na conversão abaixo.
+     */
+    private static readonly COLUNAS_USUARIO = {
+        id: usuarios.id,
+        app_id: usuarios.appId,
+        nome: usuarios.nome,
+        email: usuarios.email,
+        telefone: usuarios.telefone,
+        role: niveisAcesso.nome,
+        status: usuarios.status,
+        dois_fatores_ativo: usuarios2fa.ativo,
+        dois_fatores_obrigatorio: usuarios2fa.obrigatorio,
+    };
 
-        return rows as any as UserResponse[];
+    private static comDoisFatores(linhas: any[]): UserResponse[] {
+        return linhas.map(({ dois_fatores_ativo, dois_fatores_obrigatorio, ...resto }) => ({
+            ...resto,
+            dois_fatores: {
+                ativo: !!dois_fatores_ativo,
+                obrigatorio: !!dois_fatores_obrigatorio,
+            },
+        })) as any as UserResponse[];
+    }
+
+    public async getAllUsersGlobal(): Promise<UserResponse[]> {
+        const rows = await db.select(UserService.COLUNAS_USUARIO)
+            .from(usuarios)
+            .leftJoin(niveisAcesso, eq(usuarios.nivelAcessoId, niveisAcesso.id))
+            .leftJoin(usuarios2fa, eq(usuarios2fa.usuarioId, usuarios.id));
+
+        return UserService.comDoisFatores(rows);
     }
 
     public async getUsersByApp(appId: string): Promise<UserResponse[]> {
-        const rows = await db.select({
-            id: usuarios.id,
-            app_id: usuarios.appId,
-            nome: usuarios.nome,
-            email: usuarios.email,
-            telefone: usuarios.telefone,
-            role: niveisAcesso.nome,
-            status: usuarios.status,
-        })
-        .from(usuarios)
-        .leftJoin(niveisAcesso, eq(usuarios.nivelAcessoId, niveisAcesso.id))
-        .where(eq(usuarios.appId, Number(appId)));
+        const rows = await db.select(UserService.COLUNAS_USUARIO)
+            .from(usuarios)
+            .leftJoin(niveisAcesso, eq(usuarios.nivelAcessoId, niveisAcesso.id))
+            .leftJoin(usuarios2fa, eq(usuarios2fa.usuarioId, usuarios.id))
+            .where(eq(usuarios.appId, Number(appId)));
 
-        return rows as any as UserResponse[];
+        return UserService.comDoisFatores(rows);
+    }
+
+    /**
+     * Reset administrativo do 2FA — para quem perdeu o celular E os códigos de
+     * recuperação. A conta volta a "precisa enrolar", nunca a "sem 2FA".
+     */
+    public async resetTwoFactor(id: string): Promise<void> {
+        const existe = await db.select({ id: usuarios.id })
+            .from(usuarios)
+            .where(eq(usuarios.id, Number(id)))
+            .limit(1);
+
+        if (existe.length === 0) {
+            const error = new Error('Usuário não encontrado.');
+            (error as any).code = 'NOT_FOUND';
+            throw error;
+        }
+
+        await twoFactorService.resetarPorAdmin(id);
     }
 
     public async updateUser(id: string, data: UpdateUserDTO) {

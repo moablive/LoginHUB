@@ -37,7 +37,20 @@ export const adminMiddleware: RequestHandler = (req, res, next) => {
 // ==========================================
 // 2. AUTH MIDDLEWARE
 // ==========================================
-export const authMiddleware: RequestHandler = async (req, res, next) => {
+/**
+ * Guarda de sessão, parametrizada pelas claims `action` que ela tolera.
+ *
+ * Todo token com `action` é passe de etapa única — magic link
+ * (`setup-password`), desafio de 2FA (`2fa-challenge`), enrolamento
+ * (`2fa-setup`) — e por padrão NENHUM deles vale como sessão aqui. Antes disso
+ * a claim era simplesmente ignorada: um `challengeToken`, que se obtém só com a
+ * senha, abria `/auth/2fa/status` sem nunca provar o segundo fator.
+ *
+ * `acoesPermitidas` abre exceção onde a etapa é justamente o que a rota serve —
+ * as rotas de enrolamento, que por definição são alcançadas antes de existir
+ * sessão.
+ */
+export const criarAuthMiddleware = (acoesPermitidas: readonly string[] = []): RequestHandler => async (req, res, next) => {
     const authHeader = req.headers.authorization;
 
     if (!authHeader) {
@@ -64,7 +77,15 @@ export const authMiddleware: RequestHandler = async (req, res, next) => {
 
     try {
         // Agora ambos são strings garantidas
-        const decoded = jwt.verify(token, secretKey) as unknown as JWTPayload;
+        const decoded = jwt.verify(token, secretKey) as unknown as JWTPayload & { action?: string };
+
+        // Passe de etapa única onde a rota espera sessão.
+        if (decoded.action && !acoesPermitidas.includes(decoded.action)) {
+            return res.status(401).json({
+                error: 'TOKEN_NAO_E_SESSAO',
+                message: 'Este token serve a uma etapa do login, não à sessão. Conclua o login.',
+            });
+        }
 
         // As duas checagens são independentes — uma ida só ao banco.
         const [appRows, doisFatoresRows] = await Promise.all([
@@ -115,6 +136,17 @@ export const authMiddleware: RequestHandler = async (req, res, next) => {
         return res.status(401).json({ error: 'Token inválido ou expirado.' });
     }
 };
+
+/** Exige sessão de verdade. Recusa qualquer passe de etapa única. */
+export const authMiddleware: RequestHandler = criarAuthMiddleware();
+
+/**
+ * Aceita também o passe de enrolamento (`2fa-setup`).
+ *
+ * Só nas rotas que existem para concluir o enrolamento: quem chega nelas ainda
+ * não tem sessão, porque é exatamente isso que está indo configurar.
+ */
+export const authMiddlewareEnrolamento: RequestHandler = criarAuthMiddleware(['2fa-setup']);
 
 // ==========================================
 // 3. RATE LIMIT
@@ -217,6 +249,38 @@ export const rateLimitGestao2FA = criarRateLimit({
     janelaMs: 15 * 60 * 1000,
     max: 10,
     chave: chaveDoUsuario,
+});
+
+/**
+ * Chave do login: a CONTA em disputa, com IP de reserva.
+ *
+ * Pelo mesmo motivo do desafio de 2FA — as APIs dos tenants falam com o hub
+ * pela rede interna e chegam todas pelo mesmo gateway, então limitar por IP
+ * puro trataria todos os apps como um cliente só. O e-mail normalizado separa
+ * as tentativas por conta, que é o que interessa contra força bruta de senha.
+ *
+ * Contrapartida assumida (a mesma já aceita em `chaveDoChallenge`): quem souber
+ * o e-mail de alguém consegue queimar o balde daquela conta por 15 min.
+ */
+export const chaveDoLogin = (req: any): string => {
+    const email = req.body?.email;
+    return typeof email === 'string' && email.trim()
+        ? `e:${email.trim().toLowerCase()}`
+        : (req.ip || 'sem-ip');
+};
+
+/**
+ * Senha continua sendo o primeiro fator, e até aqui `/auth/login` não tinha
+ * limite nenhum: dava para varrer senhas à vontade contra qualquer conta. Com
+ * 2FA ativo o acerto ainda esbarraria no segundo fator, mas devolveria ao
+ * atacante a confirmação de que a senha está certa — e nas contas que ainda
+ * não enrolaram, a sessão inteira.
+ */
+export const rateLimitLogin = criarRateLimit({
+    nome: 'login',
+    janelaMs: 15 * 60 * 1000,
+    max: 10,
+    chave: chaveDoLogin,
 });
 
 // ==========================================

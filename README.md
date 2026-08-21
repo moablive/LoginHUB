@@ -425,7 +425,7 @@ daquele app.
 |---|---|---|---|
 | `POST` | `/auth/login` | Público | Autentica e emite JWT 24h. Aceita `email`, `password` e `app_id` (opcional). |
 | `POST` | `/auth/refresh` | Bearer Token (válido ou grace 7d) | Renova o token JWT por mais 24h. |
-| `POST` | `/auth/setup-password` | Público (via Magic Link Token) | Define a senha do usuário no 1º acesso ou reset (invalida o Magic Link). |
+| `POST` | `/auth/setup-password` | Público (via Magic Link Token) | Define a senha no 1º acesso ou reset (invalida o Magic Link). **Três desfechos**: `requires2FA` + `challengeToken` se a conta já tem 2FA ativo; `require2FASetup` + passe de 10 min se falta enrolar; sessão de 24h só quando não há pendência. |
 | `POST` | `/auth/logout` | Público | Retorna orientação para o cliente limpar o storage local. |
 
 #### 2FA (`/auth/2fa`)
@@ -434,20 +434,25 @@ daquele app.
 |---|---|---|---|
 | `POST` | `/auth/2fa/verify` | `challengeToken` no corpo | Fecha o login com o código do autenticador. Devolve a sessão de 24h. |
 | `POST` | `/auth/2fa/verify-backup` | `challengeToken` no corpo | Idem, com um código de recuperação (uso único). |
-| `GET` | `/auth/2fa/status` | Bearer Token | Se o 2FA está ativo e quantos códigos de recuperação restam. |
-| `POST` | `/auth/2fa/setup` | Bearer Token | Gera o secret e a URI `otpauth://`. Ainda não ativa nada. |
-| `POST` | `/auth/2fa/verify-setup` | Bearer Token | Confirma a ativação com um código. Devolve os códigos de recuperação **uma única vez** e encerra as demais sessões. |
-| `POST` | `/auth/2fa/disable` | Bearer Token | Desativa. Exige `codigo` (TOTP) **ou** `backupCode`. |
+| `GET` | `/auth/2fa/status` | Sessão **ou** passe `2fa-setup` | Se o 2FA está ativo e quantos códigos de recuperação restam. |
+| `POST` | `/auth/2fa/setup` | Sessão **ou** passe `2fa-setup` | Gera o secret e a URI `otpauth://`. Ainda não ativa nada. |
+| `POST` | `/auth/2fa/verify-setup` | Sessão **ou** passe `2fa-setup` | Confirma a ativação com um código. Devolve os códigos de recuperação **uma única vez**, encerra as demais sessões e **devolve a sessão nova** — grave-a, senão a requisição seguinte cai em `SESSAO_REVOGADA`. |
+| `POST` | `/auth/2fa/disable` | Sessão (só) | Desativa. Exige `codigo` (TOTP) **ou** `backupCode`. |
 | `POST` | `/auth/2fa/backup-codes` | Bearer Token | Regenera os códigos (exige `codigo` TOTP). Invalida os anteriores. |
 | `GET` | `/auth/2fa/backup-codes` | Bearer Token | Mesmo handler, código em `?code=`. Existe por compatibilidade — **prefira o POST**: na query string o código para em log de acesso e histórico do navegador. |
 
 **Limites de tentativa** — em memória, por processo, por CONTA (não por IP: as APIs
 dos tenants chegam todas pelo mesmo gateway da rede interna):
 
-| Rotas | Limite |
-|---|---|
-| `verify`, `verify-backup` | 5 por 15 min |
-| `setup`, `verify-setup`, `disable`, `backup-codes`, `status` | 10 por 15 min |
+| Rotas | Limite | Chave |
+|---|---|---|
+| `/auth/login` | 10 por 15 min | e-mail normalizado |
+| `verify`, `verify-backup` | 5 por 15 min | `sub` do `challengeToken` |
+| `setup`, `verify-setup`, `disable`, `backup-codes`, `status` | 10 por 15 min | `sub` da sessão |
+
+> A contrapartida de limitar por conta: quem souber o e-mail de alguém consegue
+> queimar o balde daquela conta por 15 min. É o preço de não tratar todos os
+> tenants como um cliente só — eles chegam pelo mesmo gateway interno.
 
 Ao estourar: `429` com `Retry-After` em segundos. O contador zera a cada restart
 da API — é aceitável para travar força bruta, mas não sobreviveria a réplicas.
@@ -479,6 +484,7 @@ da API — é aceitável para travar força bruta, mas não sobreviveria a répl
 | `PUT` | `/admin/users/:id` | `UpdateUserDTO` | Atualiza dados cadastrais, telefone, e-mail ou nível de acesso (`role`). |
 | `PATCH` | `/admin/users/:id/status` | `{ "status": "ativo" \| "inativo" \| "bloqueado" }` | Atualiza o status do usuário. |
 | `POST` | `/admin/users/:id/reset-password` | `{ "emailHtml"?: "..." }` | Invalida senha atual, gera Magic Link (1h) e dispara e-mail de redefinição. |
+| `POST` | `/admin/users/:id/reset-2fa` | — | Descarta o autenticador da conta (perdeu o celular **e** os códigos). A exigência de 2FA **permanece**: a pessoa reenrola no próximo login. Encerra as sessões abertas. |
 | `DELETE` | `/admin/users/:id` | - | Exclui a conta do usuário. |
 
 ---
@@ -698,9 +704,12 @@ reset de senha (o caminho de reconvite das contas antigas) também passa a exigi
 > `"undefined"` no storage — o usuário fica travado numa sessão inválida, sem
 > mensagem de erro. Atualize o cliente ANTES de reconvidar os usuários dele.
 
-Contas que já existem e ainda não foram reconvidadas continuam entrando só com
-senha: a exigência é gravada quando a conta passa por convite ou reset, então a
-migração acontece no ritmo em que você dispara os reconvites.
+A migração [`003_2fa_backfill.sql`](db/003_2fa_backfill.sql) fecha o acervo
+antigo. Sem ela a exigência só era gravada por convite ou reset, e toda conta
+anterior ao 2FA entrava apenas com senha — `estadoDoLogin` devolve `'sessao'`
+quando não existe linha em `usuarios_2fa`. "Obrigatório" valia para os novos e
+para mais ninguém. Depois do backfill, quem ainda não enrolou cai no fluxo de
+enrolamento no próximo login.
 
 #### Detalhes que economizam depuração
 
@@ -715,8 +724,14 @@ migração acontece no ritmo em que você dispara os reconvites.
   (`LoginHUB:MoneyAPP (fulano@x.com)`), senão o autenticador mostra N entradas idênticas.
 - **O master está fora.** O login master não tem linha em `usuarios` (`sub: "0"`),
   então não comporta 2FA nesta versão. Ele segue protegido só pela `MASTER_API_KEY`.
-- **Reset de senha não desativa o 2FA.** Quem perder o celular precisa de um código
-  de recuperação; sem nenhum, um admin tem de limpar a linha em `usuarios_2fa`.
+- **Reset de senha não substitui o segundo fator.** Numa conta com 2FA ativo, o
+  `/auth/setup-password` devolve `requires2FA` + `challengeToken` em vez de
+  sessão. Sem isso o reset seria um atalho para pular o TOTP: bastaria controlar
+  a caixa de entrada — ou ser um admin disparando reset — para entrar sem tocar
+  no autenticador.
+- **Perdeu o celular e os códigos?** `POST /admin/users/:id/reset-2fa`. Descarta
+  o autenticador sem isentar do 2FA; a conta volta para "precisa enrolar". Não
+  há caminho pelo próprio usuário, de propósito.
 
 #### 2FA obrigatório
 
@@ -726,7 +741,7 @@ e escaneia o QR **na mesma tela**; sem concluir, a conta não abre sessão.
 ```
 e-mail de convite  →  /setup-password?token=…   (magic link, como sempre)
                           │  define a senha
-                          │  setup-password devolve sessão + require2FASetup
+                          │  setup-password devolve PASSE de 10 min + require2FASetup
                           ▼
                      mesma página mostra o QR   ← desenhado no NAVEGADOR
                           │  confirma o código
@@ -742,10 +757,19 @@ e-mail de convite  →  /setup-password?token=…   (magic link, como sempre)
 Detalhes:
 
 - **Quem abandona no meio** (senha definida, 2FA não configurado) recebe no login
-  `{ require2FASetup, setupToken }` — uma sessão de 10 min que só serve para
-  concluir o enrolamento, em vez de ficar preso sem saída.
-- **O usuário não desativa** um 2FA imposto pelo convite: `/auth/2fa/disable`
-  devolve `403 OBRIGATORIO`. Só ação administrativa remove a exigência.
+  `{ require2FASetup, setupToken }` — um passe de 10 min que só abre as rotas de
+  enrolamento, em vez de ficar preso sem saída. O `/auth/setup-password` devolve
+  o mesmo passe, e não sessão: senão abrir o convite, definir a senha e fechar a
+  aba renderia 24h de acesso (renováveis por mais sete pelo grace do refresh)
+  sem segundo fator nenhum.
+- **Passe não é sessão.** O `authMiddleware` recusa qualquer token com claim
+  `action` — só as rotas de enrolamento abrem exceção para `2fa-setup`. Antes a
+  claim era ignorada, e um `challengeToken` (que se obtém só com a senha) já
+  lia `/auth/2fa/status`.
+- **O usuário não desativa** um 2FA obrigatório: `/auth/2fa/disable` devolve
+  `403 OBRIGATORIO`. E como a exigência agora vale para todas as contas, não há
+  rota que a remova — a ação administrativa disponível é o *reset* (troca de
+  autenticador), nunca a isenção.
 
 #### Ativando pelo terminal
 
@@ -780,12 +804,17 @@ curl -s -X POST $API/auth/2fa/verify-setup -H "Authorization: Bearer $JWT" \
   -H 'Content-Type: application/json' -d '{"codigo":"123456"}'
 ```
 
-**Componentes de referência** para o app cliente copiar (ficam em `apps/ui` para o
-TypeScript do monorepo validá-los a cada build, mas não estão ligados a rota
-nenhuma — o painel do hub é só do master):
-[`useTwoFactor.ts`](apps/ui/src/features/twoFactor/useTwoFactor.ts),
+**Componentes de referência** para o app cliente copiar
+([`useTwoFactor.ts`](apps/ui/src/features/twoFactor/useTwoFactor.ts),
 [`TwoFactorSetup.tsx`](apps/ui/src/features/twoFactor/TwoFactorSetup.tsx),
-[`TwoFactorChallenge.tsx`](apps/ui/src/features/twoFactor/TwoFactorChallenge.tsx).
+[`TwoFactorChallenge.tsx`](apps/ui/src/features/twoFactor/TwoFactorChallenge.tsx)).
+
+Ficam em `apps/ui` para o TypeScript do monorepo validá-los a cada build, em vez
+de apodrecerem dentro de um bloco de markdown. Os três são exercitados de
+verdade em [`SetupPassword.tsx`](apps/ui/src/pages/SetupPassword.tsx) — a única
+página do hub por onde passa usuário final: define a senha, escaneia o QR
+(`TwoFactorSetup`) ou confirma o código quando a conta já tem 2FA
+(`TwoFactorChallenge`). O resto do painel é só do master.
 
 ---
 
@@ -898,7 +927,10 @@ Se o aplicativo cliente utilizar a biblioteca `@loginhub/api-client`, o intercep
 | `codigo_hmac` | `varchar(64)` | HMAC do código normalizado (maiúsculas, sem hífen). |
 | `usado_em` | `timestamp` | `NULL` enquanto não gasto. Uso único. |
 
-DDL em [`db/001_2fa.sql`](db/001_2fa.sql) — dois `CREATE TABLE`, nenhum `ALTER` em
+DDL em [`db/001_2fa.sql`](db/001_2fa.sql), com
+[`002_2fa_obrigatorio.sql`](db/002_2fa_obrigatorio.sql) (coluna `obrigatorio`) e
+[`003_2fa_backfill.sql`](db/003_2fa_backfill.sql) (exigência para o acervo
+antigo) por cima — dois `CREATE TABLE`, nenhum `ALTER` em
 `usuarios`. Rollback é derrubar as duas tabelas.
 
 ---

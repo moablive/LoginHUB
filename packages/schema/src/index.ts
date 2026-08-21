@@ -19,6 +19,11 @@ export interface User {
     created_at?: Date;
     senha_hash?: string;
     nivel_acesso_id?: string;
+    /**
+     * Estado do segundo fator, para o painel do master responder "quem ainda
+     * nao enrolou?" sem uma consulta por linha.
+     */
+    dois_fatores?: { ativo: boolean; obrigatorio: boolean };
 }
 
 export interface CreateUserDTO {
@@ -113,10 +118,30 @@ export interface JWTPayload {
  */
 export interface SetupPasswordResponse {
     message: string;
-    token: string;
+    /**
+     * Credencial para o passo imediatamente seguinte:
+     *
+     *   - sessao de 24h, quando a conta nao tem pendencia de 2FA;
+     *   - passe de enrolamento de 10 min (`action: '2fa-setup'`), quando o 2FA
+     *     e exigido e ainda nao foi configurado.
+     *
+     * Ausente quando a conta JA tem 2FA ativo: definir a senha nao substitui o
+     * segundo fator, entao o que vale nesse caso e o `challengeToken`.
+     */
+    token?: string;
     expiresIn: number;
     /** `true` quando o convite exigiu 2FA e o enrolamento ainda falta. */
     require2FASetup: boolean;
+    /**
+     * Conta com 2FA ja ativo (tipicamente um reset de senha).
+     *
+     * A senha nova sozinha nao abre sessao — senao o reset seria um caminho
+     * lateral para pular o segundo fator. O cliente troca o `challengeToken`
+     * por sessao em `/auth/2fa/verify`, exatamente como faria vindo do login.
+     */
+    requires2FA?: true;
+    challengeToken?: string;
+    methods?: Array<'totp' | 'backup'>;
 }
 
 // ==========================================

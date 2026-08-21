@@ -16,7 +16,6 @@ API="${3:-http://localhost:3005/api}"
 
 [ -z "$EMAIL" ] || [ -z "$APP_ID" ] && {
   echo "uso: $0 <email> <app_id> [base_url]" >&2
-  echo "     o app_id precisa estar em TWOFA_APPS_HABILITADOS no .env" >&2
   exit 1
 }
 
@@ -33,7 +32,13 @@ if echo "$LOGIN" | grep -q '"requires2FA"'; then
   exit 1
 fi
 
+# Duas formas de credencial, conforme o estado da conta:
+#   `token`      → sessão normal (conta sem exigência de 2FA registrada);
+#   `setupToken` → passe de enrolamento de 10 min, que é o que o login devolve
+#                  desde que o 2FA passou a ser obrigatório para todo mundo.
+# As rotas de enrolamento aceitam os dois.
 TOKEN=$(echo "$LOGIN" | json token)
+[ -z "$TOKEN" ] && TOKEN=$(echo "$LOGIN" | json setupToken)
 [ -z "$TOKEN" ] && { echo "Login falhou:"; echo "$LOGIN"; exit 1; }
 
 echo "→ gerando o secret..."

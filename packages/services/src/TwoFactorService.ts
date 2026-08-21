@@ -387,11 +387,48 @@ export class TwoFactorService {
         });
     }
 
-    /** Remove a exigência (ação administrativa — ver `desativar`). */
-    public async removerObrigatoriedade(usuarioId: string): Promise<void> {
+    /**
+     * Reset administrativo: devolve a conta ao estado "precisa enrolar".
+     *
+     * É o caminho de quem perdeu o celular E os códigos de recuperação. Não
+     * havia nenhum antes disto: `desativar` recusa conta com 2FA obrigatório
+     * (de propósito — senão a exigência seria só uma sugestão), o reset de
+     * senha não mexe no segundo fator, e não existia rota administrativa. A
+     * conta simplesmente morria.
+     *
+     * A obrigatoriedade PERMANECE: isto não isenta ninguém, só descarta o
+     * autenticador antigo. E o piso de sessão é carimbado junto — sem ele o
+     * token emitido antes do reset seguiria válido por 24h, e o telefone
+     * perdido continuaria dentro da conta que o reset deveria ter fechado.
+     */
+    public async resetarPorAdmin(usuarioId: string): Promise<void> {
+        const agora = new Date();
+        const config = await this.carregarConfig(usuarioId);
+
+        if (!config) {
+            await db.insert(usuarios2fa).values({
+                usuarioId: Number(usuarioId),
+                secretCifrado: null,
+                ativo: false,
+                obrigatorio: true,
+                sessoesValidasDesde: agora,
+            });
+            return;
+        }
+
         await db.update(usuarios2fa)
-            .set({ obrigatorio: false })
+            .set({
+                secretCifrado: null,
+                ativo: false,
+                obrigatorio: true,
+                ultimoStep: null,
+                confirmadoEm: null,
+                sessoesValidasDesde: agora,
+            })
             .where(eq(usuarios2fa.usuarioId, Number(usuarioId)));
+
+        await db.delete(usuarios2faBackupCodes)
+            .where(eq(usuarios2faBackupCodes.usuarioId, Number(usuarioId)));
     }
 
     /**

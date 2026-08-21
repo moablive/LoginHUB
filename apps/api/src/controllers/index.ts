@@ -526,4 +526,32 @@ export class UserController {
             return res.status(500).json({ error: 'Erro Interno', message: 'Falha ao redefinir a senha do usuário.' });
         }
     }
+
+    /**
+     * POST /admin/users/:id/reset-2fa — descarta o autenticador da conta.
+     *
+     * Para quem perdeu o celular e os códigos de recuperação. A exigência de
+     * 2FA continua de pé: no próximo login a pessoa cai no enrolamento e
+     * escaneia um QR novo. As sessões em curso caem junto — o aparelho perdido
+     * não pode continuar dentro da conta.
+     */
+    static async resetTwoFactor(req: Request<{ id: string }>, res: Response) {
+        const { id } = req.params;
+        try {
+            await userService.resetTwoFactor(id);
+            return res.status(200).json({
+                message: '2FA reiniciado. O usuário vai configurar um autenticador novo no próximo login.',
+                ativo: false,
+                obrigatorio: true,
+                sessoesAnterioresInvalidadas: true,
+            });
+        } catch (err: unknown) {
+            const error = err as { code?: string, message?: string };
+            if (error.code === 'NOT_FOUND') {
+                return res.status(404).json({ message: 'Usuário não encontrado.' });
+            }
+            console.error(`[UserController] resetTwoFactor (ID: ${id}):`, err);
+            return res.status(500).json({ error: 'Erro Interno', message: 'Falha ao reiniciar o 2FA do usuário.' });
+        }
+    }
 }

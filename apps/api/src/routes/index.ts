@@ -8,6 +8,8 @@ import {
 import {
   adminMiddleware,
   authMiddleware,
+  authMiddlewareEnrolamento,
+  rateLimitLogin,
   rateLimitVerificacao2FA,
   rateLimitGestao2FA
 } from '@loginhub/middlewares';
@@ -18,7 +20,7 @@ export const mainRouter = Router();
 // 1. Auth Routes
 // ==========================================
 const authRouter = Router();
-authRouter.post('/login', AuthController.login);
+authRouter.post('/login', rateLimitLogin as any, AuthController.login);
 authRouter.post('/logout', AuthController.logout);
 authRouter.post('/refresh', AuthController.refresh);
 // /change-password saiu de novo: como alias de `setupPassword` ele só produzia
@@ -28,31 +30,35 @@ authRouter.post('/setup-password', AuthController.setupPassword as any);
 
 // -- 2FA (TOTP)
 //
-// Duas famílias com proteções diferentes:
+// Três famílias com proteções diferentes:
 //
 //   verify / verify-backup  → públicas. A credencial é o `challengeToken` que o
 //        login acabou de emitir. Rate limit por CONTA (o `sub` do desafio), não
 //        por IP: seis dígitos são 1 milhão de combinações e o atacante pode
 //        trocar de origem, mas não de alvo.
 //
-//   setup / verify-setup / disable / backup-codes → exigem sessão. São o
-//        primeiro uso real do `authMiddleware` neste app, e é lá que mora a
-//        checagem do piso de sessão.
+//   status / setup / verify-setup → enrolamento. Quem chega aqui pode ainda não
+//        ter sessão — é justamente o que está indo configurar —, então aceitam
+//        também o passe `2fa-setup` de 10 minutos.
+//
+//   disable / backup-codes → exigem sessão de verdade. Desativar o segundo
+//        fator ou trocar os códigos de recuperação são ações de conta aberta;
+//        um passe de etapa única não serve, e o `authMiddleware` agora recusa.
 const twoFactorRouter = Router();
 
 twoFactorRouter.post('/verify', rateLimitVerificacao2FA as any, TwoFactorController.verify as any);
 twoFactorRouter.post('/verify-backup', rateLimitVerificacao2FA as any, TwoFactorController.verifyBackup as any);
 
-twoFactorRouter.use(authMiddleware as any);
-twoFactorRouter.use(rateLimitGestao2FA as any);
+const enrolamento = [authMiddlewareEnrolamento as any, rateLimitGestao2FA as any];
+twoFactorRouter.get('/status', ...enrolamento, TwoFactorController.status as any);
+twoFactorRouter.post('/setup', ...enrolamento, TwoFactorController.setup as any);
+twoFactorRouter.post('/verify-setup', ...enrolamento, TwoFactorController.verifySetup as any);
 
-twoFactorRouter.get('/status', TwoFactorController.status as any);
-twoFactorRouter.post('/setup', TwoFactorController.setup as any);
-twoFactorRouter.post('/verify-setup', TwoFactorController.verifySetup as any);
-twoFactorRouter.post('/disable', TwoFactorController.disable as any);
+const gestao = [authMiddleware as any, rateLimitGestao2FA as any];
+twoFactorRouter.post('/disable', ...gestao, TwoFactorController.disable as any);
 // GET foi o especificado; o POST evita o código na query string. Mesmo handler.
-twoFactorRouter.get('/backup-codes', TwoFactorController.backupCodes as any);
-twoFactorRouter.post('/backup-codes', TwoFactorController.backupCodes as any);
+twoFactorRouter.get('/backup-codes', ...gestao, TwoFactorController.backupCodes as any);
+twoFactorRouter.post('/backup-codes', ...gestao, TwoFactorController.backupCodes as any);
 
 authRouter.use('/2fa', twoFactorRouter);
 
@@ -80,6 +86,9 @@ adminRouter.post('/users', UserController.addUser as any);
 adminRouter.put('/users/:id', UserController.updateUser as any);
 adminRouter.patch('/users/:id/status', UserController.toggleUserStatus as any);
 adminRouter.post('/users/:id/reset-password', UserController.resetPassword as any);
+// Perdeu o celular E os códigos de recuperação: sem isto a conta ficava morta,
+// porque /auth/2fa/disable recusa desativar um 2FA obrigatório.
+adminRouter.post('/users/:id/reset-2fa', UserController.resetTwoFactor as any);
 adminRouter.delete('/users/:id', UserController.removeUser as any);
 
 mainRouter.use('/admin', adminRouter);

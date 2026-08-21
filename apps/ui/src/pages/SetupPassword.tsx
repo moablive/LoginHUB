@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { authApi } from '@loginhub/api-client';
 import { ShieldCheckIcon } from '@heroicons/react/24/outline';
 import { TwoFactorSetup } from '../features/twoFactor/TwoFactorSetup';
+import { TwoFactorChallenge } from '../features/twoFactor/TwoFactorChallenge';
 
 export function SetupPassword() {
   const [searchParams] = useSearchParams();
@@ -18,6 +19,10 @@ export function SetupPassword() {
   // mandar para o login. O QR é desenhado AQUI, no navegador — nunca no e-mail,
   // senão os dois fatores viajariam pelo mesmo canal.
   const [precisaEnrolar, setPrecisaEnrolar] = useState(false);
+  // Reset de senha numa conta que JÁ tem 2FA: definir a senha não substitui o
+  // segundo fator, então o backend devolve desafio em vez de sessão e a página
+  // fecha o login aqui mesmo.
+  const [desafio, setDesafio] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,6 +46,10 @@ export function SetupPassword() {
 
     try {
       const r = await authApi.setupPassword(token, password);
+      if (r.requires2FA && r.challengeToken) {
+        setDesafio(r.challengeToken);
+        return;
+      }
       if (r.require2FASetup) {
         setPrecisaEnrolar(true);
         return;
@@ -71,6 +80,32 @@ export function SetupPassword() {
           >
             Ir para o Login
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (desafio) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="bg-card text-card-foreground rounded-2xl shadow-xl max-w-md w-full p-8 border border-slate-100">
+          <div className="text-center mb-6">
+            <div className="mx-auto w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mb-4">
+              <ShieldCheckIcon className="w-8 h-8 text-primary" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-800">Senha definida. Confirme quem é você.</h2>
+            <p className="text-slate-500 mt-2 text-sm">
+              Esta conta já tem verificação em duas etapas. Informe o código do autenticador.
+            </p>
+          </div>
+          <TwoFactorChallenge
+            challengeToken={desafio}
+            onAutenticado={() => {
+              setDesafio(null);
+              setSuccess(true);
+              setTimeout(() => navigate('/login'), 3000);
+            }}
+          />
         </div>
       </div>
     );

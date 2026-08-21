@@ -12,7 +12,8 @@ import {
   KeyIcon,
   XMarkIcon,
   LockClosedIcon,
-  LockOpenIcon
+  LockOpenIcon,
+  DevicePhoneMobileIcon
 } from '@heroicons/react/24/outline';
 
 import { userApi } from '@loginhub/api-client';
@@ -151,6 +152,24 @@ export const AppUsers = () => {
     }
   };
 
+  // --- RESET 2FA ---
+  // Caminho de quem perdeu o celular E os códigos de recuperação. Não isenta
+  // do 2FA: descarta o autenticador e a conta reenrola no próximo login.
+  const handleResetTwoFactor = async (user: User) => {
+    try {
+      await userApi.resetTwoFactor(user.id);
+      await fetchData();
+      showAlert(
+        '2FA reiniciado',
+        `${user.email} vai configurar um autenticador novo no próximo login. As sessões abertas foram encerradas.`,
+        'info',
+      );
+    } catch (error: unknown) {
+      console.error(error);
+      showAlert('Erro', 'Não foi possível reiniciar o 2FA deste usuário.', 'error');
+    }
+  };
+
   // --- RESET PASSWORD ---
   const handleResetPasswordClick = (user: User) => {
     setUserToReset(user);
@@ -261,13 +280,14 @@ export const AppUsers = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Acesso</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Contato</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">2FA</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="bg-card text-card-foreground divide-y divide-gray-200">
                   {users.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground">
+                      <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
                         <div className="flex flex-col items-center justify-center">
                           <UserIcon className="h-10 w-10 text-muted-foreground opacity-50 mb-2" />
                           <span>Nenhum usuário vinculado a esta aplicativo.</span>
@@ -314,8 +334,33 @@ export const AppUsers = () => {
                             </span>
                           )}
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {user.dois_fatores?.ativo ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-success/20 text-success border border-success/30">
+                              <DevicePhoneMobileIcon className="h-3 w-3 mr-1" />
+                              Ativo
+                            </span>
+                          ) : (
+                            <span
+                              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-warning/20 text-warning border border-warning/30"
+                              title="Exigido, mas ainda não configurado. A conta cai no enrolamento no próximo login."
+                            >
+                              Pendente
+                            </span>
+                          )}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="flex justify-end gap-2">
+                            {user.dois_fatores?.ativo && (
+                              <button
+                                onClick={() => void handleResetTwoFactor(user)}
+                                className="p-2 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-lg transition"
+                                title="Reiniciar 2FA (perdeu o celular)"
+                              >
+                                <DevicePhoneMobileIcon className="h-5 w-5" />
+                              </button>
+                            )}
+
                             <button
                               onClick={() => handleResetPasswordClick(user)}
                               disabled={isResetting === user.id}

@@ -230,11 +230,15 @@ export const authApi = {
   },
 
   /**
-   * Define a senha pelo magic link.
+   * Define a senha pelo magic link. Três desfechos, nesta ordem de checagem:
    *
-   * Devolve uma sessão junto: quando `require2FASetup` vem `true`, a página deve
-   * emendar direto no enrolamento de 2FA (o convite exigiu) em vez de mandar o
-   * usuário para o login. A sessão é salva aqui para as chamadas seguintes.
+   *   `requires2FA`      → a conta já tem 2FA ativo (típico de reset de senha).
+   *                        NÃO vem sessão: use `challengeToken` em
+   *                        `twoFactorApi.verify`, como se viesse do login.
+   *   `require2FASetup`  → falta enrolar. O `token` gravado abaixo é um passe
+   *                        de 10 min que só abre as rotas de enrolamento —
+   *                        emende direto no QR, não trate como sessão.
+   *   nenhum dos dois    → sessão de 24h normal.
    */
   setupPassword: async (token: string, novaSenha: string): Promise<SetupPasswordResponse> => {
     const { data } = await api.post<SetupPasswordResponse>('/auth/setup-password', { token, novaSenha });
@@ -315,6 +319,12 @@ export const twoFactorApi = {
    */
   verifySetup: async (codigo: string): Promise<TwoFactorActivationResponse> => {
     const { data } = await api.post<TwoFactorActivationResponse>('/auth/2fa/verify-setup', { codigo });
+    // A ativação carimba o piso de sessão e mata o token que fez ESTA chamada.
+    // Sem gravar o que veio na resposta, a requisição seguinte cai em 401
+    // SESSAO_REVOGADA e o /auth/refresh recusa junto — quem acabou de concluir
+    // o convite seria deslogado no exato momento em que terminou.
+    // Só o token: `usuario` e `app` no storage não mudam com o enrolamento.
+    if (data.token) localStorage.setItem('awl_token', data.token);
     return data;
   },
 
@@ -412,6 +422,16 @@ export const userApi = {
   },
   delete: async (id: string): Promise<void> => {
     await api.delete(`${USERS_BASE_URL}/${id}`);
+  },
+  /**
+   * Descarta o autenticador do usuário (perdeu o celular e os códigos).
+   *
+   * NÃO isenta ninguém de 2FA: a conta volta para "precisa enrolar" e escaneia
+   * um QR novo no próximo login. As sessões em curso caem junto.
+   */
+  resetTwoFactor: async (id: string): Promise<{ message: string }> => {
+    const { data } = await api.post<{ message: string }>(`${USERS_BASE_URL}/${id}/reset-2fa`);
+    return data;
   },
   resetPassword: async (id: string, emailHtml?: string): Promise<{ message: string; emailSent: boolean; magicLinkToken?: string }> => {
     const { data } = await api.post<{ message: string; emailSent: boolean; magicLinkToken?: string }>(`${USERS_BASE_URL}/${id}/reset-password`, { emailHtml });
