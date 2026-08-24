@@ -379,7 +379,11 @@ const httpRequestDuration = new client.Histogram({
 export const monitoringMiddleware: RequestHandler = (req, res, next) => {
   const end = httpRequestDuration.startTimer();
   res.on('finish', () => {
-    const route = req.route ? req.route.path : req.path;
+    // Sem rota casada o valor vira 'unmatched', NUNCA o path cru: a API é
+    // publica pelo tunel Cloudflare, e cada URL inventada por scanner
+    // (/wp-admin/setup-config.php e afins) criaria uma serie nova e permanente
+    // no Prometheus. O label 'route' e o unico aqui com cardinalidade aberta.
+    const route = req.route ? req.route.path : 'unmatched';
     end({
       method: req.method,
       route: route,
