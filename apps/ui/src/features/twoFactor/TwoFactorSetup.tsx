@@ -11,15 +11,41 @@ interface Props {
      * manual do secret — que todo autenticador aceita.
      */
     renderQr?: (otpauthUri: string) => React.ReactNode;
+    /**
+     * Gera o secret assim que a tela abre, sem passar pelo botão "Ativar".
+     *
+     * Para enrolamento OBRIGATÓRIO — convite e `/enrolar-2fa`. Quem chega ali
+     * não está escolhendo ligar o 2FA: veio redirecionado no meio do fluxo, com
+     * um passe de 10 minutos, e a conta não abre sessão sem concluir. Perguntar
+     * "quer ativar?" nesse ponto é uma pergunta sem resposta alternativa — e o
+     * que acontecia na prática era a pessoa parar numa tela que parecia o fim
+     * do caminho, sem QR nenhum.
+     *
+     * Fica `false` por padrão para não mudar o comportamento de quem use este
+     * componente numa tela de configurações, onde ativar é de fato opcional.
+     */
+    autoIniciar?: boolean;
 }
 
 /** Tela de ativação de 2FA. Componente de referência para apps clientes. */
-export function TwoFactorSetup({ renderQr }: Props) {
+export function TwoFactorSetup({ renderQr, autoIniciar = false }: Props) {
     const { etapa, dadosSetup, backupCodes, status, erro, carregando, carregarStatus, iniciar, confirmar } = useTwoFactor();
     const [codigo, setCodigo] = useState('');
     const [copiado, setCopiado] = useState(false);
+    const [autoTentado, setAutoTentado] = useState(false);
 
     useEffect(() => { void carregarStatus(); }, [carregarStatus]);
+
+    // Uma vez só: `iniciar()` descarta o secret anterior a cada chamada (é o
+    // botão "gerar outro QR"), então repetir aqui trocaria o código embaixo de
+    // quem já estivesse escaneando.
+    useEffect(() => {
+        if (!autoIniciar || autoTentado) return;
+        if (status === null) return;          // espera o status chegar
+        if (status.ativo) return;             // já ativo: nada a enrolar
+        setAutoTentado(true);
+        void iniciar();
+    }, [autoIniciar, autoTentado, status, iniciar]);
 
     if (etapa === 'ativo' && backupCodes) {
         return (
@@ -103,6 +129,21 @@ export function TwoFactorSetup({ renderQr }: Props) {
         );
     }
 
+    // Enrolamento obrigatório em curso: nada a perguntar, só esperar o secret.
+    // Se der erro, o botão vira "Tentar de novo" — antes a falha aparecia ao
+    // lado de um "Ativar" que dava a entender que nada tinha sido tentado.
+    if (autoIniciar && !erro) {
+        return (
+            <div className="max-w-md space-y-4">
+                <h2 className="text-xl font-semibold text-foreground">Gerando o seu código…</h2>
+                <p className="text-sm text-muted-foreground">
+                    Abra o aplicativo autenticador no celular. O QR aparece aqui em instantes.
+                </p>
+                <div className="mx-auto h-[220px] w-[220px] animate-pulse rounded-lg bg-muted" />
+            </div>
+        );
+    }
+
     return (
         <div className="max-w-md space-y-4">
             <h2 className="text-xl font-semibold text-foreground">Verificação em duas etapas</h2>
@@ -115,7 +156,7 @@ export function TwoFactorSetup({ renderQr }: Props) {
                 disabled={carregando}
                 className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-70"
             >
-                {carregando ? 'Gerando...' : 'Ativar'}
+                {carregando ? 'Gerando...' : erro ? 'Tentar de novo' : 'Ativar'}
             </button>
         </div>
     );

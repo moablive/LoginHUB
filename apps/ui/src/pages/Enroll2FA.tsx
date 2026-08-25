@@ -54,14 +54,24 @@ export function Enroll2FA() {
                 autenticador — Google Authenticator, Authy, 1Password ou Microsoft Authenticator.
             </p>
 
-            <TwoFactorSetup renderQr={(uri) => <QrCode uri={uri} />} />
+            <TwoFactorSetup autoIniciar renderQr={(uri) => <QrCode uri={uri} />} />
 
             {retorno && (
-                <p className="mt-6 text-center text-sm">
-                    <a href={retorno} className="text-primary hover:underline">
-                        ← Voltar para o aplicativo
+                <div className="mt-8 border-t border-border pt-6 text-center">
+                    <a
+                        href={retorno}
+                        className="inline-block w-full rounded-md bg-primary px-4 py-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                    >
+                        Voltar para o aplicativo
                     </a>
-                </p>
+                    {/* A sessão nasce no app, não aqui: atravessar origens com o
+                        token seria pior. Dizer isso evita a impressão de que o
+                        enrolamento não terminou. */}
+                    <p className="mt-3 text-xs text-muted-foreground">
+                        Lá você entra com a senha nova e o código do autenticador.
+                        Se o código acabou de ser usado, espere o próximo (30s).
+                    </p>
+                </div>
             )}
         </Moldura>
     );

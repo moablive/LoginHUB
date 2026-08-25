@@ -125,7 +125,7 @@ export function SetupPassword() {
               Este convite exige verificação em duas etapas. Tenha o celular à mão.
             </p>
           </div>
-          <TwoFactorSetup renderQr={(uri) => <QrCode uri={uri} />} />
+          <TwoFactorSetup autoIniciar renderQr={(uri) => <QrCode uri={uri} />} />
         </div>
       </div>
     );
