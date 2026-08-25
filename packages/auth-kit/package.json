@@ -1,0 +1,19 @@
+{
+  "name": "@loginhub/auth-kit",
+  "version": "1.0.0",
+  "description": "Fonte canonica da integracao com o LoginHUB. Copiada para cada app cliente pelo scripts/sync-auth-kit.sh.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^22.13.1",
+    "typescript": "^5.7.3"
+  }
+}

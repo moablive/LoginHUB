@@ -935,9 +935,88 @@ antigo) por cima — dois `CREATE TABLE`, nenhum `ALTER` em
 
 ---
 
+## 🧰 Pacote `@loginhub/auth-kit`
+
+**Fonte canônica da integração com o hub.** Os apps clientes não instalam este
+pacote por npm: recebem uma **cópia dos arquivos** pelo `scripts/sync-auth-kit.sh`.
+Vendorizar sem sincronizar foi exatamente o que produziu três forks divergentes
+do cliente antigo — uma delas ainda chamando `/auth/change-password`, rota que
+não existe mais.
+
+```bash
+./scripts/sync-auth-kit.sh          # propaga para os 8 apps
+./scripts/sync-auth-kit.sh --check  # falha se alguma cópia divergir (use no CI)
+```
+
+### `hubAuthServer.ts` — guarda das APIs clientes
+
+> ⚠️ **Sem isto, o 2FA não protege o app cliente.**
+>
+> Todo app valida o JWT do hub com o MESMO `JWT_SECRET` — é o que faz a
+> identidade central funcionar. Mas o hub assina com essa chave **três passes de
+> etapa única**, e um `jwt.verify` cru aceita os três:
+>
+> | Token | Como se obtém | Validade |
+> |---|---|---|
+> | `action: '2fa-challenge'` | **só a senha** | 5 min |
+> | `action: '2fa-setup'` | **só a senha** | 10 min |
+> | `action: 'setup-password'` | **só o e-mail de convite** | 24 h |
+>
+> O `2fa-setup` carrega `sub`, `email`, `app_id` e `role` — indistinguível de
+> uma sessão para quem só confere assinatura. O hub recusa esses tokens nas
+> próprias rotas; a guarda leva a mesma regra para o outro lado da fronteira.
+
+```ts
+import { verifyHubToken, HubAuthError, bearerDoRequest } from './lib/hubAuthServer';
+
+const hubConfig = { secret: process.env.JWT_SECRET, appId: process.env.LOGINHUB_APP_ID };
+
+const token = bearerDoRequest(req);
+const sessao = verifyHubToken(token, hubConfig);  // recusa `action`, confere tenant
+```
+
+Falha **fechada** (500) quando falta `secret` ou `appId`: um
+`process.env.JWT_SECRET || 'fallback'` aceita token forjado por quem ler o
+código, e um `appId` ausente desliga a checagem de tenant sem ninguém perceber.
+
+### `hubAuthClient.ts` — cliente dos frontends
+
+`/auth/login` e `/auth/setup-password` respondem **200 em três desfechos** e só
+um traz sessão. Cliente que assume "200 = token na mão" grava `undefined` no
+storage — e como `!!'undefined'` é `true`, o app se dá por autenticado com lixo
+e entra num laço de 401 sem mostrar erro nenhum.
+
+O kit devolve união discriminada, então o compilador cobra os três:
+
+```ts
+const hub = createHubAuth({ baseUrl: LOGINHUB_API, appId: 3, tokenKey: 'meu_token' });
+
+const r = await hub.login(email, senha);
+if (r.status === 'desafio')  { /* pedir código → hub.twoFactor.verify(...) */ }
+if (r.status === 'enrolar')  { location.href = `${HUB_UI}/enrolar-2fa?token=${r.setupToken}`; }
+if (r.status === 'sessao')   { /* sessão já gravada */ }
+```
+
+Sem framework e sem axios — só `fetch`. O mesmo arquivo roda em Vue, React e
+página estática; o que muda é a config.
+
+### Tela de enrolamento compartilhada
+
+Um app que recebe `require2FASetup` tem um passe de 10 minutos e nenhuma tela
+para gastá-lo. Em vez de oito implementações de QR divergindo, todos apontam
+para a **mesma página do hub**:
+
+```
+https://loginhub.astralwavelabel.com/enrolar-2fa?token=<setupToken>&retorno=<url-do-app>
+```
+
+---
+
 ## 🧰 Pacote `@loginhub/api-client`
 
-SDK em TypeScript para integração rápida de aplicações clientes com a API do LoginHUB:
+SDK do **painel admin do hub** (rotas de apps e usuários, `x-api-key`). Para a
+integração de um app cliente use o [`auth-kit`](#-pacote-loginhubauth-kit) acima
+— é ele que trata os três desfechos do login e recusa os passes de etapa única.
 
 - ✅ Injeção automática de `Authorization: Bearer <token>`
 - ✅ Interceptor com **Auto-Refresh transparente em 401** (evita chamadas duplicadas simultâneas)

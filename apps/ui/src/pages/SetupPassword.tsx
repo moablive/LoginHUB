@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { authApi } from '@loginhub/api-client';
 import { ShieldCheckIcon } from '@heroicons/react/24/outline';
 import { TwoFactorSetup } from '../features/twoFactor/TwoFactorSetup';
+import { QrCode } from '../features/twoFactor/QrCode';
 import { TwoFactorChallenge } from '../features/twoFactor/TwoFactorChallenge';
 
 export function SetupPassword() {
@@ -124,7 +125,7 @@ export function SetupPassword() {
               Este convite exige verificação em duas etapas. Tenha o celular à mão.
             </p>
           </div>
-          <TwoFactorSetup />
+          <TwoFactorSetup renderQr={(uri) => <QrCode uri={uri} />} />
         </div>
       </div>
     );

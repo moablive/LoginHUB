@@ -11,6 +11,7 @@ import { Dashboard } from '../pages/Dashboard';
 import { CreateApp } from '../pages/CreateApp'; 
 import { AppUsers } from '../pages/AppUsers';
 import { SetupPassword } from '../pages/SetupPassword';
+import { Enroll2FA } from '../pages/Enroll2FA';
 
 export const SuperAdminRoute = () => {
   const isAuth = authApi.isAuthenticated();
@@ -33,6 +34,10 @@ export function AppRoutes() {
       {/* --- ROTAS PÚBLICAS --- */}
       <Route path="/login" element={<Login />} />
       <Route path="/setup-password" element={<SetupPassword />} />
+      {/* Enrolamento de 2FA compartilhado: os apps clientes mandam para cá com
+          o passe de 10 min que o login deles devolveu em `require2FASetup`.
+          Uma tela de QR só, em vez de oito divergindo. */}
+      <Route path="/enrolar-2fa" element={<Enroll2FA />} />
       
       {/* Redireciona a raiz para o dashboard */}
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
