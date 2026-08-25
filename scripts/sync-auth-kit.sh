@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Propaga a fonte canônica do auth-kit para os apps clientes.
+# Propaga a fonte canônica do auth-kit para os apps clientes e para os bots.
 #
 # O LoginHUB é a identidade central, mas cada app carrega o próprio pedaço da
 # integração — e foi assim que nasceram três forks divergentes do mesmo cliente,
@@ -23,10 +23,15 @@ BASE="$(cd "$RAIZ/../.." && pwd)"   # /mnt/nvme2tb/docker-services
 
 SERVER="$FONTE/hubAuthServer.ts"
 CLIENT="$FONTE/hubAuthClient.ts"
+BOT="$FONTE/hubAuthBot.ts"
 
 MODO="${1:-sync}"
 
-# destino_relativo_ao_BASE  <TAB>  arquivo_de_origem
+# destino_relativo_ao_BASE  |  arquivo_de_origem (server | client | bot)
+#
+# Os bots de Telegram recebem DOIS arquivos, no MESMO diretório: o `hubAuthBot`
+# é uma camada fina sobre o `hubAuthClient` e o importa por caminho relativo.
+# Separar os dois quebra a cópia.
 #
 # editores-web fica de fora desta lista: não tem build de TypeScript, então
 # recebe o JS transpilado (ver TRANSPILE, abaixo).
@@ -46,6 +51,12 @@ Sul_Alimentos/sul-alimentos/apps/api/src/lib/hubAuthServer.ts|server
 Sul_Alimentos/sul-alimentos/packages/http-client/src/hubAuthClient.ts|client
 server/dashboard/apps/api/src/lib/hubAuthServer.ts|server
 server/dashboard/packages/api-client/src/hubAuthClient.ts|client
+LifeBusinessSuit/MoneyAPP/apps/bot/src/lib/hubAuthClient.ts|client
+LifeBusinessSuit/MoneyAPP/apps/bot/src/lib/hubAuthBot.ts|bot
+LifeBusinessSuit/TodoAPP/apps/bot/src/lib/hubAuthClient.ts|client
+LifeBusinessSuit/TodoAPP/apps/bot/src/lib/hubAuthBot.ts|bot
+LifeBusinessSuit/NotesAPP/apps/bot/src/lib/hubAuthClient.ts|client
+LifeBusinessSuit/NotesAPP/apps/bot/src/lib/hubAuthBot.ts|bot
 LISTA
 )
 
@@ -68,6 +79,7 @@ for linha in $DESTINOS; do
     tipo="${linha##*|}"
     origem="$SERVER"
     [ "$tipo" = "client" ] && origem="$CLIENT"
+    [ "$tipo" = "bot" ] && origem="$BOT"
     destino="$BASE/$rel"
 
     if [ "$MODO" = "--check" ]; then

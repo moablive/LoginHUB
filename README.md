@@ -944,7 +944,7 @@ do cliente antigo — uma delas ainda chamando `/auth/change-password`, rota que
 não existe mais.
 
 ```bash
-./scripts/sync-auth-kit.sh          # propaga para os 8 apps
+./scripts/sync-auth-kit.sh          # propaga para os apps e para os bots
 ./scripts/sync-auth-kit.sh --check  # falha se alguma cópia divergir (use no CI)
 ```
 
@@ -1012,6 +1012,39 @@ if (!novo) { /* deslogar — inclui SESSAO_REVOGADA */ }
 config.headers.Authorization = `Bearer ${novo}`;
 return api.request(config);
 ```
+
+### `hubAuthBot.ts` — os bots de Telegram
+
+Camada fina sobre o `hubAuthClient`, para os bots (MoneyAPP, TodoAPP, NotesAPP).
+Existe por uma diferença que não é de estilo:
+
+| | frontend | bot |
+|---|---|---|
+| pessoas por processo | 1 | N conversas simultâneas |
+| storage da sessão | `localStorage` | **nenhum** — o token volta para quem chamou |
+
+Um storage ambiente num bot entregaria a sessão de quem entrou por último a
+todos os outros chats. Aqui o storage não guarda nada; na prática o bot nem
+precisa do token depois: a sessão serve para descobrir de quem é a conta e
+gravar o vínculo `telegram_id → loginhub_id`, e daí em diante é o vínculo que
+autoriza.
+
+```ts
+const hub = criarHubAuthBot({ baseUrl: LOGINHUB_API, appId: 3, appLoginUrl: APP_LOGIN_URL });
+
+const r = await hub.login(email, senha);
+if (r.status === 'enrolar')  { responder(hub.linkEnrolamento()); }  // manda para o login do app
+if (r.status === 'desafio')  { guardar(r.challengeToken); /* pedir o código */ } // 5 min
+if (r.status === 'sessao')   { vincular(hub.donoDaSessao(r.session)); }
+
+// o código de 6 dígitos e o de recuperação (XXXXX-XXXXX) têm rotas diferentes
+const sessao = await hub.segundoFator(challengeToken, oQueAPessoaDigitou);
+```
+
+O desafio se resolve **no chat** (código de uso único, apagado da conversa logo
+depois), mas o enrolamento **não**: desenhar o QR no Telegram poria o secret do
+TOTP no mesmo canal por onde o bot conversa — a mesma razão pela qual ele não
+vai por e-mail. O bot manda o link da tela do hub, abaixo.
 
 ### Tela de enrolamento compartilhada
 
