@@ -23,8 +23,25 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // `injectManifest` com `injectionPoint: undefined` = nenhum precache.
+      //
+      // O padrão (`generateSW`) é Workbox precacheando o app shell. Como o hub
+      // roda `vite dev` em produção e `devOptions` está ligado, esse SW ia para
+      // o navegador de todo mundo e passava a servir index e chunks do CACHE —
+      // usuários ficavam presos numa versão antiga do painel. Foi assim que a
+      // rota `/enrolar-2fa`, já no ar, caía no `<Route path="*">` e mandava a
+      // pessoa para o login. Mesmo diagnóstico que o TodoAPP já tinha feito.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.js',
+      injectManifest: {
+        injectionPoint: undefined,
+      },
+      // Continua ligado de propósito: é assim que o SW novo (que apaga os
+      // caches) alcança quem já está com o antigo instalado.
       devOptions: {
-        enabled: true
+        enabled: true,
+        type: 'module'
       },
       manifest: {
         name: 'LoginHub',
