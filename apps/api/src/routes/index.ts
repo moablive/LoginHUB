@@ -23,6 +23,11 @@ const authRouter = Router();
 authRouter.post('/login', rateLimitLogin as any, AuthController.login);
 authRouter.post('/logout', AuthController.logout);
 authRouter.post('/refresh', AuthController.refresh);
+// Introspeccao de revogacao: o app cliente valida assinatura/action/tenant
+// localmente, mas nao enxerga o piso de sessao (mora no banco do hub). GET
+// porque e leitura pura e cacheavel; autentica com o proprio token, entao
+// ninguem varre o piso de terceiros.
+authRouter.get('/session-floor', AuthController.pisoDeSessao);
 // /change-password saiu de novo: como alias de `setupPassword` ele só produzia
 // 400 (o cliente antigo manda `Authorization` + `{ novaSenha }`, e aqui se exige
 // `{ token, novaSenha }`). Senha se define pelo magic link, e ponto.

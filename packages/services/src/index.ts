@@ -370,6 +370,43 @@ export class AuthService {
         if (!token) return;
     }
 
+    /**
+     * Piso de sessão de uma conta — para os apps clientes enxergarem revogação.
+     *
+     * O app cliente valida assinatura, `action` e tenant sozinho, com o
+     * `hubAuthServer`, sem tocar a rede. O que ele NÃO tem como saber é que a
+     * ativação do 2FA (ou um reset administrativo) carimbou um instante a partir
+     * do qual só valem tokens novos: esse carimbo mora no banco do hub.
+     *
+     * Sem esta rota, um token emitido antes do corte seguia aceito pelos apps
+     * até expirar — 24 h de janela — mesmo com o hub já o recusando.
+     *
+     * Autentica com o PRÓPRIO token em questão: o `sub` sai de dentro dele, e
+     * por isso ninguém consegue varrer o piso de terceiros. A assinatura é
+     * conferida, mas expiração e piso NÃO são — a pergunta aqui é justamente
+     * "este token ainda vale?", e responder 401 seria circular.
+     */
+    public async pisoDeSessao(token: string): Promise<{ sub: string; piso: string | null }> {
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) throw new Error('CONFIG_AUSENTE');
+
+        let decoded: JWTPayload;
+        try {
+            decoded = jwt.verify(token, jwtSecret, { ignoreExpiration: true }) as JWTPayload;
+        } catch {
+            throw new Error('TOKEN_INVALIDO');
+        }
+        if (!decoded.sub) throw new Error('TOKEN_INVALIDO');
+
+        const rows = await db.select({ sessoesValidasDesde: usuarios2fa.sessoesValidasDesde })
+            .from(usuarios2fa)
+            .where(eq(usuarios2fa.usuarioId, Number(decoded.sub)))
+            .limit(1);
+
+        const piso = rows[0]?.sessoesValidasDesde ?? null;
+        return { sub: String(decoded.sub), piso: piso ? piso.toISOString() : null };
+    }
+
     public async refreshToken(oldToken: string): Promise<LoginResponseDTO> {
         const jwtSecret = process.env.JWT_SECRET;
         if (!jwtSecret) {

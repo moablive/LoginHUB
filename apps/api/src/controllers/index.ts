@@ -54,6 +54,25 @@ export class AuthController {
         return res.status(200).json({ message: 'Logout realizado.', action: 'CLEAR_LOCAL_STORAGE' });
     }
 
+    /**
+     * Piso de sessao desta conta, para o app cliente enxergar revogacao.
+     *
+     * Responde 200 mesmo para token expirado: a pergunta e "este ainda vale?", e
+     * devolver 401 aqui seria circular. Quem decide e quem chamou, comparando o
+     * `iat` do token com o piso.
+     */
+    static async pisoDeSessao(req: Request, res: Response) {
+        const parts = (req.headers.authorization ?? '').split(' ');
+        if (parts.length !== 2 || !parts[1]) {
+            return res.status(401).json({ error: 'TOKEN_AUSENTE', message: 'Token nao fornecido.' });
+        }
+        try {
+            return res.status(200).json(await authService.pisoDeSessao(parts[1]));
+        } catch {
+            return res.status(401).json({ error: 'TOKEN_INVALIDO', message: 'Token invalido.' });
+        }
+    }
+
     static async refresh(req: Request, res: Response) {
         const authHeader = req.headers.authorization;
         if (!authHeader) {

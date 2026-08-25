@@ -176,6 +176,102 @@ export function createHubGuard(config: HubGuardConfig) {
     };
 }
 
+// ==========================================
+// REVOGAÇÃO DE SESSÃO
+// ==========================================
+
+/**
+ * Piso de sessão: o instante a partir do qual só valem tokens novos.
+ *
+ * Ativar o 2FA — e o reset administrativo — carimba `sessoes_validas_desde` no
+ * banco do hub, e o hub passa a recusar JWT com `iat` anterior. O app cliente
+ * não tinha como enxergar isso: a informação está do outro lado da fronteira, e
+ * `verifyHubToken` é local de propósito (sem rede, sem latência por requisição).
+ *
+ * Resultado: um token emitido antes do corte seguia valendo aqui até expirar —
+ * até 24 h de janela em que o hub já dizia não e o app dizia sim.
+ *
+ * Este verificador fecha a janela sem pagar uma ida à rede por requisição: o
+ * piso muda raríssimo (ativação de 2FA, reset), então um cache curto por usuário
+ * derruba o custo a praticamente zero mantendo a janela de erro no tamanho do
+ * TTL.
+ *
+ * FALHA ABERTA de propósito: se o hub não responder, a sessão é aceita. Um
+ * incidente de rede no hub derrubaria TODOS os apps de uma vez se fosse o
+ * contrário — e a assinatura, o `action` e o tenant continuam conferidos
+ * localmente. Trocar isso por falha fechada é decisão de operação, não default.
+ */
+export interface RevogacaoConfig {
+    /** Base da API do hub, ex.: `http://server_loginhub_backend:3000/api`. */
+    baseUrl: string;
+    /** Quanto tempo confiar no piso já conhecido. Padrão: 60 s. */
+    ttlMs?: number;
+}
+
+interface PisoCacheado {
+    piso: number | null;
+    expiraEm: number;
+}
+
+export function criarVerificadorDeRevogacao(config: RevogacaoConfig) {
+    const base = (config.baseUrl ?? '').replace(/\/+$/, '');
+    const ttl = config.ttlMs ?? 60_000;
+    const cache = new Map<string, PisoCacheado>();
+    /** Consultas em voo por usuário — evita N chamadas para a mesma resposta. */
+    const emVoo = new Map<string, Promise<number | null>>();
+
+    async function buscarPiso(token: string, sub: string): Promise<number | null> {
+        const agora = Date.now();
+        const guardado = cache.get(sub);
+        if (guardado && guardado.expiraEm > agora) return guardado.piso;
+
+        const jaEmVoo = emVoo.get(sub);
+        if (jaEmVoo) return jaEmVoo;
+
+        const promessa = (async () => {
+            try {
+                const res = await fetch(`${base}/auth/session-floor`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (!res.ok) return null;
+                const corpo = (await res.json()) as { piso?: string | null };
+                const piso = corpo.piso ? Math.floor(new Date(corpo.piso).getTime() / 1000) : null;
+                cache.set(sub, { piso, expiraEm: Date.now() + ttl });
+                return piso;
+            } catch {
+                // Falha aberta — ver o comentário acima.
+                return null;
+            } finally {
+                emVoo.delete(sub);
+            }
+        })();
+
+        emVoo.set(sub, promessa);
+        return promessa;
+    }
+
+    return {
+        /**
+         * `true` se a sessão foi revogada depois de emitida.
+         *
+         * Compara em SEGUNDOS: o `iat` do JWT é truncado para segundo, e sem
+         * truncar os dois lados um token emitido no mesmo segundo do corte cairia
+         * como anterior a ele.
+         */
+        async revogada(token: string, sessao: HubSession): Promise<boolean> {
+            if (!sessao.sub || !sessao.iat) return false;
+            const piso = await buscarPiso(token, String(sessao.sub));
+            return piso !== null && sessao.iat < piso;
+        },
+
+        /** Esquece o piso guardado — use depois de ativar 2FA no próprio app. */
+        invalidarCache(sub?: string | number) {
+            if (sub === undefined) cache.clear();
+            else cache.delete(String(sub));
+        },
+    };
+}
+
 /**
  * LIMITAÇÃO CONHECIDA — revogação de sessão.
  *
@@ -186,5 +282,9 @@ export function createHubGuard(config: HubGuardConfig) {
  *
  * Consequência: um token emitido antes do corte continua valendo aqui até
  * expirar (24 h no máximo, sem renovação — o `/auth/refresh` do hub recusa).
- * Fechar isso exige uma rota de introspecção no hub; até lá, a janela é essa.
+ *
+ * RESOLVIDO por `criarVerificadorDeRevogacao` acima, que consulta
+ * `GET /auth/session-floor` no hub com cache curto. A guarda local segue sem
+ * rede; só o piso é buscado, e uma vez por TTL por usuário. Quem não ligar o
+ * verificador continua com a janela descrita acima.
  */
