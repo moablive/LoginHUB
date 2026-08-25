@@ -809,12 +809,18 @@ export class UserService {
                 // Quem manda `emailHtml` continua mandando (é o caso da UI, que
                 // renderiza os templates React dela). Sem isso, o convite usa o
                 // template padrão daqui — antes o e-mail simplesmente não saía.
+                // Sem `platform_url`, o botão aponta para o PRÓPRIO hub: a tela
+                // `/setup-password` dele serve qualquer tenant, e é a única que
+                // alguns apps têm (o Editores-Web é um proxy de VNC, não hospeda
+                // formulário de senha nenhum). Antes, esses convites simplesmente
+                // não saíam.
+                const destino = app?.platformUrl || process.env.UI_PUBLIC_URL || '';
                 const html = data.emailHtml
-                    || (app?.platformUrl
+                    || (destino
                         ? buildInviteEmail({
                             appName,
-                            platformUrl: app.platformUrl,
-                            appLogo: app.logo,
+                            platformUrl: destino,
+                            appLogo: app?.logo ?? null,
                             nome: data.nome,
                         })
                         : null);

@@ -9,7 +9,12 @@ interface ResetPasswordEmailProps {
 }
 
 export const ResetPasswordEmail: React.FC<ResetPasswordEmailProps> = ({ email, magicLinkToken, appName, loginUrl, appLogo }) => {
-  const finalLoginUrl = magicLinkToken ? `${loginUrl || 'http://localhost:3006'}/setup-password?token=${magicLinkToken}` : loginUrl;
+  // Sem `platform_url` do app, o link aponta para o PRÓPRIO hub — que é a
+  // origem onde este template está sendo renderizado e tem `/setup-password`
+  // funcionando para qualquer tenant. O fallback anterior era
+  // `http://localhost:3006`, endereço que não resolve na caixa de ninguém.
+  const base = loginUrl || (typeof window !== 'undefined' ? window.location.origin : '');
+  const finalLoginUrl = magicLinkToken ? `${base}/setup-password?token=${magicLinkToken}` : loginUrl;
 
   return (
     <div style={{ fontFamily: 'sans-serif', padding: '20px', color: '#333' }}>
