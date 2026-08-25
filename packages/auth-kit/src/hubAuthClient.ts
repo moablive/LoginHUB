@@ -159,6 +159,9 @@ export function createHubAuth(config: HubAuthConfig) {
     const USER_KEY = config.userKey ?? 'awl_user';
     const APP_KEY = config.appKey ?? 'awl_app';
 
+    /** Renovação em voo, compartilhada por todos os chamadores. Ver `refresh`. */
+    let refreshEmVoo: Promise<string | null> | null = null;
+
     async function chamar<T>(rota: string, opcoes: { body?: unknown; token?: string; metodo?: string } = {}): Promise<T> {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (textoUtil(opcoes.token)) headers.Authorization = `Bearer ${opcoes.token}`;
@@ -299,19 +302,47 @@ export function createHubAuth(config: HubAuthConfig) {
 
         /**
          * Renova o JWT (aceita token recém-expirado, grace de 7 dias).
-         * `null` quando não deu — quem chama deve deslogar.
+         *
+         * **Single-flight**: chamadas concorrentes compartilham a MESMA
+         * requisição em voo. É o caso normal num interceptor — várias
+         * requisições caem em 401 juntas quando a sessão vence, e sem isso cada
+         * uma dispararia um refresh, gastando N requisições para obter N tokens
+         * dos quais só o último sobrevive no storage.
+         *
+         * O coordenador vive aqui, e não em cada app, justamente para o kit ser
+         * a fonte única: antes eram três `performRefresh` + três
+         * `refreshInFlight` copiados, cada um com a sua versão do que gravar.
+         *
+         * @param tokenExplicito para quem guarda a credencial fora do storage
+         *        (interceptors que já têm o token em mãos). Se uma renovação já
+         *        estiver em voo, ela é reaproveitada e este argumento é ignorado.
+         * @returns o token novo, ou `null` — e aí quem chama deve deslogar.
          */
-        async refresh(): Promise<string | null> {
-            const atual = getToken();
-            if (!atual) return null;
-            try {
-                const data = await chamar<HubSessionData>('/auth/refresh', { token: atual });
-                if (!textoUtil(data.token)) return null;
-                store.set(TOKEN_KEY, data.token);
-                return data.token;
-            } catch {
-                return null;
-            }
+        refresh(tokenExplicito?: string): Promise<string | null> {
+            if (refreshEmVoo) return refreshEmVoo;
+
+            const atual = textoUtil(tokenExplicito) ? tokenExplicito : getToken();
+            if (!atual) return Promise.resolve(null);
+
+            refreshEmVoo = (async () => {
+                try {
+                    const data = await chamar<HubSessionData>('/auth/refresh', { token: atual });
+                    if (!textoUtil(data.token)) return null;
+                    // Sessão inteira, não só o token: o hub devolve `usuario` e
+                    // `app` atualizados aqui, e é a única oportunidade de
+                    // perceber, por exemplo, uma troca de role.
+                    salvarSessao(data);
+                    return data.token;
+                } catch {
+                    // Inclui SESSAO_REVOGADA (2FA ativado ou reset administrativo
+                    // cortou as sessões anteriores). Não há o que renovar.
+                    return null;
+                } finally {
+                    refreshEmVoo = null;
+                }
+            })();
+
+            return refreshEmVoo;
         },
 
         logout(): void {

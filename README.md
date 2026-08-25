@@ -1000,6 +1000,19 @@ if (r.status === 'sessao')   { /* sessão já gravada */ }
 Sem framework e sem axios — só `fetch`. O mesmo arquivo roda em Vue, React e
 página estática; o que muda é a config.
 
+O `refresh` também é do kit, com **single-flight**: quando a sessão vence,
+várias requisições caem em 401 juntas, e sem coordenação cada uma dispararia a
+própria renovação. O coordenador mora no kit — antes eram três `performRefresh`
+copiados, cada um com a sua versão do que gravar no storage.
+
+```ts
+// dentro do interceptor de 401, com o axios local reenviando a requisição
+const novo = await hub.refresh();          // ou hub.refresh(tokenExplicito)
+if (!novo) { /* deslogar — inclui SESSAO_REVOGADA */ }
+config.headers.Authorization = `Bearer ${novo}`;
+return api.request(config);
+```
+
 ### Tela de enrolamento compartilhada
 
 Um app que recebe `require2FASetup` tem um passe de 10 minutos e nenhuma tela
