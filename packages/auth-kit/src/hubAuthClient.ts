@@ -153,7 +153,11 @@ const textoUtil = (v: unknown): v is string => typeof v === 'string' && v.length
 // ==========================================
 
 export function createHubAuth(config: HubAuthConfig) {
-    const base = config.baseUrl.replace(/\/+$/, '');
+    // Tolerante na CONSTRUCAO, rigoroso no USO. Um `baseUrl` ausente (build sem
+    // a variavel de ambiente) nao pode derrubar a carga do modulo: quem importa
+    // este arquivo costuma faze-lo no topo de um pacote inteiro, e um throw aqui
+    // apaga o app antes da primeira tela. O erro sai no `chamar`, com codigo.
+    const base = (config.baseUrl ?? '').replace(/\/+$/, '');
     const store = config.storage ?? storagePadrao();
     const TOKEN_KEY = config.tokenKey ?? 'awl_token';
     const USER_KEY = config.userKey ?? 'awl_user';
@@ -163,6 +167,14 @@ export function createHubAuth(config: HubAuthConfig) {
     let refreshEmVoo: Promise<string | null> | null = null;
 
     async function chamar<T>(rota: string, opcoes: { body?: unknown; token?: string; metodo?: string } = {}): Promise<T> {
+        if (!base) {
+            throw new HubApiError(
+                500,
+                'CONFIG_AUSENTE',
+                'A URL da API do LoginHUB nao esta configurada neste build.',
+            );
+        }
+
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (textoUtil(opcoes.token)) headers.Authorization = `Bearer ${opcoes.token}`;
 
