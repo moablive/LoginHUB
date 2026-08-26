@@ -24,6 +24,7 @@ import { StatusButton } from '../components/modals/StatusButton';
 import { EditAppModal } from '../components/modals/EditModals/EditAppModal';
 import { AlertModal } from '../components/modals/AlertModal/AlertModal';
 import { IntegrationBadge } from '../components/Integration/IntegrationBadge';
+import { AppLinkBadge } from '../components/Integration/AppLinkBadge';
 
 export const Dashboard = () => {
   const navigate = useNavigate();
@@ -246,9 +247,10 @@ export const Dashboard = () => {
                           </div>
                         )}
                         <div className="ml-4">
-                          <div className="text-base font-semibold text-foreground group-hover:text-primary transition-colors flex items-center gap-2">
+                          <div className="text-base font-semibold text-foreground group-hover:text-primary transition-colors flex flex-wrap items-center gap-2">
                             {app.nome}
                             <IntegrationBadge appId={app.id} />
+                            <AppLinkBadge appId={app.id} />
                           </div>
                           <div className="text-sm text-muted-foreground">{app.email}</div>
                         </div>

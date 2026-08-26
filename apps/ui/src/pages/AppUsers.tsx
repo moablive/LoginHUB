@@ -28,8 +28,9 @@ import { CreateUserModal } from '../components/modals/CreateUserModal/CreateUser
 import { AlertModal } from '../components/modals/AlertModal/AlertModal';
 import { EditUserModal } from '../components/modals/EditModals/EditUserModal';
 import { ConfirmModal } from '../components/modals/ConfirmModal/ConfirmModal';
+import { AppLinkBadge } from '../components/Integration/AppLinkBadge';
 import { IntegrationLink } from '../components/Integration/IntegrationLink';
-import { getAppIntegration } from '../config/integrations';
+import { getAppIntegration, hasAppLinks } from '../config/integrations';
 
 export const AppUsers = () => {
   const { id: appId } = useParams<{ id: string }>(); 
@@ -260,6 +261,16 @@ export const AppUsers = () => {
       {getAppIntegration(appId) && (
         <div className="max-w-7xl mx-auto -mt-2">
           <IntegrationLink appId={appId} appName={app?.nome} />
+        </div>
+      )}
+
+      {/* Vinculo APP-A-APP: este app le dados de outro (ou e lido por outro),
+          direto pela rede interna. Diferente do IntegrationLink acima, que e o
+          vinculo app<->hub. */}
+      {hasAppLinks(appId) && (
+        <div className="max-w-7xl mx-auto -mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span className="font-medium">Integra com outros apps:</span>
+          <AppLinkBadge appId={appId} />
         </div>
       )}
 
