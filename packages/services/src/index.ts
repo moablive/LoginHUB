@@ -216,7 +216,7 @@ export class AuthService {
         app_nome: string;
         app_status: string | null;
         role_nome: string | null;
-    }): Promise<LoginResponseDTO> {
+    }, ttlSegundos: number = 86400): Promise<LoginResponseDTO> {
         db.update(usuarios)
           .set({ ultimoAcesso: new Date() })
           .where(eq(usuarios.id, user.id))
@@ -236,11 +236,11 @@ export class AuthService {
             role: user.role_nome || 'user'
         };
 
-        const token = jwt.sign(payload, jwtSecret, { expiresIn: '24h' });
+        const token = jwt.sign(payload, jwtSecret, { expiresIn: ttlSegundos });
 
         return {
             token,
-            expiresIn: 86400,
+            expiresIn: ttlSegundos,
             usuario: {
                 id: user.id.toString(),
                 nome: user.nome,
@@ -307,6 +307,57 @@ export class AuthService {
         if (user.status !== 'ativo') throw new Error('USUARIO_BLOQUEADO');
 
         return this.emitirSessao(user);
+    }
+
+    /**
+     * Sessao DELEGADA para um servico confiavel (ex.: o bot de Telegram do app).
+     *
+     * O bot autenticou o usuario no hub UMA vez, no vinculo, e desde entao age
+     * em nome dele pela ligacao `telegram_id -> loginhub_id` guardada no proprio
+     * app. Esta rota troca essa confianca por um JWT de usuario CURTO e NORMAL —
+     * que o app cliente valida pela guarda de sempre (assinatura, tenant, piso de
+     * revogacao) — no lugar do `x-user-id` confiado cego. Fecha a delegacao cega
+     * sem o bot guardar credencial (ele nao pode: um processo atende N chats).
+     *
+     * Exige 2FA ATIVO: sessao so nasce apos o segundo fator, e delegar para uma
+     * conta sem enrolamento furaria a regra de 2FA obrigatorio.
+     */
+    public async emitirSessaoDelegada(
+        usuarioId: string,
+        opts: { ttlSegundos?: number; appsPermitidos?: number[] } = {},
+    ): Promise<LoginResponseDTO> {
+        const linhas = await db.select({
+            id: usuarios.id,
+            nome: usuarios.nome,
+            email: usuarios.email,
+            app_id: usuarios.appId,
+            app_nome: aplicativos.nome,
+            app_status: aplicativos.status,
+            status: usuarios.status,
+            role_nome: niveisAcesso.nome,
+        })
+        .from(usuarios)
+        .innerJoin(aplicativos, eq(usuarios.appId, aplicativos.id))
+        .innerJoin(niveisAcesso, eq(usuarios.nivelAcessoId, niveisAcesso.id))
+        .where(eq(usuarios.id, Number(usuarioId)))
+        .limit(1);
+
+        const user = linhas[0];
+        if (!user) throw new Error('USUARIO_INVALIDO');
+        if (user.app_status !== 'ativo') throw new Error('APP_BLOQUEADO');
+        if (user.status !== 'ativo') throw new Error('USUARIO_BLOQUEADO');
+
+        // A chave de delegacao pode ser restrita a certos apps: se vazar, so
+        // serve para o app do bot, nao para o ecossistema inteiro.
+        if (opts.appsPermitidos && opts.appsPermitidos.length > 0) {
+            const appId = user.app_id ?? 0;
+            if (!opts.appsPermitidos.includes(appId)) throw new Error('APP_NAO_PERMITIDO');
+        }
+
+        // 2FA obrigatorio: nao delega sessao a conta sem o segundo fator ativo.
+        if (!(await twoFactorService.estaAtivo(String(user.id)))) throw new Error('DOIS_FATORES_AUSENTE');
+
+        return this.emitirSessao(user, opts.ttlSegundos ?? 600);
     }
 
     /**

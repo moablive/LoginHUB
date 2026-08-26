@@ -7,6 +7,7 @@ import {
 } from '../controllers';
 import {
   adminMiddleware,
+  delegationMiddleware,
   authMiddleware,
   authMiddlewareEnrolamento,
   rateLimitLogin,
@@ -32,6 +33,10 @@ authRouter.get('/session-floor', AuthController.pisoDeSessao);
 // 400 (o cliente antigo manda `Authorization` + `{ novaSenha }`, e aqui se exige
 // `{ token, novaSenha }`). Senha se define pelo magic link, e ponto.
 authRouter.post('/setup-password', AuthController.setupPassword as any);
+// Fase 2: sessao delegada. O servico (bot) apresenta HUB_DELEGATION_KEY via
+// x-service-key e recebe um JWT de usuario curto para repassar ao app, no
+// lugar do x-user-id confiado cego. Desligada se a chave nao estiver setada.
+authRouter.post('/service/delegate', delegationMiddleware as any, AuthController.delegate as any);
 
 // -- 2FA (TOTP)
 //

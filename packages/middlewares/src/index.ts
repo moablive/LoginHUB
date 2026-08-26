@@ -35,6 +35,39 @@ export const adminMiddleware: RequestHandler = (req, res, next) => {
 };
 
 // ==========================================
+// 1b. DELEGATION MIDDLEWARE (fase 2 — sessao delegada p/ o bot)
+// ==========================================
+/**
+ * Guarda de `/auth/service/delegate`: o servico (bot) apresenta uma chave
+ * DEDICADA (`x-service-key: HUB_DELEGATION_KEY`) e recebe um JWT de usuario
+ * curto. Chave separada da MASTER e da BOT_SERVICE_KEY compartilhada, para o
+ * estrago de um vazamento nao escalar para o ecossistema.
+ */
+export const delegationMiddleware: RequestHandler = (req, res, next) => {
+    const validKey = process.env.HUB_DELEGATION_KEY;
+    // Sem a chave configurada a rota fica DESLIGADA: publicar o codigo nao abre
+    // uma porta nova sozinho — o dono liga a fase 2 setando a chave.
+    if (!validKey) {
+        return res.status(503).json({ error: 'DELEGACAO_DESLIGADA', message: 'Emissao delegada nao configurada.' });
+    }
+    // Borda publica: no LoginHub o tunel Cloudflare resolve o backend direto e
+    // carimba cf-ray/cf-connecting-ip; o bot chama por dentro da rede docker, sem
+    // eles. TRUST_EDGE_DELEGATION=1 desliga a checagem (topologia atipica).
+    const trustEdge = /^(1|true|yes|on)$/i.test(String(process.env.TRUST_EDGE_DELEGATION ?? ''));
+    if (!trustEdge && (req.headers['cf-ray'] !== undefined || req.headers['cf-connecting-ip'] !== undefined)) {
+        console.warn(`[Delegation] borda publica recusada. IP: ${req.ip}`);
+        return res.status(403).json({ error: 'ACESSO_PROIBIDO' });
+    }
+    const headerValue = req.headers['x-service-key'];
+    const key = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+    if (!key || key !== validKey) {
+        console.warn(`[Delegation] chave invalida. IP: ${req.ip}`);
+        return res.status(403).json({ error: 'ACESSO_PROIBIDO', message: 'Credencial de servico invalida.' });
+    }
+    return next();
+};
+
+// ==========================================
 // 2. AUTH MIDDLEWARE
 // ==========================================
 /**

@@ -106,6 +106,37 @@ export class AuthController {
         }
     }
 
+    /**
+     * Emite um JWT de usuario CURTO para um servico confiavel (o bot), no lugar
+     * do `x-user-id` confiado cego. Protegida pelo `delegationMiddleware`.
+     */
+    static async delegate(req: Request, res: Response) {
+        const body = (req.body ?? {}) as { userId?: unknown; user_id?: unknown };
+        const userId = String(body.userId ?? body.user_id ?? '').trim();
+        if (!userId || isNaN(Number(userId))) {
+            return res.status(400).json({ error: 'DADOS_INCOMPLETOS', message: 'userId obrigatorio.' });
+        }
+        const appsPermitidos = String(process.env.HUB_DELEGATION_ALLOWED_APPS ?? '')
+            .split(',').map((v) => Number(v.trim())).filter((n) => Number.isInteger(n) && n > 0);
+        const ttl = Number(process.env.HUB_DELEGATION_TTL);
+        const opts: { ttlSegundos?: number; appsPermitidos?: number[] } = { appsPermitidos };
+        if (Number.isFinite(ttl) && ttl > 0) opts.ttlSegundos = ttl;
+        try {
+            const result = await authService.emitirSessaoDelegada(userId, opts);
+            return res.status(200).json(result);
+        } catch (err: unknown) {
+            const e = err as Error;
+            switch (e.message) {
+                case 'USUARIO_INVALIDO': return res.status(404).json({ error: 'USUARIO_INVALIDO', message: 'Usuario nao encontrado.' });
+                case 'USUARIO_BLOQUEADO': return res.status(403).json({ error: 'USUARIO_BLOQUEADO', message: 'Usuario desativado.' });
+                case 'APP_BLOQUEADO': return res.status(403).json({ error: 'APP_BLOQUEADO', message: 'App inativo.' });
+                case 'APP_NAO_PERMITIDO': return res.status(403).json({ error: 'APP_NAO_PERMITIDO', message: 'A chave de delegacao nao serve para o app deste usuario.' });
+                case 'DOIS_FATORES_AUSENTE': return res.status(403).json({ error: 'DOIS_FATORES_AUSENTE', message: 'Conta sem 2FA ativo.' });
+                default: console.error('[AuthController] delegate:', e); return res.status(500).json({ error: 'ERRO_INTERNO', message: 'Falha ao emitir sessao delegada.' });
+            }
+        }
+    }
+
     // changePassword removido — troca de senha agora é feita exclusivamente via magic link (setup-password)
 
     static async setupPassword(req: Request, res: Response) {
