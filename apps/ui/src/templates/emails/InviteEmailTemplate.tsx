@@ -10,7 +10,12 @@ interface InviteEmailProps {
 }
 
 export const InviteEmailTemplate: React.FC<InviteEmailProps> = ({ email, magicLinkToken, appName, loginUrl, botUrl, appLogo }) => {
-  const finalLoginUrl = magicLinkToken ? `${loginUrl || 'http://localhost:3006'}/setup-password?token=${magicLinkToken}` : loginUrl;
+  // `platform_url` com barra final produzia `//setup-password`, e o Vue Router
+  // dos apps NAO casa esse caminho: o nginx devolve o SPA (200, parece certo),
+  // nenhuma rota bate, o guard manda para /login e a pessoa ve a tela de login
+  // em vez do formulario de senha. Metade dos apps tem a barra cadastrada.
+  const base = (loginUrl || 'http://localhost:3006').replace(/\/+$/, '');
+  const finalLoginUrl = magicLinkToken ? `${base}/setup-password?token=${magicLinkToken}` : loginUrl;
 
   return (
     <div style={{ fontFamily: 'sans-serif', padding: '20px', color: '#333' }}>

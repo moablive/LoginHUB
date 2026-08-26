@@ -13,7 +13,10 @@ export const ResetPasswordEmail: React.FC<ResetPasswordEmailProps> = ({ email, m
   // origem onde este template está sendo renderizado e tem `/setup-password`
   // funcionando para qualquer tenant. O fallback anterior era
   // `http://localhost:3006`, endereço que não resolve na caixa de ninguém.
-  const base = loginUrl || (typeof window !== 'undefined' ? window.location.origin : '');
+  // A barra final precisa cair: `platform_url` com `/` no fim gerava
+  // `//setup-password`, caminho que o Vue Router dos apps nao casa — o SPA
+  // carrega, nenhuma rota bate e o guard manda para /login.
+  const base = (loginUrl || (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/+$/, '');
   const finalLoginUrl = magicLinkToken ? `${base}/setup-password?token=${magicLinkToken}` : loginUrl;
 
   return (

@@ -203,7 +203,7 @@ export const AppUsers = () => {
           'info',
         );
       } else if (res.magicLinkToken) {
-        const loginUrlBase = app?.platform_url || window.location.origin;
+        const loginUrlBase = (app?.platform_url || window.location.origin).replace(/\/+$/, '');
         setCredentialsAlert({
           isOpen: true,
           title: 'Acesso Redefinido (envio falhou)',
@@ -428,7 +428,7 @@ export const AppUsers = () => {
           if (emailSent) {
             showAlert('Convite Enviado', `O convite foi enviado por e-mail para ${email}.`, 'info');
           } else if (magicLinkToken) {
-            const loginUrlBase = app?.platform_url || window.location.origin;
+            const loginUrlBase = (app?.platform_url || window.location.origin).replace(/\/+$/, '');
             setCredentialsAlert({
               isOpen: true,
               title: 'Convite Gerado (envio falhou)',
