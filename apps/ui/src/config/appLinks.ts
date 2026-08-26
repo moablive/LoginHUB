@@ -79,11 +79,15 @@ export interface AppLinkView {
 export const getAppLinks = (appId?: string): AppLinkView[] => {
   if (!appId) return [];
 
+  // A API devolve `aplicativos.id` como NUMERO em runtime (o tipo App diz string,
+  // mas o backend nao converte); sem coagir, "3" === 3 e falso e o selo some.
+  const id = String(appId);
+
   return CROSS_APP_LINKS.flatMap<AppLinkView>((link) => {
-    if (link.providerId === appId) {
+    if (link.providerId === id) {
       return [{ link, side: "provider", otherId: link.consumerId, otherName: link.consumerName }];
     }
-    if (link.consumerId === appId) {
+    if (link.consumerId === id) {
       return [{ link, side: "consumer", otherId: link.providerId, otherName: link.providerName }];
     }
     return [];
