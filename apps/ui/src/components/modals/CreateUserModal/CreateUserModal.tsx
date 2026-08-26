@@ -59,6 +59,8 @@ export const CreateUserModal = ({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Opções dos campos remote-select (ex.: lista de artistas do label), por nome do campo.
+  const [remoteOptions, setRemoteOptions] = useState<Record<string, { value: string; label: string }[]>>({});
 
   const blankExtras = useMemo(
     () =>
@@ -77,6 +79,37 @@ export const CreateUserModal = ({
       setError(null);
     }
   }, [isOpen, blankExtras, defaultRole]);
+
+  // Carrega os campos remote-select quando o modal abre, com o Bearer master.
+  // Filtra itens que já têm login e mapeia para { value, label }.
+  useEffect(() => {
+    if (!isOpen || !provisioned) return;
+    const token = localStorage.getItem("awl_token");
+    for (const field of provisioned.fields) {
+      if (field.type !== "remote-select" || !field.source) continue;
+      void (async () => {
+        try {
+          const { data } = await axios.get(field.source!, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            timeout: 20000,
+          });
+          const arr: Array<Record<string, unknown>> = Array.isArray(data)
+            ? data
+            : ((data?.artists ?? data?.data ?? []) as Array<Record<string, unknown>>);
+          const opts = arr
+            .filter((it) => !field.excludeWhenField || !it[field.excludeWhenField])
+            .map((it) => ({
+              value: String(it[field.optionValue || "id"] ?? ""),
+              label: String(it[field.optionLabel || "name"] ?? it[field.optionValue || "id"] ?? ""),
+            }));
+          setRemoteOptions((prev) => ({ ...prev, [field.name]: opts }));
+        } catch (err) {
+          console.error("[CreateUserModal] falha ao carregar opções de", field.name, err);
+          setRemoteOptions((prev) => ({ ...prev, [field.name]: [] }));
+        }
+      })();
+    }
+  }, [isOpen, provisioned]);
 
   // Só o papel provisionado passa pelo endpoint do app. Os demais níveis
   // (admin, suporte...) continuam no fluxo normal do LoginHUB — sem isso não
@@ -139,9 +172,10 @@ export const CreateUserModal = ({
     }
 
     if (provisionMode) {
-      const missing = provisioned!.fields.filter(
-        (f) => f.required && !String(extraData[f.name] ?? "").trim(),
-      );
+      const missing = provisioned!.fields.filter((f) => {
+        const visivel = !f.showWhen || extraData[f.showWhen.field] === f.showWhen.equals;
+        return f.required && visivel && !String(extraData[f.name] ?? "").trim();
+      });
       if (missing.length) {
         setFieldErrors(Object.fromEntries(missing.map((f) => [f.name, "Campo obrigatório"])));
         setError(`Preencha ${missing.map((f) => f.label).join(", ")}.`);
@@ -404,40 +438,110 @@ export const CreateUserModal = ({
                   </div>
                 </div>
 
-                {/* Campos que o app exige além de nome/e-mail (CPF, comissão...) */}
-                {provisionMode && provisioned!.fields.map((field) => (
-                  <div key={field.name}>
+                {/* Campos que o app exige além de nome/e-mail (comissão, artista, módulos...) */}
+                {provisionMode && provisioned!.fields.map((field) => {
+                  // Campo condicional: só aparece quando a condição bate.
+                  if (field.showWhen && extraData[field.showWhen.field] !== field.showWhen.equals) return null;
+
+                  const setExtra = (value: string) => {
+                    setExtraData((prev) => ({ ...prev, [field.name]: value }));
+                    setFieldErrors((prev) => (prev[field.name] ? { ...prev, [field.name]: "" } : prev));
+                  };
+
+                  const labelEl = (
                     <label className="block text-sm font-medium text-gray-700">
                       {field.label}
                       {!field.required && (
                         <span className="ml-1 font-normal text-muted-foreground">(opcional)</span>
                       )}
                     </label>
-                    <div className="relative">
-                      <input
-                        type={field.type === "number" ? "number" : "text"}
-                        name={field.name}
-                        step={field.type === "number" ? "0.01" : undefined}
-                        value={extraData[field.name] ?? ""}
-                        onChange={(e) => handleExtraChange(e, field.mask)}
-                        className={`${inputClass(field.name)}${field.suffix ? " pr-9" : ""}`}
-                        placeholder={field.placeholder}
-                      />
-                      {field.suffix && (
-                        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-semibold text-muted-foreground">
-                          {field.suffix}
-                        </span>
-                      )}
+                  );
+                  const helpEl = fieldErrors[field.name] ? (
+                    <p className="mt-1 text-xs text-danger">{fieldErrors[field.name]}</p>
+                  ) : field.help ? (
+                    <p className="mt-1 text-xs text-muted-foreground">{field.help}</p>
+                  ) : null;
+
+                  if (field.type === "remote-select") {
+                    const opts = remoteOptions[field.name] ?? [];
+                    return (
+                      <div key={field.name}>
+                        {labelEl}
+                        <select
+                          name={field.name}
+                          value={extraData[field.name] ?? ""}
+                          onChange={(e) => setExtra(e.target.value)}
+                          className={`${inputClass(field.name)} bg-card text-card-foreground`}
+                        >
+                          <option value="">Selecione…</option>
+                          {opts.map((o) => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                          {field.allowNew && (
+                            <option value={field.newValue || "__new__"}>{field.newLabel || "Criar novo"}</option>
+                          )}
+                        </select>
+                        {helpEl}
+                      </div>
+                    );
+                  }
+
+                  if (field.type === "checkbox-group") {
+                    const selected = String(extraData[field.name] ?? "")
+                      .split(",")
+                      .map((v) => v.trim())
+                      .filter(Boolean);
+                    const toggle = (value: string) => {
+                      const next = selected.includes(value)
+                        ? selected.filter((v) => v !== value)
+                        : [...selected, value];
+                      setExtra(next.join(","));
+                    };
+                    return (
+                      <div key={field.name}>
+                        {labelEl}
+                        <div className="mt-1 space-y-1.5 rounded-lg border border-input p-3">
+                          {(field.options ?? []).map((o) => (
+                            <label key={o.value} className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selected.includes(o.value)}
+                                onChange={() => toggle(o.value)}
+                                className="rounded border-input"
+                              />
+                              {o.label}
+                            </label>
+                          ))}
+                        </div>
+                        {helpEl}
+                      </div>
+                    );
+                  }
+
+                  // text / number (padrão)
+                  return (
+                    <div key={field.name}>
+                      {labelEl}
+                      <div className="relative">
+                        <input
+                          type={field.type === "number" ? "number" : "text"}
+                          name={field.name}
+                          step={field.type === "number" ? "0.01" : undefined}
+                          value={extraData[field.name] ?? ""}
+                          onChange={(e) => handleExtraChange(e, field.mask)}
+                          className={`${inputClass(field.name)}${field.suffix ? " pr-9" : ""}`}
+                          placeholder={field.placeholder}
+                        />
+                        {field.suffix && (
+                          <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm font-semibold text-muted-foreground">
+                            {field.suffix}
+                          </span>
+                        )}
+                      </div>
+                      {helpEl}
                     </div>
-                    {fieldErrors[field.name] ? (
-                      <p className="mt-1 text-xs text-danger">{fieldErrors[field.name]}</p>
-                    ) : (
-                      field.help && (
-                        <p className="mt-1 text-xs text-muted-foreground">{field.help}</p>
-                      )
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Nível de Acesso</label>

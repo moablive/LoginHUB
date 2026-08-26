@@ -49,7 +49,7 @@ export const APP_INTEGRATIONS: Record<string, AppIntegration> = {
   "8": {
     apiName: "Astral Wave Label API",
     apiHost: "api.astralwavelabel.com",
-    direction: "app-to-hub",
+    direction: "two-way",
     summary:
       "A API do label administra por aqui os usuários deste app e amarra cada um ao artista correspondente na base dela.",
     capabilities: [
