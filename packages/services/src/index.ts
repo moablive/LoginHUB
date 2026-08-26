@@ -324,7 +324,7 @@ export class AuthService {
      */
     public async emitirSessaoDelegada(
         usuarioId: string,
-        opts: { ttlSegundos?: number; appsPermitidos?: number[] } = {},
+        opts: { ttlSegundos?: number; appsPermitidos?: number[]; exige2fa?: boolean } = {},
     ): Promise<LoginResponseDTO> {
         const linhas = await db.select({
             id: usuarios.id,
@@ -354,8 +354,12 @@ export class AuthService {
             if (!opts.appsPermitidos.includes(appId)) throw new Error('APP_NAO_PERMITIDO');
         }
 
-        // 2FA obrigatorio: nao delega sessao a conta sem o segundo fator ativo.
-        if (!(await twoFactorService.estaAtivo(String(user.id)))) throw new Error('DOIS_FATORES_AUSENTE');
+        // 2FA no delegado e OPT-IN (HUB_DELEGATION_REQUIRE_2FA): as contas atuais
+        // do ecossistema ainda nao enrolaram e o caminho legado nunca checou —
+        // exigir aqui de saida quebraria o bot. Ligue quando todos tiverem 2FA.
+        if (opts.exige2fa && !(await twoFactorService.estaAtivo(String(user.id)))) {
+            throw new Error('DOIS_FATORES_AUSENTE');
+        }
 
         return this.emitirSessao(user, opts.ttlSegundos ?? 600);
     }

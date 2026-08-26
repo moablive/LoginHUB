@@ -119,8 +119,9 @@ export class AuthController {
         const appsPermitidos = String(process.env.HUB_DELEGATION_ALLOWED_APPS ?? '')
             .split(',').map((v) => Number(v.trim())).filter((n) => Number.isInteger(n) && n > 0);
         const ttl = Number(process.env.HUB_DELEGATION_TTL);
-        const opts: { ttlSegundos?: number; appsPermitidos?: number[] } = { appsPermitidos };
+        const opts: { ttlSegundos?: number; appsPermitidos?: number[]; exige2fa?: boolean } = { appsPermitidos };
         if (Number.isFinite(ttl) && ttl > 0) opts.ttlSegundos = ttl;
+        if (/^(1|true|yes|on)$/i.test(String(process.env.HUB_DELEGATION_REQUIRE_2FA ?? ''))) opts.exige2fa = true;
         try {
             const result = await authService.emitirSessaoDelegada(userId, opts);
             return res.status(200).json(result);
