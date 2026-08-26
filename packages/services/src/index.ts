@@ -869,7 +869,7 @@ const normalizarBarraDupla = (html: string): string =>
 // 3. USER SERVICE
 // ==========================================
 export class UserService {
-    public async addUser(data: CreateUserDTO): Promise<{ magicLinkToken?: string; emailSent: boolean }> {
+    public async addUser(data: CreateUserDTO): Promise<{ magicLinkToken?: string; emailSent: boolean; user: { id: string; nome: string; email: string; app_id: string; role: string } }> {
         if (!data.app_id) throw Object.assign(new Error('Aplicativo é obrigatória'), { code: 'VALIDATION' });
         if (!data.email) throw Object.assign(new Error('E-mail é obrigatório'), { code: 'VALIDATION' });
 
@@ -975,7 +975,19 @@ export class UserService {
             }
 
             // Só devolve o magic link ao admin se o e-mail não saiu (fallback de emergência)
-            return { magicLinkToken: emailSent ? undefined : magicLinkToken, emailSent };
+            // `user` e ADITIVO: a UI ignora, mas apps que integram (o painel do
+            // label) precisam do id para amarrar o usuario ao registro deles.
+            return {
+                magicLinkToken: emailSent ? undefined : magicLinkToken,
+                emailSent,
+                user: {
+                    id: String(newUserId),
+                    nome: data.nome || '',
+                    email: data.email,
+                    app_id: String(data.app_id),
+                    role: roleName,
+                },
+            };
         } catch (error: any) {
             if (error.code === '23505') throw Object.assign(new Error('E-mail já está em uso neste aplicativo.'), { code: 'DUPLICATE_ENTRY' });
             if (error.code === '23503') throw Object.assign(new Error('A app informada não existe.'), { code: 'RELATION_ERROR' });

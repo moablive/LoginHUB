@@ -456,6 +456,7 @@ export class UserController {
                     : 'Usuário criado, mas o e-mail de convite não pôde ser enviado.',
                 emailSent: result.emailSent,
                 magicLinkToken: result.magicLinkToken,
+                user: result.user,
             });
         } catch (err) {
             const error = err as DbError;
