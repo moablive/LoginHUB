@@ -612,6 +612,24 @@ export class AuthService {
     }
 }
 
+/**
+ * URL base sem barra no fim.
+ *
+ * `platform_url` e `bot_url` sao BASES: quem consome sempre concatena um
+ * caminho (`/setup-password`, `/login`). Com a barra cadastrada, o resultado
+ * era `//setup-password` — que o nginx dos apps atende com 200 (devolve o SPA)
+ * mas o Vue Router NAO casa: o guard manda para /login e a pessoa ve a tela de
+ * login em vez do formulario de senha, sem erro nenhum.
+ *
+ * Metade dos apps tinha a barra cadastrada, e a diferenca era invisivel no
+ * painel. Normalizar na ESCRITA e o que impede de voltar — os `replace` nos
+ * templates e no envio do e-mail sao rede de seguranca, nao a regra.
+ */
+const urlBase = (v?: string | null): string | null => {
+    const limpo = (v ?? '').trim().replace(/\/+$/, '');
+    return limpo || null;
+};
+
 // ==========================================
 // 2. APP SERVICE
 // ==========================================
@@ -625,8 +643,8 @@ export class AppService {
                     email: data.email,
                     telefone: data.telefone || null,
                     logo: data.logo || null,
-                    botUrl: data.bot_url || null,
-                    platformUrl: data.platform_url || null,
+                    botUrl: urlBase(data.bot_url),
+                    platformUrl: urlBase(data.platform_url),
                 }).returning({ id: aplicativos.id });
 
                 const appId = appRes[0].id;
@@ -730,8 +748,8 @@ export class AppService {
             if (data.documento !== undefined) updateData.documento = data.documento;
             if (data.telefone !== undefined) updateData.telefone = data.telefone || null;
             if (data.logo !== undefined) updateData.logo = data.logo || null;
-            if (data.bot_url !== undefined) updateData.botUrl = data.bot_url || null;
-            if (data.platform_url !== undefined) updateData.platformUrl = data.platform_url || null;
+            if (data.bot_url !== undefined) updateData.botUrl = urlBase(data.bot_url);
+            if (data.platform_url !== undefined) updateData.platformUrl = urlBase(data.platform_url);
 
             if (Object.keys(updateData).length === 0) return null;
 
