@@ -8,7 +8,8 @@ import {
   TrashIcon,
   MagnifyingGlassIcon,
   PencilSquareIcon,
-  LinkIcon
+  LinkIcon,
+  PuzzlePieceIcon
 } from '@heroicons/react/24/outline';
 
 import { appApi } from '@loginhub/api-client';
@@ -16,6 +17,7 @@ import { authApi } from '@loginhub/api-client';
 import { masks } from '../utils/masks';
 import type { App } from '@loginhub/schema';
 import { getAppIntegration } from '../config/integrations';
+import { getAppLinks } from '../config/appLinks';
 
 // Componentes Shared
 import { LogoutModal } from '../components/modals/LogoutModal/LogoutModal';
@@ -122,6 +124,9 @@ export const Dashboard = () => {
   const activeApps = apps.filter(c => c.status === 'ativo').length;
   // Apps que mantêm uma API conversando com o hub (ver config/integrations.ts).
   const integratedApps = apps.filter(c => getAppIntegration(c.id)).length;
+  // Apps que aparecem dentro de outro app (ver config/appLinks.ts). Conta
+  // aplicativo, não pessoa: o vínculo em si é cadastrado usuário a usuário.
+  const linkedApps = apps.filter(c => getAppLinks(c.id).length > 0).length;
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -180,6 +185,17 @@ export const Dashboard = () => {
             <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">APIs Vinculadas</p>
             <p className="text-3xl font-bold text-foreground">{integratedApps}</p>
             <p className="text-xs text-muted-foreground">Apps que falam com o hub por trás</p>
+          </div>
+        </div>
+
+        <div className="bg-card text-card-foreground p-6 rounded-2xl shadow-sm border border-border flex items-center gap-5 transition hover:shadow-md">
+          <div className="p-4 bg-amber-500/10 rounded-xl">
+            <PuzzlePieceIcon className="h-8 w-8 text-amber-500" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Apps Integrados</p>
+            <p className="text-3xl font-bold text-foreground">{linkedApps}</p>
+            <p className="text-xs text-muted-foreground">Apps que mostram dados de outro app, por usuário</p>
           </div>
         </div>
       </div>
@@ -247,7 +263,7 @@ export const Dashboard = () => {
                           </div>
                         )}
                         <div className="ml-4">
-                          <div className="text-base font-semibold text-foreground group-hover:text-primary transition-colors flex flex-wrap items-center gap-2">
+                          <div className="text-base font-semibold text-foreground group-hover:text-primary transition-colors flex items-center gap-2">
                             {app.nome}
                             <IntegrationBadge appId={app.id} />
                             <AppLinkBadge appId={app.id} />

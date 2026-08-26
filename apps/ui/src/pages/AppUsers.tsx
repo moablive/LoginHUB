@@ -28,9 +28,10 @@ import { CreateUserModal } from '../components/modals/CreateUserModal/CreateUser
 import { AlertModal } from '../components/modals/AlertModal/AlertModal';
 import { EditUserModal } from '../components/modals/EditModals/EditUserModal';
 import { ConfirmModal } from '../components/modals/ConfirmModal/ConfirmModal';
-import { AppLinkBadge } from '../components/Integration/AppLinkBadge';
 import { IntegrationLink } from '../components/Integration/IntegrationLink';
-import { getAppIntegration, hasAppLinks } from '../config/integrations';
+import { AppLinkPanel } from '../components/Integration/AppLinkPanel';
+import { getAppIntegration } from '../config/integrations';
+import { getAppLinks } from '../config/appLinks';
 
 export const AppUsers = () => {
   const { id: appId } = useParams<{ id: string }>(); 
@@ -264,13 +265,11 @@ export const AppUsers = () => {
         </div>
       )}
 
-      {/* Vinculo APP-A-APP: este app le dados de outro (ou e lido por outro),
-          direto pela rede interna. Diferente do IntegrationLink acima, que e o
-          vinculo app<->hub. */}
-      {hasAppLinks(appId) && (
-        <div className="max-w-7xl mx-auto -mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span className="font-medium">Integra com outros apps:</span>
-          <AppLinkBadge appId={appId} />
+      {/* Vínculo com OUTRO app cliente. Aqui na tela do convite porque é onde a
+          confusão nasce: convidar não liga a pessoa ao outro app. */}
+      {getAppLinks(appId).length > 0 && (
+        <div className="max-w-7xl mx-auto -mt-2">
+          <AppLinkPanel appId={appId} />
         </div>
       )}
 

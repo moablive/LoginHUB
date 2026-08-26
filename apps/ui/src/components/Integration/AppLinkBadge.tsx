@@ -1,50 +1,59 @@
-import { ArrowLongRightIcon, ArrowLongLeftIcon } from "@heroicons/react/24/outline";
+import { ArrowLongLeftIcon, ArrowLongRightIcon } from "@heroicons/react/24/outline";
 
-import { getAppReads, getAppReadBy, type AppDataFlow } from "../../config/integrations";
+import { getAppLinks, linkBadgeLabel, linkDirectionLabel } from "../../config/appLinks";
 
 /**
- * Selo de vinculo ENTRE APPS: na lista de aplicativos, marca quais deles leem
- * dados de outro app do ecossistema (→ "le X") ou sao lidos por outro
- * (← "lido por Y").
+ * Selo de vínculo entre dois apps clientes: diz que os dados de um aparecem
+ * dentro do outro, e para que lado eles correm.
  *
- * Diferente do `IntegrationBadge` (vinculo app<->hub, violeta): aqui o hub nem
- * entra na chamada — os apps se conversam direto pela rede interna —, por isso
- * a cor (teal) e o icone (seta longa direcional) sao outros, para o admin nao
- * confundir os dois tipos de vinculo.
+ * Deliberadamente diferente do `IntegrationBadge` (violeta, ponto pulsando):
+ * aquele é vínculo do app com o hub, ligado o tempo todo. Este é âmbar e o ponto
+ * não pulsa porque o vínculo não vale para o aplicativo inteiro — vale para cada
+ * pessoa que tenha conta dos dois lados, uma a uma. Confundir os dois faria o
+ * painel prometer a usuário novo um vínculo que ele não tem.
  *
- * Detalhes no `title`: a linha da tabela vive num `overflow-x-auto` e um balao
- * posicionado seria cortado na borda.
+ * Os detalhes ficam no `title` pelo mesmo motivo do outro selo: a linha da
+ * tabela vive dentro de um `overflow-x-auto` e cortaria um balão posicionado.
  */
 interface AppLinkBadgeProps {
-  /** Id do aplicativo no hub. Sem vinculo app-a-app, nada e desenhado. */
+  /** Id do aplicativo no hub. Sem vínculo cadastrado, o selo não aparece. */
   appId?: string | undefined;
 }
 
-const chipClass =
-  "inline-flex items-center gap-1 rounded-full border border-teal-500/30 bg-teal-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-teal-700 dark:text-teal-300 cursor-help";
-
-const tooltipDe = (f: AppDataFlow) =>
-  [`${f.fromName} le ${f.toName}`, `Dado: ${f.data}`, "", f.summary].join("\n");
-
 export const AppLinkBadge = ({ appId }: AppLinkBadgeProps) => {
-  const reads = getAppReads(appId);
-  const readBy = getAppReadBy(appId);
-  if (reads.length === 0 && readBy.length === 0) return null;
+  const views = getAppLinks(appId);
+  if (!views.length) return null;
 
   return (
     <>
-      {reads.map((f) => (
-        <span key={`r-${f.toId}`} title={tooltipDe(f)} className={chipClass}>
-          <ArrowLongRightIcon className="h-3 w-3" />
-          le {f.toName}
-        </span>
-      ))}
-      {readBy.map((f) => (
-        <span key={`b-${f.fromId}`} title={tooltipDe(f)} className={chipClass}>
-          <ArrowLongLeftIcon className="h-3 w-3" />
-          lido por {f.fromName}
-        </span>
-      ))}
+      {views.map((view) => {
+        const DirectionIcon = view.side === "provider" ? ArrowLongRightIcon : ArrowLongLeftIcon;
+
+        const tooltip = [
+          `${view.link.providerName} → ${view.link.consumerName}`,
+          linkDirectionLabel(view),
+          "",
+          view.link.summary,
+          `Dados: ${view.link.data}`,
+          "",
+          `Vínculo por pessoa: ${view.link.optIn}`,
+          `Onde fica: ${view.link.ledger}`,
+          "",
+          ...view.link.capabilities.map((item) => `• ${item}`),
+        ].join("\n");
+
+        return (
+          <span
+            key={`${view.link.providerId}-${view.link.consumerId}`}
+            title={tooltip}
+            className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 cursor-help"
+          >
+            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-amber-500" />
+            <DirectionIcon className="h-3 w-3" />
+            {linkBadgeLabel(view)}
+          </span>
+        );
+      })}
     </>
   );
 };
