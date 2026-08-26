@@ -773,6 +773,25 @@ export class AppService {
     }
 }
 
+/**
+ * Ultima barreira contra `//setup-password` no link do magic link.
+ *
+ * O HTML do convite e do reset e renderizado NO NAVEGADOR do admin (a UI monta
+ * o template e manda pronto). Isso significa que uma correcao no template so
+ * vale para quem recarregou o painel — e um navegador com modulo em cache
+ * continua produzindo o link quebrado, sem ninguem perceber.
+ *
+ * A barra dupla nasce de `platform_url` cadastrada com `/` no fim. O nginx dos
+ * apps devolve o SPA em qualquer caminho (200, parece certo), mas o Vue Router
+ * NAO casa `//setup-password` com a rota `/setup-password`: o guard manda para
+ * /login e a pessoa ve a tela de login em vez do formulario de senha.
+ *
+ * Normalizar aqui fecha o caso de vez, porque o servidor e o unico ponto que
+ * nao da para servir de cache. O `[^:]` preserva o `https://` do inicio.
+ */
+const normalizarBarraDupla = (html: string): string =>
+    html.replace(/([^:])\/\/+setup-password/g, '$1/setup-password');
+
 // ==========================================
 // 3. USER SERVICE
 // ==========================================
@@ -871,7 +890,7 @@ export class UserService {
                     );
                 } else {
                     // Substitui o placeholder pelo token real antes de enviar
-                    const finalHtml = html.replace(/__MAGIC_LINK__/g, magicLinkToken);
+                    const finalHtml = normalizarBarraDupla(html.replace(/__MAGIC_LINK__/g, magicLinkToken));
 
                     emailSent = await emailService.sendEmail(
                         data.email,
@@ -1098,7 +1117,7 @@ export class UserService {
                 if (appRow.length > 0) appName = appRow[0].nome;
             }
 
-            const finalHtml = emailHtml.replace(/__MAGIC_LINK__/g, magicLinkToken);
+            const finalHtml = normalizarBarraDupla(emailHtml.replace(/__MAGIC_LINK__/g, magicLinkToken));
 
             emailSent = await emailService.sendEmail(
                 userRes[0].email,
