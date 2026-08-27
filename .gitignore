@@ -24,14 +24,13 @@ out/
 .turbo/
 
 # --- Variáveis de Ambiente (SEGURANÇA CRÍTICA) ---
+# `.env.*` no lugar da lista nominal: a lista só cobre os sufixos previstos e
+# deixa passar `.env.db` e `.env.bak.20260820-135718`, que são justamente os
+# nomes que aparecem na mão. O `!` no fim resgata o exemplo, que deve ser
+# versionado.
 .env
-.env.local
-.env.development
-.env.development.local
-.env.test
-.env.test.local
-.env.production
-.env.production.local
+.env.*
+!.env.example
 *.local
 
 # --- Logs do Sistema ---
@@ -92,3 +91,6 @@ pids/
 *.pid
 *.seed
 *.pid.lock
+
+# Worktrees descartaveis do Claude Code
+.claude/worktrees/
