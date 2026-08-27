@@ -80,13 +80,34 @@ const ASTRALWAVE_API =
 
 /** Chave = id do aplicativo no LoginHUB. */
 export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
-  // Sul Alimentos — o convite cria o vendedor; ele completa os dados pelo link.
+  // Sul Alimentos — convida vendedor (novo ou já cadastrado) e amarra o login.
+  // O admin da Sul passou a poder cadastrar o vendedor direto no app, sem
+  // convite; quando isso acontece o registro existe e só falta o acesso, então
+  // criar outro pelo convite geraria duplicata. O select resolve os dois casos.
   "2": {
     roleLabel: "Vendedor",
     roleDescription:
-      "Acessa o portal do vendedor da Sul Alimentos. CPF e telefone são informados pelo próprio vendedor ao abrir o convite.",
+      "Acessa o portal do vendedor da Sul Alimentos. Escolha um vendedor já cadastrado que ainda não tem login, ou cadastre um novo — nesse caso CPF e telefone são informados pelo próprio vendedor ao abrir o convite.",
     endpoint: `${SUL_ALIMENTOS_API}/vendedor`,
     fields: [
+      {
+        name: "sellerId",
+        label: "Vendedor",
+        type: "remote-select",
+        // `semLogin=1` devolve todos os vendedores sem login, e não os 20 mais
+        // recentes da listagem padrão — com o teto, quem foi cadastrado há mais
+        // tempo simplesmente não aparecia como opção.
+        source: `${SUL_ALIMENTOS_API}/vendedor?semLogin=1`,
+        optionValue: "id",
+        // O e-mail vem no rótulo porque o convite exige o e-mail do cadastro:
+        // é por ele que o vendedor acha o próprio registro depois de entrar.
+        optionLabel: "label",
+        allowNew: true,
+        newValue: "__new__",
+        newLabel: "+ Cadastrar novo vendedor",
+        required: true,
+        help: "Só aparecem vendedores ainda sem login. Use o e-mail que aparece ao lado do nome.",
+      },
       {
         name: "commissionRate",
         label: "Taxa de comissão",
@@ -95,15 +116,24 @@ export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
         suffix: "%",
         required: true,
         help: "Definida por você. Os dados pessoais quem informa é o vendedor.",
+        // Só no cadastro novo. Vinculando alguém que já existe, a comissão é a
+        // que está no cadastro dele — mandar o campo aqui a sobrescreveria com
+        // o valor do formulário, que é 0 por padrão.
+        showWhen: { field: "sellerId", equals: "__new__" },
       },
     ],
     // CPF e telefone não entram aqui: o vendedor preenche os próprios dados ao
     // abrir o Magic Link, na tela de definição de senha da Sul Alimentos.
-    buildPayload: (base, extra) => ({
-      name: base.nome,
-      email: base.email,
-      commissionRate: extra.commissionRate || "0",
-    }),
+    buildPayload: (base, extra) => {
+      const isNew = !extra.sellerId || extra.sellerId === "__new__";
+      return {
+        name: base.nome,
+        email: base.email,
+        ...(isNew
+          ? { commissionRate: extra.commissionRate || "0" }
+          : { sellerId: extra.sellerId }),
+      };
+    },
   },
 
   // Astral Wave Label — convida DJ (novo ou existente) e amarra ao artista.
