@@ -68,9 +68,18 @@ Sem Docker: `npm run dev` na raiz. Build: `npm run build`.
   `setup-password` (magic link), `2fa-challenge`, `2fa-setup`. O
   `authMiddleware` recusa todos por padrão; só as rotas de enrolamento abrem
   exceção para `2fa-setup`, e o `/auth/refresh` recusa qualquer um deles.
-- **2FA é obrigatório para toda conta**, sem configuração por app. Não existe
-  rota que isente — a ação administrativa é o *reset* do autenticador
-  (`POST /admin/users/:id/reset-2fa`), nunca a isenção.
+- **2FA é obrigatório para toda conta que faz login aqui**, sem configuração por
+  app. Não existe rota que isente — a ação administrativa é o *reset* do
+  autenticador (`POST /admin/users/:id/reset-2fa`), nunca a isenção.
+- **`aplicativos.usa_login_hub = false` não é isenção de 2FA — é app que não
+  autentica no hub.** Hoje só o **Cofre** (app 14): o hub emite o convite e
+  para por aí; quem entra lá usa a senha mestra do próprio cofre, que é a chave
+  de criptografia e o hub nunca vê. Essas contas **não** ganham linha em
+  `usuarios_2fa` (o "pendente" nunca resolveria) e o `login` as **recusa**
+  (`APP_NAO_AUTENTICA_NO_HUB`, 403). Recusar é mais restritivo que o
+  comportamento antigo: com `obrigatorio = false`, `estadoDoLogin` devolveria
+  `'sessao'` e a conta entraria SEM segundo fator se alguém lhe desse uma senha.
+  Ver `db/004_apps_sem_login_hub.sql`.
 - **`sessoes_validas_desde`** é o piso de validade das sessões: JWT com `iat`
   anterior é recusado no middleware **e** no refresh. Comparar sempre em
   segundos nos dois lados (o `iat` é truncado; o piso tem milissegundos).
@@ -80,6 +89,13 @@ Sem Docker: `npm run dev` na raiz. Build: `npm run build`.
   não de flag no usuário. Trocar a senha mata o link sozinho.
 - **Multi-tenant real**: o mesmo e-mail pode existir em apps diferentes; a
   unicidade é `(email, app_id)`. Login sem `app_id` desambigua pela senha.
+- **O passe `setup-password` carrega `app_id`, e um app depende disso.** O hub
+  resolve o tenant pelo `sub` e não precisaria da claim, mas o **Cofre**
+  (`server/Cofre`, app 14) aceita o magic link como autorização para criar um
+  cofre e usa `app_id` para recusar convite de outro tenant — sem ela, um
+  convite do MoneyAPP abriria um cofre. Emitida em `UserService.addUser` e em
+  `resetPassword`. Ao mexer nesses `jwt.sign`, rode
+  `docker exec server_cofre_backend node scripts/smoke.mjs`.
 - **O login master (`master@infra.local`) não tem linha em `usuarios`** e por
   isso fica fora do 2FA. É protegido só pela `MASTER_API_KEY`.
 

@@ -38,6 +38,15 @@ export class AuthController {
                     return res.status(403).json({ error: 'Acesso Suspenso', message: 'Sua app está inativa. Contate o suporte.' });
                 case 'USUARIO_BLOQUEADO':
                     return res.status(403).json({ error: 'Conta Inativa', message: 'Seu usuário foi desativado.' });
+                // App marcado com `usa_login_hub = false`: o hub só emitiu o
+                // convite. 403 e não 500 — a condição é do pedido, não uma
+                // falha do servidor, e um 500 manda o admin caçar bug que não
+                // existe. Ver db/004_apps_sem_login_hub.sql.
+                case 'APP_NAO_AUTENTICA_NO_HUB':
+                    return res.status(403).json({
+                        error: 'APP_NAO_AUTENTICA_NO_HUB',
+                        message: 'Este aplicativo nao usa o login do LoginHUB. Entre pelo proprio aplicativo.',
+                    });
                 case 'AMBIGUOUS_EMAIL':
                     return res.status(409).json({
                         error: 'AMBIGUOUS_EMAIL',
@@ -130,6 +139,7 @@ export class AuthController {
             switch (e.message) {
                 case 'USUARIO_INVALIDO': return res.status(404).json({ error: 'USUARIO_INVALIDO', message: 'Usuario nao encontrado.' });
                 case 'USUARIO_BLOQUEADO': return res.status(403).json({ error: 'USUARIO_BLOQUEADO', message: 'Usuario desativado.' });
+                case 'APP_NAO_AUTENTICA_NO_HUB': return res.status(403).json({ error: 'APP_NAO_AUTENTICA_NO_HUB', message: 'Este aplicativo nao usa o login do LoginHUB.' });
                 case 'APP_BLOQUEADO': return res.status(403).json({ error: 'APP_BLOQUEADO', message: 'App inativo.' });
                 case 'APP_NAO_PERMITIDO': return res.status(403).json({ error: 'APP_NAO_PERMITIDO', message: 'A chave de delegacao nao serve para o app deste usuario.' });
                 case 'DOIS_FATORES_AUSENTE': return res.status(403).json({ error: 'DOIS_FATORES_AUSENTE', message: 'Conta sem 2FA ativo.' });

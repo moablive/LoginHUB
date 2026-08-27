@@ -230,6 +230,12 @@ export interface App {
     bot_url?: string | null;
     platform_url?: string | null;
     dominio?: string;
+    /**
+     * `false` = o hub so EMITE CONVITE para este app; as contas dele nao
+     * autenticam aqui e nao enrolam 2FA. O painel mostra um aviso e troca a
+     * coluna "2FA" por "nao se aplica". Ver db/004_apps_sem_login_hub.sql.
+     */
+    usaLoginHub?: boolean;
     status: 'ativo' | 'inativo' | 'bloqueado' | 'ativa' | 'inativa' | 'bloqueada';
     data_cadastro?: string | Date;
     created_at?: Date;
@@ -352,6 +358,11 @@ export const aplicativos = pgTable('aplicativos', {
     botUrl: varchar('bot_url', { length: 500 }),
     platformUrl: varchar('platform_url', { length: 500 }),
     status: varchar('status', { length: 20 }).default('ativo'),
+    // FALSE = o hub so EMITE CONVITE para este app; as contas dele nao
+    // autenticam aqui. O Cofre e o caso: o magic link autoriza a criacao do
+    // cofre, e dali em diante quem autentica e a senha mestra, que e a chave de
+    // criptografia e o hub nunca ve. Ver db/004_apps_sem_login_hub.sql.
+    usaLoginHub: boolean('usa_login_hub').notNull().default(true),
     dataCadastro: timestamp('data_cadastro').defaultNow(),
     dataAtualizacao: timestamp('data_atualizacao'),
 });

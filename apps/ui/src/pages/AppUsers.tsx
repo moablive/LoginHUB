@@ -13,7 +13,8 @@ import {
   XMarkIcon,
   LockClosedIcon,
   LockOpenIcon,
-  DevicePhoneMobileIcon
+  DevicePhoneMobileIcon,
+  ShieldExclamationIcon,
 } from '@heroicons/react/24/outline';
 
 import { userApi } from '@loginhub/api-client';
@@ -257,6 +258,33 @@ export const AppUsers = () => {
         </button>
       </div>
 
+      {/* Apps que só recebem convite (usa_login_hub = false) não autenticam
+          aqui — o Cofre é o caso. Sem este aviso, a coluna "2FA" da tabela
+          abaixo sugere que o segundo fator protege o app, e não protege: a
+          pessoa nunca passa pelo login do hub, então nunca enrola. */}
+      {app && app.usaLoginHub === false && (
+        <div className="max-w-7xl mx-auto mb-4">
+          <div className="rounded-lg border border-warning/40 bg-warning/10 px-4 py-3">
+            <p className="text-sm font-semibold text-warning flex items-center gap-2">
+              <ShieldExclamationIcon className="h-5 w-5 shrink-0" />
+              O 2FA do LoginHUB não vale para este aplicativo
+            </p>
+            <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+              Aqui o hub <strong>só emite o convite</strong>. Quem entra em{' '}
+              <span className="font-medium text-foreground">{app?.nome}</span> não passa
+              pelo login do LoginHUB, então nunca chega a configurar o segundo fator —
+              por isso ele fica desligado por padrão nestas contas, em vez de mostrar um
+              &ldquo;pendente&rdquo; que nunca resolve.
+            </p>
+            <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+              A senha destas contas <strong>não abre nada aqui</strong>: o login do hub é
+              recusado para elas. A proteção do app é a senha mestra que a pessoa define
+              no próprio {app?.nome} — o hub não a conhece e não consegue recuperá-la.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Vínculo com a API do próprio app, quando existe. Aqui o convite pode não
           nascer no hub: quem cria o usuário é o backend do app. */}
       {getAppIntegration(appId) && (
@@ -345,7 +373,17 @@ export const AppUsers = () => {
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {user.dois_fatores?.ativo ? (
+                          {app?.usaLoginHub === false ? (
+                            // "Pendente" seria falso aqui: não há login no hub
+                            // para cair no enrolamento. Dizer "não se aplica" é
+                            // o estado verdadeiro.
+                            <span
+                              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border"
+                              title="Este app não autentica pelo LoginHUB — o hub só emitiu o convite."
+                            >
+                              não se aplica
+                            </span>
+                          ) : user.dois_fatores?.ativo ? (
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-success/20 text-success border border-success/30">
                               <DevicePhoneMobileIcon className="h-3 w-3 mr-1" />
                               Ativo

@@ -77,6 +77,7 @@ export class AuthService {
             app_nome: aplicativos.nome,
             app_logo: aplicativos.logo,
             app_status: aplicativos.status,
+            app_usa_login_hub: aplicativos.usaLoginHub,
             status: usuarios.status,
             role_nome: niveisAcesso.nome,
         };
@@ -154,6 +155,12 @@ export class AuthService {
         const user = matches[0];
         if (user.app_status !== 'ativo') throw new Error('APP_BLOQUEADO');
         if (user.status !== 'ativo') throw new Error('USUARIO_BLOQUEADO');
+        // App que só recebe convite não autentica aqui. Recusar é mais
+        // restritivo que o comportamento antigo, não menos: como essas contas
+        // não têm 2FA enrolado, `estadoDoLogin` devolveria 'sessao' e elas
+        // entrariam SEM segundo fator se alguém lhes desse uma senha (um reset
+        // administrativo basta). Ver db/004_apps_sem_login_hub.sql.
+        if (user.app_usa_login_hub === false) throw new Error('APP_NAO_AUTENTICA_NO_HUB');
 
         // Senha conferiu — mas isso pode não bastar.
         const estado = await twoFactorService.estadoDoLogin(user.id.toString());
@@ -292,6 +299,7 @@ export class AuthService {
             app_id: usuarios.appId,
             app_nome: aplicativos.nome,
             app_status: aplicativos.status,
+            app_usa_login_hub: aplicativos.usaLoginHub,
             status: usuarios.status,
             role_nome: niveisAcesso.nome,
         })
@@ -305,6 +313,8 @@ export class AuthService {
         if (!user) throw new Error('USUARIO_INVALIDO');
         if (user.app_status !== 'ativo') throw new Error('APP_BLOQUEADO');
         if (user.status !== 'ativo') throw new Error('USUARIO_BLOQUEADO');
+        // Mesma recusa do login: este caminho tambem emite sessao.
+        if (user.app_usa_login_hub === false) throw new Error('APP_NAO_AUTENTICA_NO_HUB');
 
         return this.emitirSessao(user);
     }
@@ -906,10 +916,25 @@ export class UserService {
 
             const newUserId = insertedUser[0].id;
 
-            // 2FA é exigido de toda conta, sem exceção por app. A linha nasce aqui
-            // já marcando a obrigação; o secret só aparece quando a pessoa abre o
+            // 2FA é exigido de toda conta que FAZ LOGIN aqui. A linha nasce
+            // marcando a obrigação; o secret só aparece quando a pessoa abre o
             // convite e escaneia o QR.
-            await twoFactorService.marcarObrigatorio(String(newUserId));
+            //
+            // A exceção não é "app dispensado do 2FA": é app que não autentica
+            // pelo hub (`usa_login_hub = false`, hoje só o Cofre). Marcar essas
+            // contas produzia um "2FA pendente" que nunca resolvia, porque a
+            // pessoa jamais passa pelo login daqui — e um estado pendente eterno
+            // no painel sugere uma proteção que não existe. O `login` recusa
+            // essas contas de saída, então não há sessão sem segundo fator.
+            const appDoUsuario = await db
+                .select({ usaLoginHub: aplicativos.usaLoginHub })
+                .from(aplicativos)
+                .where(eq(aplicativos.id, Number(data.app_id)))
+                .limit(1);
+
+            if (appDoUsuario[0]?.usaLoginHub !== false) {
+                await twoFactorService.marcarObrigatorio(String(newUserId));
+            }
 
             let magicLinkToken: string | undefined = undefined;
 
@@ -918,8 +943,22 @@ export class UserService {
                 if (!jwtSecret) {
                     console.error("JWT_SECRET missing in .env");
                 }
+                // `app_id` no passe de convite: o hub resolve o tenant pelo
+                // `sub` e não precisaria dele, mas os APPS CLIENTES precisam.
+                // Sem esta claim, um app que aceita o convite como autorização
+                // não tem como saber de qual tenant ele veio — e um convite do
+                // MoneyAPP abriria conta no Cofre, já que todos os passes são
+                // assinados com o mesmo JWT_SECRET. Aditivo: quem não conhece
+                // a claim ignora, e o /auth/setup-password daqui lê só
+                // sub/action/pwf.
                 magicLinkToken = jwt.sign(
-                    { sub: newUserId, action: 'setup-password', email: data.email, pwf: passwordFingerprint(passwordHash) },
+                    {
+                        sub: newUserId,
+                        action: 'setup-password',
+                        email: data.email,
+                        app_id: String(data.app_id),
+                        pwf: passwordFingerprint(passwordHash),
+                    },
                     jwtSecret || 'secret',
                     { expiresIn: MAGIC_LINK_TTL },
                 );
@@ -1163,7 +1202,17 @@ export class UserService {
     }
 
     public async resetUserPassword(id: string, emailHtml?: string): Promise<{ magicLinkToken?: string; emailSent: boolean }> {
-        const userRes = await db.select({ id: usuarios.id, email: usuarios.email, app_id: usuarios.appId }).from(usuarios).where(eq(usuarios.id, Number(id))).limit(1);
+        const userRes = await db
+            .select({
+                id: usuarios.id,
+                email: usuarios.email,
+                app_id: usuarios.appId,
+                app_usa_login_hub: aplicativos.usaLoginHub,
+            })
+            .from(usuarios)
+            .leftJoin(aplicativos, eq(aplicativos.id, usuarios.appId))
+            .where(eq(usuarios.id, Number(id)))
+            .limit(1);
         if (userRes.length === 0) {
             const error = new Error('Usuário não encontrado.');
             (error as any).code = 'NOT_FOUND';
@@ -1181,15 +1230,32 @@ export class UserService {
             .where(eq(usuarios.id, Number(id)));
 
         // Reset é o caminho de reconvite das contas antigas: quem passa por aqui
-        // sai com 2FA exigido, como qualquer conta nova.
-        await twoFactorService.marcarObrigatorio(id);
+        // sai com 2FA exigido, como qualquer conta nova — menos as contas de app
+        // que não autentica no hub, pela mesma razão do `addUser`. Elas jamais
+        // passam pelo login daqui, então a obrigação vira um "2FA pendente" que
+        // nunca resolve. Sem esta guarda, reenviar o convite de um usuário do
+        // Cofre desfaz a limpeza feita pela db/004_apps_sem_login_hub.sql — e o
+        // reset é justamente o caminho mais provável de acontecer de novo.
+        if (userRes[0].app_usa_login_hub !== false) {
+            await twoFactorService.marcarObrigatorio(id);
+        }
 
         const jwtSecret = process.env.JWT_SECRET;
         if (!jwtSecret) {
             console.error("JWT_SECRET missing in .env");
         }
+        // Mesma claim `app_id` do convite de conta nova (ver addUser): o reset
+        // é o caminho de RECONVITE, e produz um passe indistinguível do outro.
+        // Se só um dos dois carregasse o tenant, o reset quebraria nos apps que
+        // validam o convite — exatamente o caso mais difícil de notar.
         const magicLinkToken = jwt.sign(
-            { sub: id, action: 'setup-password', email: userRes[0].email, pwf: passwordFingerprint(senhaHash) },
+            {
+                sub: id,
+                action: 'setup-password',
+                email: userRes[0].email,
+                app_id: userRes[0].app_id ? String(userRes[0].app_id) : undefined,
+                pwf: passwordFingerprint(senhaHash),
+            },
             jwtSecret || 'secret',
             { expiresIn: MAGIC_LINK_TTL },
         );
