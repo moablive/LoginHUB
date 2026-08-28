@@ -52,6 +52,7 @@ Todo o ciclo de vida da conta — convite por e-mail, primeiro acesso via **Magi
 | 🚢 Script de Deploy Automatizado | ✅ | Script `./redeploy.sh` na raiz para deploy interativo ou via CLI com Docker Compose. |
 | 🤝 Convite com Provisionamento no App | ✅ | Apps que guardam dados próprios do usuário (CPF, comissão) criam o cadastro deles e o acesso no hub numa operação só. Ver fluxo 5️⃣. |
 | 🔥 Hot Reload no Docker | ✅ | O código vem do host por bind mount: salvar um arquivo reflete no container, sem rebuild. |
+| 🏷️ Aviso de Nova Versão | ✅ | O painel compara a própria versão com a do `GET /api` e oferece recarregar quando sai deploy. Badge `v1.0.1` no canto. Ver [Versionamento](#-versionamento-e-aviso-de-nova-versão). |
 
 ---
 
@@ -113,15 +114,22 @@ LoginHUB/
 │       ├── src/
 │       │   ├── pages/            # Login, Dashboard, AppUsers, CreateApp, SetupPassword
 │       │   ├── components/       # Modais, LogoUpload, Layout, Header (Dracula Toggle)
-│       │   └── templates/emails/ # Templates React → HTML para disparo de convites
+│       │   ├── templates/emails/ # Templates React → HTML para disparo de convites
+│       │   └── features/version/ # useVersionCheck + UpdateBanner + VersionBadge
 │       ├── Dockerfile
 │       └── docker-compose.yml
 ├── packages/
 │   ├── schema/                   # Drizzle Table Schemas, Unique Constraints, Interfaces DTOs
 │   ├── database/                 # Pool de conexão PostgreSQL + Client Drizzle
 │   ├── api-client/               # Cliente Axios com interceptor de Auto-Refresh (single-flight)
+│   ├── auth-kit/                 # Fonte canônica da integração, copiada para os apps clientes
 │   ├── middlewares/              # authMiddleware, adminMiddleware, CORS, Métricas
 │   └── services/                 # AuthService, AppService, UserService, EmailService
+├── scripts/
+│   ├── bump-version.mjs          # VERSION → APP_VERSION/APP_BUILD_DATE no .env
+│   ├── sync-auth-kit.sh          # Distribui o auth-kit para os apps clientes
+│   └── 2fa-enroll.sh
+├── VERSION                       # Fonte da verdade da versão de build (versionada)
 ├── docker-compose.yml            # Compose principal da raiz (subição combinada de API + UI)
 ├── redeploy.sh                   # Script de redeploy interativo/automatizado
 └── .env                          # Variáveis de ambiente
@@ -150,7 +158,7 @@ São três serviços, todos a partir da mesma imagem `loginhub-base` (Dockerfile
 
 | Serviço              | Container                   | O que roda                          | Reage a                       |
 |----------------------|-----------------------------|-------------------------------------|-------------------------------|
-| `login-hub-packages` | `server_loginhub_packages`  | `tsc --watch` dos 5 packages        | `packages/*/src`              |
+| `login-hub-packages` | `server_loginhub_packages`  | `tsc --watch` dos packages          | `packages/*/src`              |
 | `login-hub-api`      | `server_loginhub_backend`   | `ts-node-dev --respawn`             | `apps/api/src`, `packages/*/dist` |
 | `login-hub-ui`       | `server_loginhub_frontend`  | `vite` dev server (HMR no browser)  | `apps/ui/src`, `packages/*/dist` |
 
@@ -181,6 +189,15 @@ do host serve só para debug direto na máquina.
   nativo do rollup seria o errado e o Vite morreria no boot. Por isso o
   `docker-compose.yml` declara um volume anônimo para cada `node_modules` e o
   `Dockerfile` remove o `package-lock.json` antes do `npm install`.
+- **Workspace novo em `apps/` ou `packages/` = linha nova na âncora
+  `x-monorepo-volumes`.** A lista tem um item por workspace, inclusive os que
+  não têm dependência própria e os que ficam fora do `build:packages` — é o caso
+  do `auth-kit`, que só é copiado para os apps clientes pelo
+  `scripts/sync-auth-kit.sh`. Descobrir meses depois qual pacote passou a ter
+  binário nativo custa mais do que manter a lista completa:
+  ```bash
+  ls -d apps/*/ packages/*/     # a lista que a âncora tem que cobrir
+  ```
 - **Trocou dependência? Recrie os volumes.** Volume anônimo sobrevive a
   `up -d`. Depois de mexer em qualquer `package.json`:
   ```bash
@@ -301,9 +318,116 @@ O LoginHUB disponibiliza o utilitário `./redeploy.sh` na raiz para simplificar 
 
 # Atualizar imagens base e limpar imagens dangling
 ./redeploy.sh --pull --prune
+
+# Recriar um serviço SEM incrementar a versão de build
+./redeploy.sh --no-bump ui
 ```
 
+> **Todo redeploy incrementa a versão** (`scripts/bump-version.mjs`) antes do
+> `up`, e é isso que acende o aviso de "nova versão disponível" no painel de
+> quem está com a aba aberta. Use `--no-bump` só quando estiver recriando um
+> container sem código novo. Ver [Versionamento](#-versionamento-e-aviso-de-nova-versão).
+
 ---
+
+## 🏷️ Versionamento e Aviso de Nova Versão
+
+Toda aba aberta do painel envelhece: quem deixou o LoginHUB aberto ontem continua
+executando o build de ontem — chamando rota que mudou, com bug já corrigido — até
+alguém fechar a aba. Este mecanismo avisa e deixa a pessoa decidir quando
+recarregar. Recarregar sozinho jogaria fora um convite meio preenchido.
+
+### A cadeia, de ponta a ponta
+
+```
+VERSION (1.0.1)  ← fonte da verdade, versionada no git
+   │
+   │  npm run docker:deploy
+   ▼
+scripts/bump-version.mjs → 1.0.2 + APP_BUILD_DATE=<ISO>
+   │
+   └──▶ .env  (APP_VERSION, APP_BUILD_DATE)
+             │
+             │  docker compose --env-file .env up -d
+             ▼
+   ┌──────────────────────────┬───────────────────────────────┐
+   │ server_loginhub_backend  │ server_loginhub_frontend      │
+   │ APP_VERSION              │ VITE_APP_VERSION              │
+   ▼                          ▼
+GET /api  →                   o vite dev server injeta a string
+{ version, buildDate }        em import.meta.env
+   │                          │
+   └────────────┬─────────────┘
+                ▼
+     useVersionCheck  (compara os dois lados a cada 5 min)
+                │  versão diverge?
+                ▼
+     UpdateBanner → "Nova versão disponível"  [Depois] [Atualizar agora]
+```
+
+O que faz funcionar: **as duas pontas nascem do mesmo número**. Se divergirem,
+houve deploy — não é heurística, é fato.
+
+### Os arquivos
+
+| Arquivo | Papel |
+|---|---|
+| `VERSION` | fonte da verdade — `1.0.1\n`, versionado |
+| `scripts/bump-version.mjs` | incrementa e espelha `APP_VERSION`/`APP_BUILD_DATE` no `.env` |
+| `docker-compose.yml` | entrega `APP_VERSION` à api e `VITE_APP_VERSION` à ui |
+| `apps/api/src/app.ts` | `GET /api` devolve `version` e `buildDate` |
+| `apps/ui/src/features/version/useVersionCheck.ts` | pergunta à API, compara, expõe `versaoNova` |
+| `apps/ui/src/features/version/UpdateBanner.tsx` | o cartão no canto |
+| `apps/ui/src/features/version/VersionBadge.tsx` | `v1.0.1` no canto inferior esquerdo |
+
+### Como versionar
+
+```bash
+npm run version:bump      # 1.0.1 -> 1.0.2  (patch)
+npm run version:minor     # 1.0.9 -> 1.1.0
+npm run version:major     # 1.1.4 -> 2.0.0
+npm run docker:deploy     # faz o bump E sobe — é o caminho normal
+```
+
+O bump está **dentro** do `docker:deploy` de propósito. Deploy sem bump é o modo
+mais fácil de o mecanismo inteiro virar decoração.
+
+> Para fixar um número: `node scripts/bump-version.mjs --set 2.0.0`.
+
+### Por que o hub não precisa do `usePwaUpdate`
+
+O padrão de referência (Sul Alimentos) concilia a checagem de versão com o
+service worker, porque lá o `reload()` seria servido pelo precache do próprio SW
+e devolveria o `index.html` velho.
+
+**Aqui não existe precache**: o `vite.config.ts` roda com
+`strategies: 'injectManifest'` + `injectionPoint: undefined` justamente porque o
+painel já ficou preso numa versão antiga por causa do Workbox (foi assim que
+`/enrolar-2fa`, já no ar, caía no `<Route path="*">`). Sem precache, o
+`window.location.reload()` busca o `index.html` do servidor de verdade — e o
+`useVersionCheck` sozinho basta.
+
+### Conferência
+
+```bash
+curl -s https://loginhub.astralwavelabel.com/api | jq '{version, buildDate}'
+docker exec server_loginhub_frontend env | grep VITE_APP_
+curl -s http://localhost:3006/src/features/version/VersionBadge.tsx | grep -o '"[0-9]\+\.[0-9]\+\.[0-9]\+"'
+```
+
+### Armadilhas
+
+| Sintoma | Causa | Correção |
+|---|---|---|
+| Badge nunca muda de versão | o container da ui não foi recriado — o vite lê a env no start | `docker compose --env-file .env up -d` (recria) |
+| Banner nunca aparece | health atrás de auth, ou 401 no fetch | o `app.get('/api')` tem que ficar **antes** do `app.use('/api', router)` |
+| Banner nunca aparece, console mudo | CORS derrubou o preflight | não acrescente header custom ao `fetch` do `useVersionCheck` |
+| Banner aparece sempre, em dev | `VITE_APP_VERSION` vazio comparado com a versão real | é o que a guarda `temBaseline` resolve — não a remova |
+| Banner volta depois de cada reload | deploy parcial (api numa versão, ui em outra) | a marca em `sessionStorage` segura; conferir se os dois containers subiram |
+| Deploy não muda nada | `up -d` sem o bump | usar `npm run docker:deploy` |
+
+---
+
 
 ## 🔧 Variáveis de Ambiente (`.env`)
 
@@ -391,6 +515,15 @@ SMTP_PASS='***'
 #SMTP_APP_2_FROM=contato@sulalimentos.com
 #SMTP_APP_2_USER=contato@sulalimentos.com
 #SMTP_APP_2_PASS='***'
+
+# ====================
+# Versão do build (gerado — não editar à mão)
+# ====================
+# Escrito por scripts/bump-version.mjs a partir do arquivo VERSION. O compose
+# entrega APP_VERSION para a api (health check) e a MESMA string como
+# VITE_APP_VERSION para a ui (badge + aviso de nova versão).
+APP_VERSION=1.0.1
+APP_BUILD_DATE=2026-08-28T03:40:29.753Z
 ```
 
 ### Remetente por aplicativo

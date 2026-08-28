@@ -1,5 +1,7 @@
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { VersionBadge } from '../features/version/VersionBadge';
+import { UpdateBanner } from '../features/version/UpdateBanner';
 import { authApi } from '@loginhub/api-client';
 
 // Layout
@@ -29,6 +31,10 @@ export function AppRoutes() {
   return (
     <>
       <ThemeToggle />
+      {/* Fora do <Routes> de proposito: trocar de rota nao pode desmontar o
+          aviso de versao nova nem zerar o intervalo da checagem. */}
+      <VersionBadge />
+      <UpdateBanner />
       <Routes>
       
       {/* --- ROTAS PÚBLICAS --- */}

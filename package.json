@@ -13,9 +13,12 @@
     "watch:packages": "concurrently -n schema,database,api-client,middlewares,services -c magenta,cyan,yellow,blue,green \"npm run build -w @loginhub/schema -- --watch --preserveWatchOutput\" \"npm run build -w @loginhub/database -- --watch --preserveWatchOutput\" \"npm run build -w @loginhub/api-client -- --watch --preserveWatchOutput\" \"npm run build -w @loginhub/middlewares -- --watch --preserveWatchOutput\" \"npm run build -w @loginhub/services -- --watch --preserveWatchOutput\"",
     "build": "npm run build:packages && npm run build -w api && npm run build -w ui",
     "lint": "npm run lint --workspaces",
+    "version:bump": "node scripts/bump-version.mjs",
+    "version:minor": "node scripts/bump-version.mjs --minor",
+    "version:major": "node scripts/bump-version.mjs --major",
     "docker:dev": "docker compose --env-file .env up",
-    "docker:deploy": "docker compose --env-file .env up -d --build",
-    "docker:rebuild": "docker compose --env-file .env down -v && docker compose --env-file .env up -d --build"
+    "docker:deploy": "npm run version:bump && docker compose --env-file .env up -d --build",
+    "docker:rebuild": "npm run version:bump && docker compose --env-file .env down -v && docker compose --env-file .env up -d --build"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

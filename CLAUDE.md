@@ -34,8 +34,11 @@ packages/database   conexão Drizzle/pg
 packages/services   AuthService, UserService, AppService, TwoFactorService, EmailService
 packages/middlewares auth, rate limit, CORS, métricas Prometheus
 packages/api-client  cliente HTTP que os apps clientes consomem
+packages/auth-kit    fonte canônica da integração, copiada para cada app cliente
 db/                 SQL de migração, aplicado À MÃO (não há runner)
 scripts/2fa-enroll.sh  enrolamento de 2FA pelo terminal
+scripts/bump-version.mjs  VERSION -> APP_VERSION/APP_BUILD_DATE no .env
+VERSION             fonte da verdade da versão de build (versionada)
 ```
 
 O **README.md é a documentação de verdade** — fluxos, endpoints, decisões e
@@ -57,6 +60,11 @@ docker compose --env-file .env up -d
 - Banco: container `server_db_postgres` (compartilhado com outros projetos do host).
 
 Sem Docker: `npm run dev` na raiz. Build: `npm run build`.
+
+Para publicar, use `npm run docker:deploy` ou `./redeploy.sh` — os dois
+incrementam a versão de build antes de subir. É o bump que acende o aviso de
+"nova versão disponível" na aba de quem já está com o painel aberto; deploy sem
+bump deixa o mecanismo mudo. Detalhes na seção *Versionamento* do README.
 
 **Não há suíte de testes** — nenhum `*.test.ts` no repositório e nenhum script
 `test` no `package.json`. Mudança em auth/TOTP se valida à mão (curl, o

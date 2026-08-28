@@ -17,6 +17,7 @@
 #   ./redeploy.sh --no-build api  # sobe sem rebuildar imagem
 #   ./redeploy.sh --down api      # derruba e recria do zero
 #   ./redeploy.sh --pull --prune  # atualiza imagens base e limpa dangling
+#   ./redeploy.sh --no-bump api   # sobe sem incrementar a versao de build
 # =============================================================================
 set -uo pipefail
 
@@ -39,6 +40,7 @@ err()  { printf '%s\n' "${C_RED}✗${C_RESET} $*" >&2; }
 
 # --- Flags -------------------------------------------------------------------
 DO_BUILD=1
+DO_BUMP=1
 DO_DOWN=0
 DO_PULL=0
 DO_PRUNE=0
@@ -46,7 +48,7 @@ JUST_LIST=0
 SELECTED=()
 
 usage() {
-  sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
@@ -55,6 +57,7 @@ while [[ $# -gt 0 ]]; do
     -h|--help)     usage 0 ;;
     -l|--list)     JUST_LIST=1 ;;
     --no-build)    DO_BUILD=0 ;;
+    --no-bump)     DO_BUMP=0 ;;
     --down)        DO_DOWN=1 ;;
     --pull)        DO_PULL=1 ;;
     --prune)       DO_PRUNE=1 ;;
@@ -157,6 +160,19 @@ deploy_services() {
 
   (
     cd "$ROOT_DIR" || exit 1
+
+    # Incrementa a versao de build ANTES do up: e o .env recem-escrito que o
+    # compose le para injetar APP_VERSION/VITE_APP_VERSION nos containers.
+    # Deploy sem bump deixa o aviso de "nova versao" do painel sem sinal —
+    # e a razao mais comum de o mecanismo virar decoracao. Use --no-bump
+    # quando estiver so recriando um servico, sem codigo novo.
+    if [[ $DO_BUMP -eq 1 ]]; then
+      if [[ -f scripts/bump-version.mjs ]]; then
+        node scripts/bump-version.mjs || warn "bump falhou; seguindo com a versao anterior."
+      else
+        warn "scripts/bump-version.mjs nao encontrado; seguindo sem bump."
+      fi
+    fi
 
     if [[ $DO_DOWN -eq 1 ]]; then
       log "down (removendo containers antigos dos serviços alvos)..."

@@ -26,6 +26,7 @@ x-monorepo-volumes: &monorepo-volumes
   - /app/apps/api/node_modules
   - /app/apps/ui/node_modules
   - /app/packages/api-client/node_modules
+  - /app/packages/auth-kit/node_modules
   - /app/packages/database/node_modules
   - /app/packages/middlewares/node_modules
   - /app/packages/schema/node_modules
@@ -80,6 +81,12 @@ services:
       - DB_PORT=5432
       - DB_NAME=login_hub
       - DB_USER=admin_root
+
+      # Versao do build, gerada por scripts/bump-version.mjs e lida pelo health
+      # check publico (GET /api). O `:-0.0.0` evita derrubar o compose quando o
+      # .env ainda nao tem a chave — e e o valor que o front sabe ignorar.
+      - APP_VERSION=${APP_VERSION:-0.0.0}
+      - APP_BUILD_DATE=${APP_BUILD_DATE:-}
 
     # Carrega o arquivo para ler os segredos (${DB_PASSWORD}, JWT_SECRET, SMTP...)
     env_file:
@@ -137,6 +144,13 @@ services:
       # nunca conecta (a página funciona, mas exige F5).
       - VITE_HMR_CLIENT_PORT=443
       - VITE_HMR_PROTOCOL=wss
+
+      # Mesmo numero que a api recebe como APP_VERSION, com o prefixo que o
+      # vite expoe ao browser (badge no canto + aviso de "nova versao").
+      # Como aqui o front e servido pelo `vite dev`, e nao por um build
+      # congelado na imagem, basta o container reiniciar para o valor trocar.
+      - VITE_APP_VERSION=${APP_VERSION:-0.0.0}
+      - VITE_APP_BUILD_DATE=${APP_BUILD_DATE:-}
 
     env_file:
       - .env
