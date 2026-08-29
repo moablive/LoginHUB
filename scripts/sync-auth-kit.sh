@@ -43,6 +43,7 @@ LifeBusinessSuit/TodoAPP/apps/frontend/src/lib/hubAuthClient.ts|client
 LifeBusinessSuit/NotesAPP/apps/backend/src/lib/hubAuthServer.ts|server
 LifeBusinessSuit/NotesAPP/apps/frontend/src/lib/hubAuthClient.ts|client
 LifeBusinessSuit/LBSTTSAPP/apps/backend/src/lib/hubAuthServer.ts|server
+LifeBusinessSuit/LBS_NotifyAPP/src/lib/hubAuthServer.ts|server
 LifeBusinessSuit/LBSTTSAPP/apps/frontend/src/lib/hubAuthClient.ts|client
 Astral_Wave/astralwavelabel/api/src/shared/lib/hubAuthServer.ts|server
 Astral_Wave/astralwavelabel/apps/artist/src/lib/hubAuthClient.ts|client
