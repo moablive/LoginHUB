@@ -1106,6 +1106,38 @@ não existe mais.
 ./scripts/sync-auth-kit.sh --check  # falha se alguma cópia divergir (use no CI)
 ```
 
+### A lista de destinos — o caminho errado não falha
+
+Os destinos ficam na variável `DESTINOS`, dentro do próprio script, um por linha,
+no formato `caminho_relativo|origem`. O caminho é relativo a
+`/mnt/nvme2tb/docker-services` (o `BASE`, dois níveis acima da raiz do hub).
+
+> ⚠️ **Destino inexistente não dá erro — ele é criado.** No modo de propagação o
+> script roda `mkdir -p "$(dirname "$destino")"` antes do `cp`. Um caminho errado
+> não interrompe nada: gera uma árvore fantasma com a cópia dentro, e o app de
+> verdade continua com a versão anterior, sem sinal nenhum. Quem acusa isso é o
+> `--check`, que lista o caminho como `FALTA` e sai com código != 0.
+
+Por isso o nome da pasta importa mais do que parece. **Os apps do LifeBusinessSuit
+usam o prefixo `LBS_` no diretório, mesmo quando o produto não usa no nome:**
+
+| Produto | Diretório em disco |
+|---|---|
+| MoneyAPP | `LifeBusinessSuit/LBS_MoneyAPP` |
+| TodoAPP | `LifeBusinessSuit/LBS_TodoAPP` |
+| NotesAPP | `LifeBusinessSuit/LBS_NotesAPP` |
+| TTSAPP | `LifeBusinessSuit/LBS_TTSAPP` |
+| NotifyAPP | `LifeBusinessSuit/LBS_NotifyAPP` |
+
+O NotifyAPP ainda foge do formato dos irmãos: não tem `apps/backend`, o guard
+mora direto em `src/lib/hubAuthServer.ts`.
+
+Em 29/08/2026 a lista foi corrigida: catorze destinos ainda apontavam para os
+nomes sem prefixo, de antes da padronização. As cópias nos apps estavam certas —
+quem estava errada era a lista, e o `--check` vivia vermelho com catorze `FALTA`
+falsos. Alarme sempre vermelho é alarme que ninguém lê: se uma cópia divergisse
+de verdade, sumiria no meio do ruído.
+
 ### `hubAuthServer.ts` — guarda das APIs clientes
 
 > ⚠️ **Sem isto, o 2FA não protege o app cliente.**

@@ -36,15 +36,15 @@ MODO="${1:-sync}"
 # editores-web fica de fora desta lista: não tem build de TypeScript, então
 # recebe o JS transpilado (ver TRANSPILE, abaixo).
 DESTINOS=$(cat <<'LISTA'
-LifeBusinessSuit/MoneyAPP/apps/backend/src/lib/hubAuthServer.ts|server
-LifeBusinessSuit/MoneyAPP/apps/frontend/src/lib/hubAuthClient.ts|client
-LifeBusinessSuit/TodoAPP/apps/backend/src/lib/hubAuthServer.ts|server
-LifeBusinessSuit/TodoAPP/apps/frontend/src/lib/hubAuthClient.ts|client
-LifeBusinessSuit/NotesAPP/apps/backend/src/lib/hubAuthServer.ts|server
-LifeBusinessSuit/NotesAPP/apps/frontend/src/lib/hubAuthClient.ts|client
-LifeBusinessSuit/LBSTTSAPP/apps/backend/src/lib/hubAuthServer.ts|server
+LifeBusinessSuit/LBS_MoneyAPP/apps/backend/src/lib/hubAuthServer.ts|server
+LifeBusinessSuit/LBS_MoneyAPP/apps/frontend/src/lib/hubAuthClient.ts|client
+LifeBusinessSuit/LBS_TodoAPP/apps/backend/src/lib/hubAuthServer.ts|server
+LifeBusinessSuit/LBS_TodoAPP/apps/frontend/src/lib/hubAuthClient.ts|client
+LifeBusinessSuit/LBS_NotesAPP/apps/backend/src/lib/hubAuthServer.ts|server
+LifeBusinessSuit/LBS_NotesAPP/apps/frontend/src/lib/hubAuthClient.ts|client
+LifeBusinessSuit/LBS_TTSAPP/apps/backend/src/lib/hubAuthServer.ts|server
 LifeBusinessSuit/LBS_NotifyAPP/src/lib/hubAuthServer.ts|server
-LifeBusinessSuit/LBSTTSAPP/apps/frontend/src/lib/hubAuthClient.ts|client
+LifeBusinessSuit/LBS_TTSAPP/apps/frontend/src/lib/hubAuthClient.ts|client
 Astral_Wave/astralwavelabel/api/src/shared/lib/hubAuthServer.ts|server
 Astral_Wave/astralwavelabel/apps/artist/src/lib/hubAuthClient.ts|client
 Astral_Wave/astralwavelabel/apps/site/src/lib/hubAuthClient.ts|client
@@ -52,12 +52,12 @@ Sul_Alimentos/sul-alimentos/apps/api/src/lib/hubAuthServer.ts|server
 Sul_Alimentos/sul-alimentos/packages/http-client/src/hubAuthClient.ts|client
 server/dashboard/apps/api/src/lib/hubAuthServer.ts|server
 server/dashboard/packages/api-client/src/hubAuthClient.ts|client
-LifeBusinessSuit/MoneyAPP/apps/bot/src/lib/hubAuthClient.ts|client
-LifeBusinessSuit/MoneyAPP/apps/bot/src/lib/hubAuthBot.ts|bot
-LifeBusinessSuit/TodoAPP/apps/bot/src/lib/hubAuthClient.ts|client
-LifeBusinessSuit/TodoAPP/apps/bot/src/lib/hubAuthBot.ts|bot
-LifeBusinessSuit/NotesAPP/apps/bot/src/lib/hubAuthClient.ts|client
-LifeBusinessSuit/NotesAPP/apps/bot/src/lib/hubAuthBot.ts|bot
+LifeBusinessSuit/LBS_MoneyAPP/apps/bot/src/lib/hubAuthClient.ts|client
+LifeBusinessSuit/LBS_MoneyAPP/apps/bot/src/lib/hubAuthBot.ts|bot
+LifeBusinessSuit/LBS_TodoAPP/apps/bot/src/lib/hubAuthClient.ts|client
+LifeBusinessSuit/LBS_TodoAPP/apps/bot/src/lib/hubAuthBot.ts|bot
+LifeBusinessSuit/LBS_NotesAPP/apps/bot/src/lib/hubAuthClient.ts|client
+LifeBusinessSuit/LBS_NotesAPP/apps/bot/src/lib/hubAuthBot.ts|bot
 LISTA
 )
 
