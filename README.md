@@ -394,6 +394,28 @@ mais fácil de o mecanismo inteiro virar decoração.
 
 > Para fixar um número: `node scripts/bump-version.mjs --set 2.0.0`.
 
+### Deploy pelo painel do servidor
+
+A Central de Deploys do `server/dashboard` **não** usa o `./redeploy.sh` daqui:
+ela roda o `redeploy.sh` genérico do painel, que descobre a stack pelo
+`docker-compose.yml` (aparece como `server/LoginHUB`) e executa
+`docker compose --env-file .env up -d --build` nesta pasta. Não há `shared.env`
+acima, então a camada de variáveis é idêntica à do script local.
+
+Até 29/08/2026 esse caminho **não bumpava**: deploy pelo painel subia com a
+versão anterior e o aviso de "nova versão disponível" ficava mudo. Hoje o script
+genérico roda `node scripts/bump-version.mjs` quando a stack tem o arquivo,
+antes do compose — o comportamento passou a ser o mesmo dos dois caminhos.
+
+| Caminho | Bumpa? |
+|---|---|
+| `npm run docker:deploy` | sim |
+| `./redeploy.sh` (daqui) | sim, salvo `--no-bump` |
+| Central de Deploys do painel | sim, salvo o checkbox "sem bump de versão"; `--dry-run` nunca bumpa |
+
+> Depois de um deploy pelo painel, **`git status` acusa o `VERSION` modificado** —
+> ele é versionado e o bump o reescreve. Commitar o número é parte do deploy.
+
 ### Por que o hub não precisa do `usePwaUpdate`
 
 O padrão de referência (Sul Alimentos) concilia a checagem de versão com o
@@ -424,7 +446,8 @@ curl -s http://localhost:3006/src/features/version/VersionBadge.tsx | grep -o '"
 | Banner nunca aparece, console mudo | CORS derrubou o preflight | não acrescente header custom ao `fetch` do `useVersionCheck` |
 | Banner aparece sempre, em dev | `VITE_APP_VERSION` vazio comparado com a versão real | é o que a guarda `temBaseline` resolve — não a remova |
 | Banner volta depois de cada reload | deploy parcial (api numa versão, ui em outra) | a marca em `sessionStorage` segura; conferir se os dois containers subiram |
-| Deploy não muda nada | `up -d` sem o bump | usar `npm run docker:deploy` |
+| Deploy não muda nada | `up -d` sem o bump | usar `npm run docker:deploy` ou `./redeploy.sh` |
+| Deploy pelo painel não acende o aviso | painel com a versão antiga do `redeploy.sh` genérico | o script que o painel executa vem da skill `[27]` no banco, não do disco — sincronizar com `awlskills edit 27 --file` |
 
 ---
 
