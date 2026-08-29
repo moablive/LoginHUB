@@ -130,7 +130,7 @@ services:
     environment:
       - TZ=America/Sao_Paulo
 
-      # As VITE_* (VITE_API_URL, VITE_MASTER_KEY, VITE_SUL_ALIMENTOS_API_URL...)
+      # As VITE_* (VITE_API_URL, VITE_SUL_ALIMENTOS_API_URL...)
       # não são mais build args: o vite lê o .env da raiz em runtime
       # (envDir do vite.config.ts) e também o process.env vindo do env_file
       # abaixo. Basta editar o .env e reiniciar o serviço — sem rebuild.

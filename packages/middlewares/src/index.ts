@@ -1,7 +1,15 @@
 import { RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
 import { db } from '@loginhub/database';
-import { aplicativos, usuarios2fa, JWTPayload } from '@loginhub/schema';
+import {
+    aplicativos,
+    usuarios2fa,
+    JWTPayload,
+    MASTER_LOGIN_EMAIL,
+    MASTER_SUB,
+    masterKeyFingerprint,
+    masterKeyDoAmbiente
+} from '@loginhub/schema';
 import { eq } from 'drizzle-orm';
 import cors, { CorsOptions } from 'cors';
 import client from 'prom-client';
@@ -9,8 +17,30 @@ import client from 'prom-client';
 // ==========================================
 // 1. ADMIN MIDDLEWARE
 // ==========================================
+/**
+ * Guarda das rotas de administração do hub. Aceita DUAS credenciais, e a
+ * distinção entre elas é o ponto da coisa:
+ *
+ *   `x-api-key: <MASTER_API_KEY>`  → chamador servidor-a-servidor (convite de
+ *        vendedor da Sul Alimentos, bot, scripts, curl do operador). Segredo
+ *        compartilhado entre servidores, que é onde ele é legítimo.
+ *
+ *   `Authorization: Bearer <sessão master>` → o painel. Ele prova a posse da
+ *        chave UMA vez, no `/auth/login`, e daí em diante carrega um token.
+ *
+ * O segundo caminho existe porque o primeiro, no navegador, obrigava o front a
+ * ter a MASTER_API_KEY — e no Vite isso significa `VITE_MASTER_KEY`, ou seja, a
+ * chave inteira servida a QUALQUER visitante da página, sem autenticar. Era o
+ * estado até 29/08/2026. O token não tem esse problema: só existe para quem já
+ * provou a chave, expira, e morre quando a chave é trocada (claim `mk`).
+ *
+ * A sessão master é reconhecida pelo conjunto, não por uma claim solta: `sub` 0
+ * + e-mail do master + role admin + `mk` conferindo com a chave em vigor. Um JWT
+ * de usuário comum com `role: "admin"` (que existe: é o admin DO APP dele) não
+ * abre nada aqui.
+ */
 export const adminMiddleware: RequestHandler = (req, res, next) => {
-    const validKey = process.env.MASTER_API_KEY;
+    const validKey = masterKeyDoAmbiente();
 
     // Fail-safe: Bloqueia se a configuração do servidor estiver incorreta
     if (!validKey) {
@@ -19,19 +49,51 @@ export const adminMiddleware: RequestHandler = (req, res, next) => {
     }
 
     const headerValue = req.headers['x-api-key'];
-    
+
     // Normaliza caso o header venha como array de strings
     const apiKey = Array.isArray(headerValue) ? headerValue[0] : headerValue;
 
-    if (!apiKey || apiKey !== validKey) {
-        console.warn(`[AdminAuth] Acesso negado. IP: ${req.ip}`);
-        return res.status(403).json({ 
-            error: 'Acesso Proibido',
-            message: 'Credencial mestre inválida ou ausente.' 
-        });
+    if (apiKey && apiKey === validKey) {
+        return next();
     }
 
-    return next();
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+
+    if (token) {
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) {
+            console.error('❌ FATAL: JWT_SECRET ausente no .env');
+            return res.status(500).json({ error: 'Erro de configuração do servidor.' });
+        }
+
+        try {
+            const decoded = jwt.verify(token, jwtSecret) as unknown as JWTPayload & { action?: string };
+
+            // Passe de etapa única nunca é sessão — vale aqui como vale no
+            // authMiddleware, e com mais razão: aqui a sessão é a do master.
+            const ehSessaoMaster =
+                !decoded.action &&
+                decoded.sub === MASTER_SUB &&
+                decoded.email === MASTER_LOGIN_EMAIL &&
+                decoded.role === 'admin' &&
+                !!decoded.mk &&
+                decoded.mk === masterKeyFingerprint(validKey);
+
+            if (ehSessaoMaster) {
+                (req as any).user = { ...decoded };
+                return next();
+            }
+        } catch {
+            // Token inválido/expirado cai no 403 comum, sem vazar o motivo.
+        }
+    }
+
+    console.warn(`[AdminAuth] Acesso negado. IP: ${req.ip}`);
+    return res.status(403).json({
+        error: 'Acesso Proibido',
+        message: 'Credencial mestre inválida ou ausente.'
+    });
 };
 
 // ==========================================

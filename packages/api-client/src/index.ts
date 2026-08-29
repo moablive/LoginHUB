@@ -34,21 +34,17 @@ api.interceptors.request.use(
     }
 
     const token = localStorage.getItem('awl_token');
-    const masterKey = (import.meta as any).env.VITE_MASTER_KEY;
-    const isSuperAdmin = sessionStorage.getItem('is_super_admin') === 'true';
 
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`;
     }
 
-    // Os dois headers convivem de propósito: o `adminMiddleware` do LoginHUB
-    // aceita SÓ `x-api-key`, enquanto integrações externas (ex.: o convite de
-    // vendedor da Sul Alimentos) exigem um Bearer de verdade. Mandar apenas um
-    // dos dois quebra metade das chamadas da sessão master.
-    if (masterKey && (isSuperAdmin || !token)) {
-      config.headers['x-api-key'] = masterKey;
-    }
-
+    // Só o Bearer. Aqui existia também `x-api-key: VITE_MASTER_KEY`, e essa
+    // linha era o vazamento: o prefixo VITE_ é justamente o que manda o Vite
+    // publicar a variável no bundle, então a chave mestra saía em todo módulo
+    // servido — legível por qualquer visitante da página, sem autenticar.
+    // O `adminMiddleware` passou a aceitar a sessão master, que é o que este
+    // token é; o `x-api-key` continua valendo, mas só entre servidores.
     return config;
   },
   (error) => Promise.reject(error)
@@ -140,6 +136,49 @@ api.interceptors.response.use(
 // ==========================================
 export const authApi = {
   /**
+   * Login do MASTER — a única credencial que o painel do hub usa.
+   *
+   * A chave digitada vai para o servidor e é ele quem compara com a
+   * MASTER_API_KEY; o navegador nunca recebe a chave de volta, só a sessão. Era
+   * o contrário até 29/08/2026: o cliente tinha a chave inteira (`VITE_MASTER_KEY`
+   * publicada no bundle pelo Vite) e comparava aqui mesmo, o que a expunha a
+   * quem apenas abrisse a página.
+   *
+   * Função separada de `login` de propósito: `master@infra.local` está na lista
+   * de e-mails reservados que o login comum recusa, e essa recusa é o que
+   * impede alguém de tentar o master pelo caminho de usuário.
+   */
+  loginMaster: async (masterKey: string): Promise<AuthResult> => {
+    localStorage.removeItem('awl_token');
+    localStorage.removeItem('awl_user');
+    localStorage.removeItem('awl_app');
+    sessionStorage.removeItem('is_super_admin');
+
+    const { data } = await api.post<LoginResponse>('/auth/login', {
+      email: MASTER_LOGIN_EMAIL,
+      password: masterKey,
+    });
+
+    sessionStorage.setItem('is_super_admin', 'true');
+    localStorage.setItem('awl_token', data.token);
+
+    // Mantido igual ao que a sessão master sempre gravou: o painel lê `role`
+    // daqui, e trocar para o payload do backend (`role: "admin"`) mudaria o
+    // comportamento de tela sem necessidade.
+    const adminUser: User = {
+      id: 'master-root-id',
+      nome: 'Super Administrator',
+      email: 'root@infrastructure.local',
+      role: 'master',
+      app_id: null,
+      status: 'ativo'
+    };
+
+    localStorage.setItem('awl_user', JSON.stringify(adminUser));
+    return { redirect: '/apps' };
+  },
+
+  /**
    * Login do usuário.
    * @param appId Opcional — quando o mesmo e-mail existe em apps diferentes,
    *              é necessário informar para desambiguar. Se omitido e o
@@ -151,35 +190,6 @@ export const authApi = {
     localStorage.removeItem('awl_user');
     localStorage.removeItem('awl_app');
     sessionStorage.removeItem('is_super_admin');
-
-    const masterKey = (import.meta as any).env.VITE_MASTER_KEY;
-
-    if (masterKey && password === masterKey) {
-      // A sessão master já foi puramente client-side: marcava a flag e não
-      // guardava token nenhum. Quem só falava com o próprio hub não sentia
-      // (o x-api-key resolvia), mas qualquer chamada a uma API externa saía
-      // sem `Authorization` e voltava 401. O backend tem um login master que
-      // devolve JWT de verdade (app_id "0", role admin) — é ele que usamos.
-      const { data } = await api.post<LoginResponse>('/auth/login', {
-        email: MASTER_LOGIN_EMAIL,
-        password: masterKey,
-      });
-
-      sessionStorage.setItem('is_super_admin', 'true');
-      localStorage.setItem('awl_token', data.token);
-
-      const adminUser: User = {
-        id: 'master-root-id',
-        nome: 'Super Administrator',
-        email: email || 'root@infrastructure.local',
-        role: 'master',
-        app_id: null,
-        status: 'ativo'
-      };
-
-      localStorage.setItem('awl_user', JSON.stringify(adminUser));
-      return { redirect: '/apps' };
-    }
 
     const reservedEmails = ['master@infra.local', 'root@system.local', 'admin@local'];
     if (reservedEmails.includes(email)) {

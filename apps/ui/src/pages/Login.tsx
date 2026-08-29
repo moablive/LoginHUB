@@ -27,18 +27,13 @@ export function Login() {
   const onSubmit = async (data: LoginFormInputs): Promise<void> => {
     setLoginError(null);
     try {
-      // 1. Lógica Master Key:
-      // O e-mail é injetado hardcoded pois o usuário só digita a chave mestra.
-      const hiddenMasterEmail = 'master@infra.local';
+      // A chave digitada vai inteira para o servidor, que é quem a compara com
+      // a MASTER_API_KEY. O painel não conhece mais a chave — antes ele a tinha
+      // no bundle (`VITE_MASTER_KEY`) e comparava no navegador.
+      await authApi.loginMaster(data.password);
 
-      // 2. Chamada ao serviço
-      // Passamos o email oculto + a senha digitada
-      await authApi.login(hiddenMasterEmail, data.password);
-      sessionStorage.setItem("is_super_admin", "true");
-
-      // 3. Sucesso: Redireciona
-      // O authApi já salva o token, então apenas navegamos
-      navigate('/dashboard'); 
+      // Sucesso: o authApi já gravou token e flag de super admin.
+      navigate('/dashboard');
 
     } catch (error: unknown) {
       console.error('Erro no login:', error);

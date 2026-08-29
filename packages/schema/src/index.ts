@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { pgTable, serial, varchar, integer, timestamp, boolean, text, unique } from 'drizzle-orm/pg-core';
 
 // ==========================================
@@ -103,11 +104,39 @@ export interface LoginResponseDTO {
 export interface JWTPayload {
     sub: string;
     email: string;
-    app_id: string; 
-    role: string;       
+    app_id: string;
+    role: string;
     iat?: number;
     exp?: number;
+    /** Só na sessão master. Ver `masterKeyFingerprint`. */
+    mk?: string;
 }
+
+/** E-mail do login master. Não existe em `usuarios` — é conta do .env. */
+export const MASTER_LOGIN_EMAIL = 'master@infra.local';
+
+/** `sub` do JWT master. Não é id de usuário: não há linha para o master. */
+export const MASTER_SUB = '0';
+
+/**
+ * Impressão digital da MASTER_API_KEY, gravada na claim `mk` da sessão master.
+ *
+ * O master é a única conta sem linha em `usuarios`, logo sem
+ * `sessoes_validas_desde` para servir de piso — sem isto, uma sessão emitida
+ * antes de trocar a chave continuaria valendo depois dela, e a rotação não
+ * derrubaria ninguém. Mesma ideia do fingerprint do `senha_hash` que faz o
+ * magic link morrer sozinho quando a senha muda.
+ *
+ * Mora aqui, e não em cada pacote, porque quem assina (`services`) e quem
+ * confere (`middlewares`) têm de calcular exatamente a mesma coisa: duas cópias
+ * que divirjam derrubam todas as sessões master de uma vez.
+ */
+export const masterKeyFingerprint = (masterKey: string): string =>
+    createHash('sha256').update(masterKey).digest('hex').slice(0, 16);
+
+/** A chave mestra configurada no ambiente, com o nome legado como fallback. */
+export const masterKeyDoAmbiente = (): string | undefined =>
+    process.env.MASTER_API_KEY || process.env.MASTER_KEY;
 
 /**
  * Resposta do `/auth/setup-password`.

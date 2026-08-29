@@ -21,7 +21,11 @@ import {
     TwoFactorChallengeResponse,
     TwoFactorSetupRequiredResponse,
     SetupPasswordResponse,
-    User as UserResponse
+    User as UserResponse,
+    MASTER_LOGIN_EMAIL,
+    MASTER_SUB,
+    masterKeyFingerprint,
+    masterKeyDoAmbiente
 } from '@loginhub/schema';
 
 // ==========================================
@@ -60,6 +64,48 @@ const CHALLENGE_TTL_SEGUNDOS = 300;
 const passwordFingerprint = (senhaHash: string): string =>
     crypto.createHash('sha256').update(senhaHash).digest('hex').slice(0, 16);
 
+/**
+ * Sessão do master, emitida pelo login e renovada pelo `/auth/refresh`.
+ *
+ * Um lugar só porque as duas pontas têm de produzir o MESMO payload: o
+ * `adminMiddleware` autoriza pelo conjunto (`sub` 0 + role admin + `mk`
+ * conferindo), e um refresh que devolvesse claim de menos revogaria a sessão
+ * silenciosamente no request seguinte.
+ *
+ * A claim `mk` amarra a sessão à MASTER_API_KEY vigente — é o piso que o master
+ * não tem em `usuarios_2fa.sessoes_validas_desde`, por não ter linha em
+ * `usuarios`. Trocar a chave derruba toda sessão master já emitida.
+ */
+const emitirSessaoMaster = (masterKey: string): LoginResponseDTO => {
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) throw new Error("ERRO_INTERNO");
+
+    const payload = {
+        sub: MASTER_SUB,
+        email: MASTER_LOGIN_EMAIL,
+        app_id: "0",
+        role: "admin",
+        mk: masterKeyFingerprint(masterKey),
+    };
+    const token = jwt.sign(payload, jwtSecret, { expiresIn: "24h" });
+
+    return {
+        token,
+        expiresIn: 86400,
+        usuario: {
+            id: MASTER_SUB,
+            nome: "Super Admin",
+            email: MASTER_LOGIN_EMAIL,
+            role: "admin"
+        },
+        app: {
+            id: "0",
+            nome: "LoginHub Central",
+            status: "ativo"
+        }
+    };
+};
+
 // ==========================================
 // 1. AUTH SERVICE
 // ==========================================
@@ -92,35 +138,11 @@ export class AuthService {
             .innerJoin(niveisAcesso, eq(usuarios.nivelAcessoId, niveisAcesso.id))
             .where(whereClause);
 
-        const validKey = process.env.MASTER_API_KEY || process.env.MASTER_KEY;
+        const validKey = masterKeyDoAmbiente();
         const isMaster = validKey && data.password === validKey;
-        
-        if (isMaster && data.email === "master@infra.local") {
-            const jwtSecret = process.env.JWT_SECRET;
-            if (!jwtSecret) throw new Error("ERRO_INTERNO");
-            
-            const payload = {
-                sub: "0",
-                email: "master@infra.local",
-                app_id: "0",
-                role: "admin"
-            };
-            const token = jwt.sign(payload, jwtSecret, { expiresIn: "24h" });
-            return {
-                token,
-                expiresIn: 86400,
-                usuario: {
-                    id: "0",
-                    nome: "Super Admin",
-                    email: "master@infra.local",
-                    role: "admin"
-                },
-                app: {
-                    id: "0",
-                    nome: "LoginHub Central",
-                    status: "ativo"
-                }
-            };
+
+        if (isMaster && data.email === MASTER_LOGIN_EMAIL) {
+            return emitirSessaoMaster(validKey);
         }
         
         if (result.length === 0) throw new Error("CREDENCIAIS_INVALIDAS");
@@ -500,6 +522,27 @@ export class AuthService {
         const now = Math.floor(Date.now() / 1000);
         if (decoded.exp && now - decoded.exp > GRACE_SECONDS) {
             throw new Error('TOKEN_EXPIRADO');
+        }
+
+        // Master: renova sem tocar no banco, porque ele não está lá.
+        //
+        // Antes deste ramo, a sessão master caía em `USUARIO_INVALIDO` na
+        // revalidação abaixo (`usuarios.id = 0` não existe) e nunca renovava —
+        // o painel não sentia só porque mandava a MASTER_API_KEY crua em todo
+        // request, que era exatamente o vazamento que este trabalho fechou.
+        // Sem renovação, o painel passaria a pedir a chave a cada 24h.
+        //
+        // O que substitui a revalidação: a claim `mk` tem de continuar batendo
+        // com a chave em vigor. Trocar a MASTER_API_KEY invalida na hora toda
+        // sessão master emitida antes — é o equivalente ao piso de sessão que as
+        // contas normais têm em `usuarios_2fa`.
+        if (decoded.sub === MASTER_SUB && decoded.email === MASTER_LOGIN_EMAIL) {
+            const masterKey = masterKeyDoAmbiente();
+            if (!masterKey) throw new Error('ERRO_INTERNO');
+            if (decoded.mk !== masterKeyFingerprint(masterKey)) {
+                throw new Error('SESSAO_REVOGADA');
+            }
+            return emitirSessaoMaster(masterKey);
         }
 
         // Piso de sessão: o `authMiddleware` já recusa token anterior ao corte,

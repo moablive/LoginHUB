@@ -482,7 +482,8 @@ DB_PASS='***'
 # ====================
 JWT_SECRET='***'                # Chave privada para assinatura de JWT (login e magic links)
 MASTER_API_KEY='***'            # Chave de administrador mestre para chamadas /admin/*
-VITE_MASTER_KEY='***'           # Chave mestra exposta para o build da UI
+                                # NÃO crie VITE_MASTER_KEY: o prefixo VITE_ publica
+                                # a variável no bundle e a chave vira pública.
 
 # ====================
 # 2FA (TOTP)
@@ -617,7 +618,8 @@ da API — é aceitável para travar força bruta, mas não sobreviveria a répl
 
 ### 🔐 Administração (`/admin/*`)
 
-*Exige o header `x-api-key: <MASTER_API_KEY>` em todas as requisições.*
+*Exige `x-api-key: <MASTER_API_KEY>` (chamador servidor-a-servidor) **ou**
+`Authorization: Bearer <sessão master>` (o painel). Ver [Sessão master](#-sessão-master-e-a-master-key).*
 
 #### Aplicativos (Tenants)
 
@@ -1254,6 +1256,92 @@ Disponível em: [`https://loginhub.astralwavelabel.com/login`](https://loginhub.
   pede os campos que o app exige (CPF, comissão...) e delega a criação a ele. Ver fluxo 5️⃣.
 - 🧛 **Dracula Dark Mode**: Chaveador de tema escuro/claro integrado.
 - 📱 **PWA**: Instalável como aplicativo nativo em desktops e dispositivos móveis.
+
+---
+
+## 🔑 Sessão master e a master key
+
+O painel do hub tem uma credencial só: a `MASTER_API_KEY`. Ela **não** muda de
+valor nem de dono — o que mudou em 29/08/2026 foi o caminho que ela percorre.
+
+### Como era, e por que precisou mudar
+
+O `.env` tinha duas linhas com o mesmo valor: `MASTER_API_KEY` (lida pela API) e
+`VITE_MASTER_KEY` (lida pela UI). A segunda é o problema: **o prefixo `VITE_` é
+exatamente o mecanismo pelo qual o Vite publica uma variável no bundle**. A
+chave era servida dentro de `import.meta.env` em todo módulo que o dev server
+entregava — legível por qualquer visitante da página, sem autenticar, e valendo
+como `x-api-key` em todas as rotas `/admin/*`.
+
+O `.env` protege contra o git. Não protege contra o navegador; para isso o que
+vale é o prefixo da variável.
+
+### Como é agora
+
+```
+você digita a master key  ──▶  POST /auth/login (master@infra.local)
+                                        │  o SERVIDOR compara com MASTER_API_KEY
+                                        ▼
+                          JWT master { sub:0, role:admin, mk }  ──▶  localStorage
+                                        │
+                                        ▼
+                     adminMiddleware aceita o Bearer  ──▶  /admin/*
+```
+
+A chave sobe uma vez, no login, e nunca volta ao navegador. O que fica no
+cliente é a sessão.
+
+O `adminMiddleware` (`packages/middlewares/src/index.ts`) passou a aceitar duas
+credenciais, e a distinção entre elas é o ponto:
+
+| Credencial | Quem usa | Continua igual? |
+|---|---|---|
+| `x-api-key: <MASTER_API_KEY>` | servidor-a-servidor: convite de vendedor da Sul Alimentos, bot, scripts, `curl` do operador | **sim, intocado** |
+| `Authorization: Bearer <sessão master>` | o painel | novo |
+
+A sessão master é reconhecida pelo **conjunto** — `sub` 0, e-mail do master,
+`role: admin`, claim `mk` conferindo e nenhuma claim `action`. Um JWT de usuário
+comum com `role: "admin"` (que existe: é o admin *do app dele*) não abre nada
+aqui.
+
+### A claim `mk` — o piso de sessão que o master não tinha
+
+`mk` é a impressão digital da `MASTER_API_KEY` (`masterKeyFingerprint`, em
+`@loginhub/schema`, o mesmo `sha256(...).slice(0,16)` do `pwf` do magic link).
+
+Ela existe porque o master é a única conta **sem linha em `usuarios`** e, por
+consequência, sem `usuarios_2fa.sessoes_validas_desde` — o piso que faz "ativar
+2FA" derrubar sessões já emitidas. Sem `mk`, uma sessão master emitida antes da
+troca da chave continuaria válida depois dela, e rotacionar não derrubaria
+ninguém.
+
+Com ela: **trocar a `MASTER_API_KEY` invalida na hora toda sessão master**, no
+`adminMiddleware` e no `/auth/refresh`. É o botão de revogação do master.
+
+### Por que você não desloga
+
+`/auth/refresh` ganhou um ramo master, antes das consultas ao banco: ele pula a
+revalidação em `usuarios` (onde o master não está, e onde antes dava
+`USUARIO_INVALIDO`) e reemite a sessão desde que `mk` continue batendo. O
+interceptor do `@loginhub/api-client` já renova em qualquer 401 e repete a
+request — então a aba se mantém logada sozinha, sem a chave estar no navegador.
+
+TTL de 24 h + 7 dias de graça sobre token expirado: uma aba usada ao menos uma
+vez a cada oito dias nunca pede a chave de novo.
+
+### Ao mexer nisto
+
+- **Nunca crie variável `VITE_*` com segredo.** Não é convenção de nome, é
+  publicação. Hoje só existem `VITE_API_URL`, `VITE_APP_VERSION`,
+  `VITE_APP_BUILD_DATE` e a opcional `VITE_SUL_ALIMENTOS_API_URL` — todas
+  públicas por natureza.
+- **`masterKeyFingerprint` tem um dono só** (`@loginhub/schema`). Quem assina
+  (`services`) e quem confere (`middlewares`) precisam calcular a mesma coisa;
+  duas cópias que divirjam derrubam todas as sessões master de uma vez.
+- **`master@infra.local` está na lista de e-mails reservados** que o
+  `authApi.login` recusa. É por isso que o painel usa `authApi.loginMaster()`,
+  função separada — e é essa recusa que impede alguém de tentar o master pelo
+  caminho de usuário comum.
 
 ---
 
