@@ -94,8 +94,12 @@ services:
     # e o painel ficaria preso esperando um watcher que aqui não existe.
     depends_on: !reset null
 
+    # `127.0.0.1` e nao `localhost`: o nginx.conf tem `listen 80;` sem o par
+    # `listen [::]:80;`, entao ele so atende IPv4. O `localhost` dentro do
+    # container resolve ::1 primeiro e o healthcheck respondia "Connection
+    # refused" com o site no ar.
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/"]
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:80/"]
       interval: 30s
       timeout: 5s
       retries: 3
