@@ -347,6 +347,24 @@ export const rateLimitGestao2FA = criarRateLimit({
 });
 
 /**
+ * `GET /2fa/status` é LEITURA e estava no balde de gestão, gastando o mesmo
+ * orçamento de 10/15min que o `setup`. A tela de enrolamento consulta o status
+ * a cada carregamento, então três recarregamentos — banal no celular, onde a
+ * aba é descartada ao trocar de app — bastavam para o próprio dono da conta
+ * levar MUITAS_TENTATIVAS e não conseguir mais ativar o 2FA.
+ *
+ * Separar não afrouxa nada: a força bruta que os 10 protegem é a de adivinhar
+ * o código, e essa mora em `/2fa/verify*` e no `verify-setup`, que continuam
+ * nos baldes estreitos. O limite aqui só existe contra laço descontrolado.
+ */
+export const rateLimitStatus2FA = criarRateLimit({
+    nome: '2fa-status',
+    janelaMs: 15 * 60 * 1000,
+    max: 60,
+    chave: chaveDoUsuario,
+});
+
+/**
  * Chave do login: a CONTA em disputa, com IP de reserva.
  *
  * Pelo mesmo motivo do desafio de 2FA — as APIs dos tenants falam com o hub

@@ -58,14 +58,20 @@ export function TwoFactorChallenge({ challengeToken, onAutenticado, onCancelar }
 
             <input
                 value={codigo}
-                onChange={(e) => setCodigo(e.target.value)}
+                onChange={(e) => setCodigo(usarBackup ? e.target.value.toUpperCase() : e.target.value.replace(/\D/g, '').slice(0, 6))}
                 // O código TOTP é numérico e curto; o de recuperação tem letras
                 // e hífen. `inputMode` muda o teclado do celular conforme o caso.
                 inputMode={usarBackup ? 'text' : 'numeric'}
                 autoComplete="one-time-code"
+                autoCapitalize={usarBackup ? 'characters' : 'off'}
+                autoCorrect="off"
+                spellCheck={false}
                 placeholder={usarBackup ? 'XXXXX-XXXXX' : '000000'}
                 maxLength={usarBackup ? 11 : 6}
-                autoFocus
+                // Sem autoFocus no celular: abrir o teclado durante a montagem
+                // rola a tela sozinha e, no iOS, o foco às vezes fica sem
+                // teclado nenhum. No desktop o foco automático segue valendo.
+                autoFocus={typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches}
                 required
                 className="w-full rounded-lg border border-input bg-background px-3 py-3 text-center text-lg tracking-widest text-foreground focus:border-primary focus:outline-none"
             />
@@ -76,7 +82,7 @@ export function TwoFactorChallenge({ challengeToken, onAutenticado, onCancelar }
 
             <button
                 type="submit"
-                disabled={enviando || codigo.length === 0}
+                disabled={enviando || (usarBackup ? codigo.length < 11 : codigo.length !== 6)}
                 className="w-full rounded-md bg-primary px-4 py-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-70"
             >
                 {enviando ? 'Verificando...' : 'Verificar'}

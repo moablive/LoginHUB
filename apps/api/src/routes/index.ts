@@ -12,7 +12,8 @@ import {
   authMiddlewareEnrolamento,
   rateLimitLogin,
   rateLimitVerificacao2FA,
-  rateLimitGestao2FA
+  rateLimitGestao2FA,
+  rateLimitStatus2FA
 } from '@loginhub/middlewares';
 
 export const mainRouter = Router();
@@ -60,7 +61,9 @@ twoFactorRouter.post('/verify', rateLimitVerificacao2FA as any, TwoFactorControl
 twoFactorRouter.post('/verify-backup', rateLimitVerificacao2FA as any, TwoFactorController.verifyBackup as any);
 
 const enrolamento = [authMiddlewareEnrolamento as any, rateLimitGestao2FA as any];
-twoFactorRouter.get('/status', ...enrolamento, TwoFactorController.status as any);
+// `status` é leitura e sai do balde estreito: a tela de enrolamento consulta a
+// cada carregamento, e no celular recarregar é rotina. Ver rateLimitStatus2FA.
+twoFactorRouter.get('/status', authMiddlewareEnrolamento as any, rateLimitStatus2FA as any, TwoFactorController.status as any);
 twoFactorRouter.post('/setup', ...enrolamento, TwoFactorController.setup as any);
 twoFactorRouter.post('/verify-setup', ...enrolamento, TwoFactorController.verifySetup as any);
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTwoFactor } from './useTwoFactor';
 
 interface Props {
@@ -33,8 +33,19 @@ export function TwoFactorSetup({ renderQr, autoIniciar = false }: Props) {
     const [codigo, setCodigo] = useState('');
     const [copiado, setCopiado] = useState(false);
     const [autoTentado, setAutoTentado] = useState(false);
+    const statusPedido = useRef(false);
 
-    useEffect(() => { void carregarStatus(); }, [carregarStatus]);
+    // O guarda por ref é necessário: em <StrictMode> o React monta, desmonta e
+    // remonta o efeito, então este `carregarStatus` saía DUAS vezes por
+    // carregamento de página. Como `/2fa/status` divide com `/2fa/setup` o
+    // mesmo balde de 10 requisições por 15 minutos e por usuário, quem
+    // recarregasse a tela três vezes — coisa banal no celular — levava
+    // MUITAS_TENTATIVAS e ficava sem conseguir enrolar o próprio 2FA.
+    useEffect(() => {
+        if (statusPedido.current) return;
+        statusPedido.current = true;
+        void carregarStatus();
+    }, [carregarStatus]);
 
     // Uma vez só: `iniciar()` descarta o secret anterior a cada chamada (é o
     // botão "gerar outro QR"), então repetir aqui trocaria o código embaixo de
@@ -109,8 +120,16 @@ export function TwoFactorSetup({ renderQr, autoIniciar = false }: Props) {
 
                 <input
                     value={codigo}
-                    onChange={(e) => setCodigo(e.target.value)}
+                    // Só dígitos: colar "123 456" do autenticador não pode
+                    // travar o botão em `length !== 6`.
+                    onChange={(e) => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    type="text"
                     inputMode="numeric"
+                    pattern="[0-9]*"
+                    autoComplete="one-time-code"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
                     maxLength={6}
                     placeholder="000000"
                     className="w-full rounded-lg border border-input bg-background px-3 py-3 text-center text-lg tracking-widest text-foreground focus:border-primary focus:outline-none"
