@@ -1,0 +1,102 @@
+# =============================================================================
+# Override de PRODUÇÃO da UI — troca o `vite dev` pelo bundle estático.
+#
+#     docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build login-hub-ui
+#
+# POR QUE
+#
+# O serviço `login-hub-ui` do compose padrão roda o dev server do Vite atrás do
+# túnel Cloudflare. Isso é ótimo para editar e ver na hora, e é ruim para quem
+# usa o painel pelo celular:
+#
+#   - `/@vite/client` recarrega a página sozinho (`location.reload()`) sempre
+#     que o WebSocket de HMR cai e volta. No celular ele cai a cada bloqueio de
+#     tela e a cada troca de Wi-Fi para 4G — a modal fecha e o formulário some
+#     no meio do preenchimento.
+#   - O React roda em modo de desenvolvimento: o <StrictMode> dispara cada
+#     efeito duas vezes, dobrando as chamadas de API. Nas telas de 2FA isso
+#     queima o balde de rate limit do próprio usuário.
+#   - O celular baixa ~4,4 MB em 60+ requisições sem minificação (só o
+#     react-dom são 1 MB), em vez dos ~260 kB comprimidos do build.
+#
+# O QUE ISTO CUSTA
+#
+# Hot reload. Com este override, mudança em `apps/ui` só aparece depois de
+# `--build`. O backend (`login-hub-api`) NÃO é tocado por este arquivo e
+# continua com `ts-node-dev --respawn`.
+#
+# Para voltar ao dev server, suba sem o `-f docker-compose.prod.yml`.
+#
+# COMO ELE JA ESTA APLICADO (link simbolico, nao rename)
+#
+#     docker-compose.override.yml -> docker-compose.prod.yml
+#
+# O Compose le `docker-compose.override.yml` sozinho, sem `-f`, e isso importa
+# porque os DOIS caminhos de redeploy deste servidor fixam o nome do arquivo:
+#
+#   ./redeploy.sh                            -> COMPOSE_FILE="docker-compose.yml"
+#   dashboard/scripts/redeploy.sh (o painel) -> COMPOSE_FILE="docker-compose.yml"
+#
+# Sem o override no lugar, o proximo redeploy pelo painel devolveria a UI para o
+# `vite dev` sem avisar.
+#
+# E link, e nao `mv`, porque `docker-compose.override.yml` esta no .gitignore
+# (linha 81) de proposito: aquele nome e reservado a ajuste local de cada
+# maquina. Renomear tiraria este arquivo do versionamento, e quem clonasse o
+# repositorio receberia so o dev server. Assim o conteudo fica versionado aqui e
+# o link (ignorado) e o que liga a chave em producao.
+#
+# Se o link se perder (clone novo, checkout limpo), recrie:
+#
+#     ln -s docker-compose.prod.yml docker-compose.override.yml
+#
+# Para voltar ao dev server sem apagar nada: `rm docker-compose.override.yml`.
+# =============================================================================
+
+services:
+  login-hub-ui:
+    build:
+      context: .
+      dockerfile: apps/ui/Dockerfile
+      args:
+        # Todas públicas por definição: o prefixo VITE_ é o que manda o Vite
+        # publicá-las dentro do bundle. Segredo nenhum entra aqui — ver a nota
+        # no Dockerfile sobre o `COPY .env` que foi removido.
+        VITE_API_URL: ${VITE_API_URL}
+        VITE_SUL_ALIMENTOS_API_URL: ${VITE_SUL_ALIMENTOS_API_URL:-}
+        VITE_ASTRALWAVE_API_URL: ${VITE_ASTRALWAVE_API_URL:-}
+        VITE_APP_VERSION: ${APP_VERSION:-0.0.0}
+        VITE_APP_BUILD_DATE: ${APP_BUILD_DATE:-}
+    image: loginhub-ui-prod
+
+    # O `command` do compose padrão sobe o vite; aqui quem manda é o CMD do
+    # nginx que veio da imagem.
+    command: ["nginx", "-g", "daemon off;"]
+
+    # Anula o bind mount do monorepo. Sem esta linha o `.:/app` continuaria
+    # montado dentro do container de nginx — inofensivo, mas é o `.env` inteiro
+    # dentro de um container exposto ao túnel. O bundle já está em
+    # /usr/share/nginx/html.
+    volumes: !reset []
+
+    environment:
+      - TZ=America/Sao_Paulo
+
+    # O env_file do compose padrão joga os segredos no ambiente do processo.
+    # O nginx não precisa de nenhum deles.
+    env_file: !reset []
+
+    # O nginx não depende de nada para subir: o bundle já está na imagem e o
+    # `resolver 127.0.0.11` do nginx.conf resolve o backend em tempo de
+    # requisição, então a API pode chegar depois sem derrubar o painel.
+    # `!reset` (e não uma lista vazia) porque o Compose MESCLA override com
+    # base — sem ele o `login-hub-packages: service_healthy` continuaria valendo
+    # e o painel ficaria preso esperando um watcher que aqui não existe.
+    depends_on: !reset null
+
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
