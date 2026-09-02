@@ -51,6 +51,36 @@ api.interceptors.request.use(
 );
 
 // ==========================================
+// FLAG DE SUPER ADMIN
+// ==========================================
+/**
+ * Marca que a sessão no `awl_token` é a do master.
+ *
+ * Mora no localStorage, e não no sessionStorage, porque o sessionStorage morre
+ * junto com a aba: no celular o sistema descarta a aba em segundo plano, e ao
+ * voltar o painel encontrava token válido sem a flag e mandava a pessoa para o
+ * login. A flag não autoriza nada — quem decide é o `adminMiddleware` contra o
+ * JWT —, ela só diz ao roteador qual árvore de telas montar.
+ *
+ * A leitura ainda aceita o sessionStorage para não deslogar quem estiver com o
+ * painel aberto no momento do deploy.
+ */
+const CHAVE_SUPER_ADMIN = 'awl_is_super_admin';
+
+const marcarSuperAdmin = (): void => {
+  localStorage.setItem(CHAVE_SUPER_ADMIN, 'true');
+};
+
+const limparSuperAdmin = (): void => {
+  localStorage.removeItem(CHAVE_SUPER_ADMIN);
+  sessionStorage.removeItem('is_super_admin');
+};
+
+export const ehSuperAdmin = (): boolean =>
+  localStorage.getItem(CHAVE_SUPER_ADMIN) === 'true' ||
+  sessionStorage.getItem('is_super_admin') === 'true';
+
+// ==========================================
 // REFRESH TOKEN HELPER
 // ==========================================
 /** E-mail que o login master do backend exige (packages/services). */
@@ -112,6 +142,7 @@ api.interceptors.response.use(
         localStorage.removeItem('awl_token');
         localStorage.removeItem('awl_user');
         localStorage.removeItem('awl_app');
+        limparSuperAdmin();
         window.location.href = '/login';
       }
     }
@@ -152,14 +183,14 @@ export const authApi = {
     localStorage.removeItem('awl_token');
     localStorage.removeItem('awl_user');
     localStorage.removeItem('awl_app');
-    sessionStorage.removeItem('is_super_admin');
+    limparSuperAdmin();
 
     const { data } = await api.post<LoginResponse>('/auth/login', {
       email: MASTER_LOGIN_EMAIL,
       password: masterKey,
     });
 
-    sessionStorage.setItem('is_super_admin', 'true');
+    marcarSuperAdmin();
     localStorage.setItem('awl_token', data.token);
 
     // Mantido igual ao que a sessão master sempre gravou: o painel lê `role`
@@ -189,7 +220,7 @@ export const authApi = {
     localStorage.removeItem('awl_token');
     localStorage.removeItem('awl_user');
     localStorage.removeItem('awl_app');
-    sessionStorage.removeItem('is_super_admin');
+    limparSuperAdmin();
 
     const reservedEmails = ['master@infra.local', 'root@system.local', 'admin@local'];
     if (reservedEmails.includes(email)) {
@@ -235,7 +266,7 @@ export const authApi = {
     localStorage.removeItem('awl_token');
     localStorage.removeItem('awl_user');
     localStorage.removeItem('awl_app');
-    sessionStorage.removeItem('is_super_admin');
+    limparSuperAdmin();
     window.location.href = '/login';
   },
 
@@ -274,8 +305,7 @@ export const authApi = {
 
   isAuthenticated: (): boolean => {
     const token = localStorage.getItem('awl_token');
-    const isSuperAdmin = sessionStorage.getItem('is_super_admin') === 'true';
-    return !!token || isSuperAdmin;
+    return !!token || ehSuperAdmin();
   },
 
   getUser: (): User | null => {

@@ -69,15 +69,15 @@ export const ConfirmModal = ({
   const styles = VARIANT_STYLES[variant];
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
-      <div className="flex min-h-screen items-center justify-center p-4 text-center sm:p-0">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]" role="dialog" aria-modal="true">
+      <div className="flex min-h-full items-end justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-center sm:items-center sm:p-0">
         <div
           className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
           onClick={isLoading ? undefined : onClose}
           aria-hidden="true"
         />
 
-        <div className="relative transform overflow-hidden rounded-2xl bg-card text-card-foreground text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-md border border-border animate-fade-in-up">
+        <div className="relative w-full transform overflow-hidden rounded-2xl bg-card text-card-foreground text-left shadow-xl transition-all sm:my-8 sm:max-w-md border border-border animate-fade-in-up">
           {/* Cabeçalho */}
           <div className="px-5 pt-5 pb-2 flex items-start gap-4">
             <div className={`flex-shrink-0 h-12 w-12 rounded-full flex items-center justify-center ${styles.iconBg}`}>
@@ -130,7 +130,7 @@ export const ConfirmModal = ({
               type="button"
               onClick={onClose}
               disabled={isLoading}
-              className="inline-flex items-center justify-center rounded-lg bg-card text-card-foreground px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset ring-gray-300 hover:bg-muted/50 disabled:opacity-50 transition-colors"
+              className="inline-flex items-center justify-center rounded-lg bg-card text-card-foreground px-4 py-2 text-sm font-semibold text-foreground ring-1 ring-inset ring-border hover:bg-muted/50 disabled:opacity-50 transition-colors"
             >
               {cancelText}
             </button>

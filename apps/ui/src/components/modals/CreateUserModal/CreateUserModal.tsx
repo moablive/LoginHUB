@@ -327,22 +327,22 @@ export const CreateUserModal = ({
   if (!isOpen) return null;
 
   const inputClass = (field: string) =>
-    `mt-1 block w-full rounded-lg shadow-sm sm:text-sm py-2 px-3 border ${
+    `mt-1 block w-full rounded-lg shadow-sm text-base sm:text-sm py-2 px-3 border ${
       fieldErrors[field]
         ? "border-red-400 focus:border-red-500 focus:ring-red-500"
         : "border-input focus:border-blue-500 focus:ring-blue-500"
     }`;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
-      <div className="flex min-h-screen items-center justify-center p-4 text-center sm:p-0">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]" role="dialog" aria-modal="true">
+      <div className="flex min-h-full items-end justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-center sm:items-center sm:p-0">
         <div
           className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
           onClick={isLoading ? undefined : onClose}
           aria-hidden="true"
         />
 
-        <div className={`relative transform overflow-hidden rounded-2xl bg-card text-card-foreground text-left shadow-xl transition-all sm:my-8 sm:w-full ${step === "preview" ? "sm:max-w-3xl" : "sm:max-w-lg"} border border-border animate-fade-in-up`}>
+        <div className={`relative w-full transform overflow-hidden rounded-2xl bg-card text-card-foreground text-left shadow-xl transition-all sm:my-8 ${step === "preview" ? "sm:max-w-3xl" : "sm:max-w-lg"} border border-border animate-fade-in-up`}>
           {/* Cabeçalho */}
           <div className="bg-muted/50 px-4 py-3 sm:px-6 flex justify-between items-center border-b border-border">
             <h3 className="text-lg font-semibold leading-6 text-foreground flex items-center gap-2">
@@ -401,7 +401,7 @@ export const CreateUserModal = ({
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Nome Completo</label>
+                  <label className="block text-sm font-medium text-foreground">Nome Completo</label>
                   <input
                     type="text"
                     name="nome"
@@ -417,7 +417,7 @@ export const CreateUserModal = ({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">E-mail de Acesso</label>
+                  <label className="block text-sm font-medium text-foreground">E-mail de Acesso</label>
                   <input
                     type="email"
                     name="email"
@@ -449,7 +449,7 @@ export const CreateUserModal = ({
                   };
 
                   const labelEl = (
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-sm font-medium text-foreground">
                       {field.label}
                       {!field.required && (
                         <span className="ml-1 font-normal text-muted-foreground">(opcional)</span>
@@ -544,12 +544,12 @@ export const CreateUserModal = ({
                 })}
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Nível de Acesso</label>
+                  <label className="block text-sm font-medium text-foreground">Nível de Acesso</label>
                   <select
                     name="role"
                     value={formData.role}
                     onChange={handleChange}
-                    className="mt-1 block w-full rounded-lg border-input shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border bg-card text-card-foreground"
+                    className="mt-1 block w-full rounded-lg border-input shadow-sm focus:border-blue-500 focus:ring-blue-500 text-base sm:text-sm py-2 px-3 border bg-card text-card-foreground"
                   >
                     {provisioned && (
                       <option value={PROVISION_ROLE}>
@@ -607,7 +607,7 @@ export const CreateUserModal = ({
                 <button
                   type="button"
                   disabled={isLoading}
-                  className="mt-3 inline-flex w-full justify-center rounded-lg bg-card text-card-foreground px-4 py-2 text-sm font-semibold text-foreground shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-muted/50 disabled:opacity-50 sm:mt-0 sm:w-auto transition-colors"
+                  className="mt-3 inline-flex w-full justify-center rounded-lg bg-card text-card-foreground px-4 py-2 text-sm font-semibold text-foreground shadow-sm ring-1 ring-inset ring-border hover:bg-muted/50 disabled:opacity-50 sm:mt-0 sm:w-auto transition-colors"
                   onClick={onClose}
                 >
                   Cancelar
@@ -662,7 +662,7 @@ export const CreateUserModal = ({
                   type="button"
                   onClick={() => setStep("form")}
                   disabled={isLoading}
-                  className="mt-3 inline-flex w-full justify-center items-center gap-2 rounded-lg bg-card text-card-foreground px-4 py-2 text-sm font-semibold text-foreground shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-muted/50 disabled:opacity-50 sm:mt-0 sm:w-auto transition-colors"
+                  className="mt-3 inline-flex w-full justify-center items-center gap-2 rounded-lg bg-card text-card-foreground px-4 py-2 text-sm font-semibold text-foreground shadow-sm ring-1 ring-inset ring-border hover:bg-muted/50 disabled:opacity-50 sm:mt-0 sm:w-auto transition-colors"
                 >
                   <ArrowLeftIcon className="h-4 w-4" />
                   Voltar

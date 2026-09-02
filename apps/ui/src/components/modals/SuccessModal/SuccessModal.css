@@ -1,5 +1,12 @@
 /* Fundo Escuro com Desfoque (Glass Effect) */
 .awl-modal-overlay {
+  /* Sem isto o card mais alto que a viewport (paisagem, teclado
+     aberto) fica com os botoes fora de alcance e sem rolagem. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 1rem;
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
   position: fixed;
   top: 0;
   left: 0;
@@ -16,7 +23,8 @@
 
 /* O Card do Modal */
 .awl-modal-card {
-  background: white;
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
   padding: 2.5rem;
   border-radius: 20px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
@@ -25,6 +33,9 @@
   width: 90%;
   transform: scale(0.8);
   animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  /* auto nos dois eixos: centraliza quando cabe, permite rolar quando nao cabe. */
+  margin: auto;
+  flex-shrink: 0;
 }
 
 /* Círculo do Ícone */
@@ -50,12 +61,12 @@
 
 @keyframes popIn {
   from { 
-    opacity: 0; 
-    transform: scale(0.8) translateY(20px); 
+  opacity: 0; 
+  transform: scale(0.8) translateY(20px); 
   }
   to { 
-    opacity: 1; 
-    transform: scale(1) translateY(0); 
+  opacity: 1; 
+  transform: scale(1) translateY(0); 
   }
 }
 

@@ -310,8 +310,8 @@ export const AppUsers = () => {
               <p className="mt-4 text-muted-foreground">Sincronizando dados...</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+            <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
+              <table className="min-w-full divide-y divide-border">
                 <thead className="bg-muted/50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Nome</th>
@@ -322,7 +322,7 @@ export const AppUsers = () => {
                     <th className="px-6 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Ações</th>
                   </tr>
                 </thead>
-                <tbody className="bg-card text-card-foreground divide-y divide-gray-200">
+                <tbody className="bg-card text-card-foreground divide-y divide-border">
                   {users.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
@@ -572,7 +572,7 @@ export const AppUsers = () => {
                     readOnly
                     value={credentialsAlert.message}
                     rows={7}
-                    className="w-full text-sm text-gray-700 bg-muted/50 border border-border rounded-lg p-3 font-mono resize-none focus:outline-none"
+                    className="w-full text-base sm:text-sm text-foreground bg-muted/50 border border-border rounded-lg p-3 font-mono resize-none focus:outline-none"
                   />
                   <button 
                     onClick={() => navigator.clipboard.writeText(credentialsAlert.message)}

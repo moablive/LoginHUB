@@ -56,8 +56,8 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 bg-card text-card-foreground p-8 rounded-xl shadow-lg border border-border">
+    <div className="min-h-screen min-h-dvh flex items-center justify-center bg-background px-4 py-8 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8 bg-card text-card-foreground p-6 sm:p-8 rounded-xl shadow-lg border border-border">
 
         {/* CABEÇALHO */}
         <div className="text-center">
@@ -80,7 +80,7 @@ export function Login() {
               
               {/* Ícone Cadeado */}
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <LockClosedIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                <LockClosedIcon className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
               </div>
               
               <input
@@ -88,7 +88,7 @@ export function Login() {
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
                 required
-                className="appearance-none rounded-lg relative block w-full pl-10 pr-10 px-3 py-3 border border-input placeholder-muted-foreground text-foreground bg-background focus:outline-none focus:ring-primary focus:border-primary focus:z-10 sm:text-sm"
+                className="appearance-none rounded-lg relative block w-full pl-10 pr-10 px-3 py-3 border border-input placeholder-muted-foreground text-foreground bg-background focus:outline-none focus:ring-primary focus:border-primary focus:z-10 text-base sm:text-sm"
                 placeholder="Insira a Master Key"
                 {...register('password', { required: true })}
               />

@@ -25,6 +25,11 @@
     --danger-foreground: 210 40% 98%;
     --success: 142.1 76.2% 36.3%;
     --success-foreground: 355.7 100% 97.3%;
+    /* `bg-warning`, `text-warning` e `border-warning` já eram usados em
+       AppUsers e TwoFactorSetup sem existir token nenhum — o Tailwind não
+       emitia regra e o aviso saía sem cor. */
+    --warning: 37.7 92.1% 50.2%;
+    --warning-foreground: 20.9 91.7% 14.1%;
     --radius: 0.75rem;
   }
  
@@ -43,6 +48,8 @@
     --danger-foreground: 210 40% 98%;
     --success: 142.1 70.6% 45.3%;
     --success-foreground: 144.9 80.4% 10%;
+    --warning: 47.9 95.8% 53.1%;
+    --warning-foreground: 20.9 91.7% 14.1%;
   }
 }
 
@@ -53,5 +60,27 @@
   body {
     @apply bg-background text-foreground;
     font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  }
+}
+
+@layer base {
+  html {
+    /* Evita que o iOS reescale a fonte ao girar o aparelho para paisagem. */
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    /* O painel tem tabela larga; sem isto um `whitespace-nowrap` estoura a
+       viewport e o celular fica com scroll horizontal na página inteira. */
+    overflow-x: hidden;
+  }
+  /* Alvo de toque mínimo. Os botões de ação da tabela eram `p-2` num ícone de
+     20px = 36px de alvo; abaixo dos 44px que iOS e Android recomendam, é onde
+     nasce o "cliquei e pegou o botão errado". */
+  @media (pointer: coarse) {
+    button,
+    [role='button'],
+    a.btn {
+      min-height: 44px;
+    }
   }
 }

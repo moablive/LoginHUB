@@ -68,13 +68,13 @@ export function SetupPassword() {
 
   if (!token) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-card text-card-foreground rounded-2xl shadow-xl max-w-md w-full p-8 text-center border border-slate-100">
+      <div className="min-h-screen min-h-dvh bg-background flex items-center justify-center p-4 py-8">
+        <div className="bg-card text-card-foreground rounded-2xl shadow-xl max-w-md w-full p-8 text-center border border-border">
           <div className="mx-auto w-16 h-16 bg-danger/20 rounded-full flex items-center justify-center mb-6">
             <ShieldCheckIcon className="w-8 h-8 text-danger" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-800 mb-2">Link Inválido</h2>
-          <p className="text-slate-600 mb-8">Não foi possível encontrar o token de acesso. O link pode estar quebrado ou já foi utilizado.</p>
+          <h2 className="text-2xl font-bold text-foreground mb-2">Link Inválido</h2>
+          <p className="text-muted-foreground mb-8">Não foi possível encontrar o token de acesso. O link pode estar quebrado ou já foi utilizado.</p>
           <button
             onClick={() => navigate('/login')}
             className="bg-primary hover:bg-primary/90 text-primary-foreground font-medium py-2 px-6 rounded-lg transition-colors w-full"
@@ -88,14 +88,14 @@ export function SetupPassword() {
 
   if (desafio) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-card text-card-foreground rounded-2xl shadow-xl max-w-md w-full p-8 border border-slate-100">
+      <div className="min-h-screen min-h-dvh bg-background flex items-center justify-center p-4 py-8">
+        <div className="bg-card text-card-foreground rounded-2xl shadow-xl max-w-md w-full p-8 border border-border">
           <div className="text-center mb-6">
             <div className="mx-auto w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mb-4">
               <ShieldCheckIcon className="w-8 h-8 text-primary" />
             </div>
-            <h2 className="text-xl font-bold text-slate-800">Senha definida. Confirme quem é você.</h2>
-            <p className="text-slate-500 mt-2 text-sm">
+            <h2 className="text-xl font-bold text-foreground">Senha definida. Confirme quem é você.</h2>
+            <p className="text-muted-foreground mt-2 text-sm">
               Esta conta já tem verificação em duas etapas. Informe o código do autenticador.
             </p>
           </div>
@@ -114,14 +114,14 @@ export function SetupPassword() {
 
   if (precisaEnrolar) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-card text-card-foreground rounded-2xl shadow-xl max-w-md w-full p-8 border border-slate-100">
+      <div className="min-h-screen min-h-dvh bg-background flex items-center justify-center p-4 py-8">
+        <div className="bg-card text-card-foreground rounded-2xl shadow-xl max-w-md w-full p-8 border border-border">
           <div className="text-center mb-6">
             <div className="mx-auto w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mb-4">
               <ShieldCheckIcon className="w-8 h-8 text-primary" />
             </div>
-            <h2 className="text-xl font-bold text-slate-800">Senha definida. Falta um passo.</h2>
-            <p className="text-slate-500 mt-2 text-sm">
+            <h2 className="text-xl font-bold text-foreground">Senha definida. Falta um passo.</h2>
+            <p className="text-muted-foreground mt-2 text-sm">
               Este convite exige verificação em duas etapas. Tenha o celular à mão.
             </p>
           </div>
@@ -133,42 +133,43 @@ export function SetupPassword() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="bg-card text-card-foreground rounded-2xl shadow-xl max-w-md w-full p-8 text-center border border-slate-100">
+      <div className="min-h-screen min-h-dvh bg-background flex items-center justify-center p-4 py-8">
+        <div className="bg-card text-card-foreground rounded-2xl shadow-xl max-w-md w-full p-8 text-center border border-border">
           <div className="mx-auto w-16 h-16 bg-success/20 rounded-full flex items-center justify-center mb-6">
             <ShieldCheckIcon className="w-8 h-8 text-success" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-800 mb-2">Senha definida!</h2>
-          <p className="text-slate-600 mb-8">Sua senha foi configurada com sucesso. Você já pode acessar a plataforma.</p>
-          <p className="text-sm text-slate-400">Redirecionando para o login...</p>
+          <h2 className="text-2xl font-bold text-foreground mb-2">Senha definida!</h2>
+          <p className="text-muted-foreground mb-8">Sua senha foi configurada com sucesso. Você já pode acessar a plataforma.</p>
+          <p className="text-sm text-muted-foreground">Redirecionando para o login...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="bg-card text-card-foreground rounded-2xl shadow-xl max-w-md w-full p-8 border border-slate-100">
+    <div className="min-h-screen min-h-dvh bg-background flex items-center justify-center p-4 py-8">
+      <div className="bg-card text-card-foreground rounded-2xl shadow-xl max-w-md w-full p-8 border border-border">
         <div className="text-center mb-8">
           <div className="mx-auto w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mb-6">
             <ShieldCheckIcon className="w-8 h-8 text-primary" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-800">Defina sua senha</h2>
-          <p className="text-slate-500 mt-2 text-sm">Crie uma senha segura para o seu primeiro acesso.</p>
+          <h2 className="text-2xl font-bold text-foreground">Defina sua senha</h2>
+          <p className="text-muted-foreground mt-2 text-sm">Crie uma senha segura para o seu primeiro acesso.</p>
         </div>
 
         {error && (
-          <div className="bg-danger/10 text-danger p-4 rounded-xl mb-6 text-sm border border-red-100 text-center">
+          <div className="bg-danger/10 text-danger p-4 rounded-xl mb-6 text-sm border border-danger/30 text-center">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Nova Senha</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Nova Senha</label>
             <input
               type="password"
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-slate-700 placeholder-slate-400"
+              autoComplete="new-password"
+              className="w-full px-4 py-3 text-base bg-muted/40 border border-input rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-foreground placeholder-muted-foreground"
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -177,10 +178,11 @@ export function SetupPassword() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Confirme a Senha</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Confirme a Senha</label>
             <input
               type="password"
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-slate-700 placeholder-slate-400"
+              autoComplete="new-password"
+              className="w-full px-4 py-3 text-base bg-muted/40 border border-input rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-foreground placeholder-muted-foreground"
               placeholder="••••••••"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}

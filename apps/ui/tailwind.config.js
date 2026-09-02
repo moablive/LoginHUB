@@ -32,6 +32,10 @@ export default {
           DEFAULT: "hsl(var(--success))",
           foreground: "hsl(var(--success-foreground))",
         },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
+        },
         brand: {
           dark: '#111827',
           blue: '#2563EB',
@@ -41,6 +45,23 @@ export default {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      // `animate-fade-in` e `animate-fade-in-up` eram usados em 10 lugares sem
+      // nunca terem sido declarados: o Tailwind não gerava a classe e a modal
+      // simplesmente aparecia seca.
+      keyframes: {
+        'fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        'fade-in-up': {
+          from: { opacity: '0', transform: 'translateY(8px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+      },
+      animation: {
+        'fade-in': 'fade-in 150ms ease-out',
+        'fade-in-up': 'fade-in-up 180ms ease-out',
       }
     },
   },

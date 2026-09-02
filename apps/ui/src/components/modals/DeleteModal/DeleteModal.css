@@ -2,6 +2,13 @@
 
 /* Fundo Escuro com Blur */
 .awl-delete-overlay {
+  /* Sem isto o card mais alto que a viewport (paisagem, teclado
+     aberto) fica com os botoes fora de alcance e sem rolagem. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 1rem;
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
   position: fixed;
   top: 0;
   left: 0;
@@ -18,7 +25,8 @@
 
 /* Card Central */
 .awl-delete-card {
-  background: white;
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
   padding: 2rem;
   border-radius: 20px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
@@ -28,6 +36,9 @@
   transform: scale(0.9);
   animation: popUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
   border-top: 5px solid #dc3545; /* Linha vermelha no topo */
+  /* auto nos dois eixos: centraliza quando cabe, permite rolar quando nao cabe. */
+  margin: auto;
+  flex-shrink: 0;
 }
 
 /* Ícone de Alerta Pulsante */

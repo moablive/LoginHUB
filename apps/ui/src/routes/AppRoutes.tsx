@@ -2,7 +2,7 @@ import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { ThemeToggle } from '../components/ThemeToggle';
 import { VersionBadge } from '../features/version/VersionBadge';
 import { UpdateBanner } from '../features/version/UpdateBanner';
-import { authApi } from '@loginhub/api-client';
+import { authApi, ehSuperAdmin } from '@loginhub/api-client';
 
 // Layout
 import { AdminLayout } from '../layouts/AdminLayout';
@@ -17,7 +17,11 @@ import { Enroll2FA } from '../pages/Enroll2FA';
 
 export const SuperAdminRoute = () => {
   const isAuth = authApi.isAuthenticated();
-  const isMaster = sessionStorage.getItem('is_super_admin') === 'true'; 
+  // `ehSuperAdmin` e não o sessionStorage direto: a marca migrou para o
+  // localStorage porque o sessionStorage morre com a aba, e o celular descarta
+  // a aba em segundo plano — ao voltar, o painel expulsava para o login com o
+  // token ainda válido. Ver a nota em packages/api-client.
+  const isMaster = ehSuperAdmin();
 
   if (!isAuth || !isMaster) {
     return <Navigate to="/login" replace />;

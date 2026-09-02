@@ -107,7 +107,7 @@ export const LogoUpload = ({
 
   return (
     <div>
-      {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
+      {label && <label className="block text-sm font-medium text-foreground mb-1">{label}</label>}
 
       <div className="flex items-center gap-4">
         <div className="flex-shrink-0 h-20 w-20 rounded-xl border-2 border-dashed border-input bg-muted/50 flex items-center justify-center overflow-hidden">

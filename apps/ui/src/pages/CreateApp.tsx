@@ -113,7 +113,7 @@ export const CreateApp = () => {
               </h3>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nome do Aplicativo</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Nome do Aplicativo</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <BuildingOfficeIcon className="h-5 w-5 text-muted-foreground" />
@@ -124,13 +124,13 @@ export const CreateApp = () => {
                     placeholder="Ex: Tech Solutions Ltda"
                   />
                 </div>
-                {errors.nome && <p className="mt-1 text-xs text-red-500">{errors.nome.message}</p>}
+                {errors.nome && <p className="mt-1 text-xs text-danger">{errors.nome.message}</p>}
               </div>
 
               <LogoUpload value={logo} onChange={setLogo} />
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Documento (CPF/CNPJ)</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Documento (CPF/CNPJ)</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <IdentificationIcon className="h-5 w-5 text-muted-foreground" />
@@ -145,11 +145,11 @@ export const CreateApp = () => {
                     maxLength={18}
                   />
                 </div>
-                {errors.documento && <p className="mt-1 text-xs text-red-500">{errors.documento.message}</p>}
+                {errors.documento && <p className="mt-1 text-xs text-danger">{errors.documento.message}</p>}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">E-mail Corporativo</label>
+                <label className="block text-sm font-medium text-foreground mb-1">E-mail Corporativo</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <EnvelopeIcon className="h-5 w-5 text-muted-foreground" />
@@ -164,7 +164,7 @@ export const CreateApp = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Telefone</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <PhoneIcon className="h-5 w-5 text-muted-foreground" />
@@ -180,7 +180,7 @@ export const CreateApp = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">URL da Plataforma <span className="text-muted-foreground font-normal">(opcional)</span></label>
+                <label className="block text-sm font-medium text-foreground mb-1">URL da Plataforma <span className="text-muted-foreground font-normal">(opcional)</span></label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <GlobeAltIcon className="h-5 w-5 text-muted-foreground" />
@@ -198,11 +198,11 @@ export const CreateApp = () => {
                   />
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">Endereço web do aplicativo. É o link "Acessar Sistema" do e-mail de convite.</p>
-                {errors.platform_url && <p className="mt-1 text-xs text-red-500">{errors.platform_url.message}</p>}
+                {errors.platform_url && <p className="mt-1 text-xs text-danger">{errors.platform_url.message}</p>}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">URL do Bot <span className="text-muted-foreground font-normal">(opcional)</span></label>
+                <label className="block text-sm font-medium text-foreground mb-1">URL do Bot <span className="text-muted-foreground font-normal">(opcional)</span></label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <LinkIcon className="h-5 w-5 text-muted-foreground" />
@@ -220,7 +220,7 @@ export const CreateApp = () => {
                   />
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">Link enviado no e-mail de convite para os usuários acessarem o bot (Telegram, WhatsApp, etc).</p>
-                {errors.bot_url && <p className="mt-1 text-xs text-red-500">{errors.bot_url.message}</p>}
+                {errors.bot_url && <p className="mt-1 text-xs text-danger">{errors.bot_url.message}</p>}
               </div>
             </div>
 

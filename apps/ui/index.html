@@ -6,9 +6,16 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/pwa-192x192.png" />
     
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: sem ele o notch/barra de gestos come o rodapé, onde
+         moram o ThemeToggle e o aviso de nova versão.
+         interactive-widget=resizes-content: faz o teclado virtual ENCOLHER o
+         layout em vez de deslizar a página por baixo dele — é o que impedia o
+         campo focado de ficar atrás do teclado dentro das modais `fixed`.
+         Sem maximum-scale de propósito: travar o zoom quebra acessibilidade. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     
-    <meta name="theme-color" content="#2563EB" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0b" />
     <meta name="description" content="LoginHub Manager Application" />
     
     <title>LoginHub | Manager</title>

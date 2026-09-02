@@ -62,8 +62,8 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-card text-card-foreground rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-black/70 backdrop-blur-sm animate-fade-in sm:items-center">
+      <div className="my-auto w-full max-w-md shrink-0 overflow-hidden rounded-2xl bg-card text-card-foreground shadow-xl">
         {/* Header */}
         <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/50">
           <h3 className="text-lg font-bold text-foreground">Editar Usuário</h3>
@@ -82,7 +82,7 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
 
           {/* Nome */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nome Completo</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Nome Completo</label>
             <input
               type="text"
               required
@@ -94,7 +94,7 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
 
           {/* Email */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">E-mail de Acesso</label>
+            <label className="block text-sm font-medium text-foreground mb-1">E-mail de Acesso</label>
             <input
               type="email"
               required
@@ -106,7 +106,7 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
 
           {/* Nível de Acesso */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nível de Acesso</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Nível de Acesso</label>
             <select
               value={formData.role}
               onChange={e => setFormData({...formData, role: e.target.value})}
@@ -121,7 +121,7 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
 
           {/* ✅ Campo Telefone Adicionado */}
           <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
+            <label className="flex items-center gap-2 text-sm font-medium text-foreground mb-1">
                <PhoneIcon className="h-4 w-4 text-muted-foreground" />
                Telefone / WhatsApp
             </label>
@@ -141,7 +141,7 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-gray-700 bg-card text-card-foreground border border-input rounded-lg hover:bg-muted/50 transition font-medium"
+              className="px-4 py-2 text-foreground bg-card text-card-foreground border border-input rounded-lg hover:bg-muted/50 transition font-medium"
             >
               Cancelar
             </button>

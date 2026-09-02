@@ -68,18 +68,18 @@ export const AlertModal = ({
   const currentStyle = styles[variant];
 
   return (
-    <div className="fixed inset-0 z-[60] overflow-y-auto" role="dialog" aria-modal="true">
-      <div className="flex min-h-screen items-center justify-center p-4 text-center sm:p-0">
+    <div className="fixed inset-0 z-[60] overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]" role="dialog" aria-modal="true">
+      <div className="flex min-h-full items-end justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-center sm:items-center sm:p-0">
         
         {/* Backdrop (Fundo Escuro) */}
         <div 
-          className="fixed inset-0 bg-gray-900/75 backdrop-blur-sm transition-opacity animate-fade-in" 
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity animate-fade-in" 
           onClick={onClose}
           aria-hidden="true"
         />
 
         {/* Modal Panel */}
-        <div className="relative transform overflow-hidden rounded-2xl bg-card text-card-foreground text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-sm border border-border animate-fade-in-up">
+        <div className="relative w-full transform overflow-hidden rounded-2xl bg-card text-card-foreground text-left shadow-2xl transition-all sm:my-8 sm:max-w-sm border border-border animate-fade-in-up">
           <div className="bg-card text-card-foreground px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
             <div className="sm:flex sm:items-start">
               

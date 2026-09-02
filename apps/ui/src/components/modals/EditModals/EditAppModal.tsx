@@ -72,8 +72,8 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-card text-card-foreground rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-black/70 backdrop-blur-sm animate-fade-in sm:items-center">
+      <div className="my-auto w-full max-w-md shrink-0 overflow-hidden rounded-2xl bg-card text-card-foreground shadow-xl">
         <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/50">
           <h3 className="text-lg font-bold text-foreground">Editar Aplicativo</h3>
           <button onClick={onClose} className="text-muted-foreground hover:text-muted-foreground transition">
@@ -89,7 +89,7 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nome da Aplicativo</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Nome da Aplicativo</label>
             <input
               type="text"
               required
@@ -102,7 +102,7 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
           <LogoUpload value={logo} onChange={setLogo} />
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Documento (CNPJ)</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Documento (CNPJ)</label>
             <input
               type="text"
               required
@@ -114,7 +114,7 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">E-mail Corporativo</label>
+            <label className="block text-sm font-medium text-foreground mb-1">E-mail Corporativo</label>
             <input
               type="email"
               required
@@ -125,7 +125,7 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Telefone</label>
             <input
               type="text"
               value={masks.phone(formData.telefone)}
@@ -136,7 +136,7 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-foreground mb-1">
               URL da Plataforma <span className="text-muted-foreground font-normal">(opcional)</span>
             </label>
             <input
@@ -150,7 +150,7 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-foreground mb-1">
               URL do Bot <span className="text-muted-foreground font-normal">(opcional)</span>
             </label>
             <input
@@ -167,7 +167,7 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-gray-700 bg-card text-card-foreground border border-input rounded-lg hover:bg-muted/50 transition font-medium"
+              className="px-4 py-2 text-foreground bg-card text-card-foreground border border-input rounded-lg hover:bg-muted/50 transition font-medium"
             >
               Cancelar
             </button>

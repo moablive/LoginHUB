@@ -45,7 +45,7 @@ export const DeleteModal = ({
           </p>
         )}
 
-        <p className="text-red-500 text-xs mt-4 font-semibold uppercase tracking-wide">
+        <p className="text-danger text-xs mt-4 font-semibold uppercase tracking-wide">
           ⚠️ Esta ação é irreversível
         </p>
 
