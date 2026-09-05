@@ -50,6 +50,8 @@ Astral_Wave/astralwavelabel/apps/artist/src/lib/hubAuthClient.ts|client
 Astral_Wave/astralwavelabel/apps/site/src/lib/hubAuthClient.ts|client
 Sul_Alimentos/sul-alimentos/apps/api/src/lib/hubAuthServer.ts|server
 Sul_Alimentos/sul-alimentos/packages/http-client/src/hubAuthClient.ts|client
+Sul_Alimentos/sul-alimentos/apps/bot/src/lib/hubAuthClient.ts|client
+Sul_Alimentos/sul-alimentos/apps/bot/src/lib/hubAuthBot.ts|bot
 server/dashboard/apps/api/src/lib/hubAuthServer.ts|server
 server/dashboard/packages/api-client/src/hubAuthClient.ts|client
 LifeBusinessSuit/LBS_MoneyAPP/apps/bot/src/lib/hubAuthClient.ts|client
