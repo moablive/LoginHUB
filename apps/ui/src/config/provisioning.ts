@@ -47,6 +47,16 @@ export interface ProvisionField {
   newValue?: string;
   /** Label da opção "criar novo". */
   newLabel?: string;
+  /**
+   * Ao escolher um item existente, copia campos dele para o nome e o e-mail do
+   * convite, e trava os dois inputs.
+   *
+   * Existe para o app cujo vínculo exige o e-mail do cadastro (a Sul recusa
+   * convite com e-mail diferente do vendedor, de propósito: é por ele que o
+   * vendedor acha o próprio registro depois de entrar). Sem isto o admin tinha
+   * de redigitar o e-mail exato do cadastro e só descobria o erro no 409.
+   */
+  fillsBase?: { nome?: string; email?: string };
   // -- checkbox-group --
   /** Opções fixas do grupo de checkboxes (value guardado como CSV em extraData). */
   options?: ProvisionFieldOption[];
@@ -70,9 +80,13 @@ export interface ProvisionedApp {
   ) => Record<string, unknown>;
 }
 
+// `sul-api.astralwavelabel.com` era a rota antiga, no túnel geral do servidor,
+// e está NXDOMAIN desde que a Sul Alimentos ganhou túnel e domínio próprios.
+// Enquanto apontou para lá, o select de vendedor abria vazio — o GET falhava no
+// navegador e o modal seguia como se o app não tivesse ninguém sem login.
 const SUL_ALIMENTOS_API =
   import.meta.env.VITE_SUL_ALIMENTOS_API_URL ||
-  "https://sul-api.astralwavelabel.com/api";
+  "https://api.sulalimentos.com/api";
 
 const ASTRALWAVE_API =
   import.meta.env.VITE_ASTRALWAVE_API_URL ||
@@ -106,7 +120,10 @@ export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
         newValue: "__new__",
         newLabel: "+ Cadastrar novo vendedor",
         required: true,
-        help: "Só aparecem vendedores ainda sem login. Use o e-mail que aparece ao lado do nome.",
+        // O convite de quem já existe usa o e-mail do cadastro, não o do
+        // formulário; preencher daqui evita o 409 por divergência.
+        fillsBase: { nome: "name", email: "email" },
+        help: "Só aparecem vendedores ainda sem login. Escolhendo um, o nome e o e-mail vêm do cadastro dele.",
       },
       {
         name: "commissionRate",

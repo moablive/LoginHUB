@@ -60,7 +60,17 @@ export const CreateUserModal = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Opções dos campos remote-select (ex.: lista de artistas do label), por nome do campo.
-  const [remoteOptions, setRemoteOptions] = useState<Record<string, { value: string; label: string }[]>>({});
+  // O `item` cru vai junto porque o `fillsBase` copia campos dele (nome, e-mail)
+  // para o convite — o par value/label não basta.
+  const [remoteOptions, setRemoteOptions] = useState<
+    Record<string, { value: string; label: string; item: Record<string, unknown> }[]>
+  >({});
+  // Falha ao carregar um remote-select, por campo. Antes só ia para o console, e
+  // um select vazio era indistinguível de "não há ninguém sem login" — foi assim
+  // que a URL morta da Sul Alimentos passou despercebida.
+  const [remoteErrors, setRemoteErrors] = useState<Record<string, string>>({});
+  // Campos travados porque vieram do cadastro escolhido no select.
+  const [baseTravada, setBaseTravada] = useState(false);
 
   const blankExtras = useMemo(
     () =>
@@ -77,6 +87,8 @@ export const CreateUserModal = ({
       setFieldErrors({});
       setStep("form");
       setError(null);
+      setRemoteErrors({});
+      setBaseTravada(false);
     }
   }, [isOpen, blankExtras, defaultRole]);
 
@@ -101,15 +113,25 @@ export const CreateUserModal = ({
             .map((it) => ({
               value: String(it[field.optionValue || "id"] ?? ""),
               label: String(it[field.optionLabel || "name"] ?? it[field.optionValue || "id"] ?? ""),
+              item: it,
             }));
           setRemoteOptions((prev) => ({ ...prev, [field.name]: opts }));
+          setRemoteErrors((prev) => ({ ...prev, [field.name]: "" }));
         } catch (err) {
           console.error("[CreateUserModal] falha ao carregar opções de", field.name, err);
           setRemoteOptions((prev) => ({ ...prev, [field.name]: [] }));
+          const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+          setRemoteErrors((prev) => ({
+            ...prev,
+            [field.name]: status
+              ? `Não foi possível carregar a lista (erro ${status}). Só o cadastro novo está disponível.`
+              : `Não foi possível falar com ${appName || "o aplicativo"} para carregar a lista. ` +
+                `Verifique se ele está no ar — só o cadastro novo está disponível.`,
+          }));
         }
       })();
     }
-  }, [isOpen, provisioned]);
+  }, [isOpen, provisioned, appName]);
 
   // Só o papel provisionado passa pelo endpoint do app. Os demais níveis
   // (admin, suporte...) continuam no fluxo normal do LoginHUB — sem isso não
@@ -406,9 +428,10 @@ export const CreateUserModal = ({
                     type="text"
                     name="nome"
                     required
+                    readOnly={baseTravada}
                     value={formData.nome}
                     onChange={handleChange}
-                    className={inputClass("name")}
+                    className={`${inputClass("name")}${baseTravada ? " bg-muted/50 text-muted-foreground" : ""}`}
                     placeholder="Ex: João Silva"
                   />
                   {fieldErrors.name && (
@@ -422,9 +445,10 @@ export const CreateUserModal = ({
                     type="email"
                     name="email"
                     required
+                    readOnly={baseTravada}
                     value={formData.email}
                     onChange={handleChange}
-                    className={inputClass("email")}
+                    className={`${inputClass("email")}${baseTravada ? " bg-muted/50 text-muted-foreground" : ""}`}
                     placeholder="usuario@aplicativo.com"
                   />
                   {fieldErrors.email && (
@@ -433,7 +457,18 @@ export const CreateUserModal = ({
                   <div className="mt-2 flex items-start gap-2 rounded-md bg-primary/10 border border-blue-200 px-3 py-2">
                     <InformationCircleIcon className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
                     <p className="text-xs text-primary leading-snug">
-                      <strong>E-mail único por aplicativo:</strong> o mesmo e-mail pode ser usado em aplicativos diferentes, mas não pode se repetir dentro deste aplicativo.
+                      {baseTravada ? (
+                        <>
+                          <strong>Nome e e-mail vêm do cadastro escolhido</strong> e não podem ser
+                          alterados aqui — é por este e-mail que a pessoa encontra o próprio registro
+                          depois de entrar. Para corrigi-lo, edite o cadastro no{" "}
+                          {appName || "aplicativo"} antes de convidar.
+                        </>
+                      ) : (
+                        <>
+                          <strong>E-mail único por aplicativo:</strong> o mesmo e-mail pode ser usado em aplicativos diferentes, mas não pode se repetir dentro deste aplicativo.
+                        </>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -464,13 +499,43 @@ export const CreateUserModal = ({
 
                   if (field.type === "remote-select") {
                     const opts = remoteOptions[field.name] ?? [];
+                    const carregou = field.name in remoteOptions;
+                    const falhou = !!remoteErrors[field.name];
+
+                    // Escolher um item existente traz nome e e-mail do cadastro
+                    // dele; voltar para "criar novo" (ou para vazio) devolve os
+                    // dois campos ao admin, em branco.
+                    const escolher = (value: string) => {
+                      setExtra(value);
+                      if (!field.fillsBase) return;
+
+                      const alvo = opts.find((o) => o.value === value);
+                      if (!alvo) {
+                        // Só limpa o que este select tinha preenchido. Quem
+                        // digitou nome e e-mail antes de escolher "criar novo"
+                        // não pode ver os dois campos esvaziarem na sua frente.
+                        if (baseTravada) setFormData((prev) => ({ ...prev, nome: "", email: "" }));
+                        setBaseTravada(false);
+                        return;
+                      }
+                      const de = (chave?: string) =>
+                        chave ? String(alvo.item[chave] ?? "") : undefined;
+                      setBaseTravada(true);
+                      setFormData((prev) => ({
+                        ...prev,
+                        nome: de(field.fillsBase!.nome) ?? prev.nome,
+                        email: de(field.fillsBase!.email) ?? prev.email,
+                      }));
+                      setFieldErrors((prev) => ({ ...prev, name: "", email: "" }));
+                    };
+
                     return (
                       <div key={field.name}>
                         {labelEl}
                         <select
                           name={field.name}
                           value={extraData[field.name] ?? ""}
-                          onChange={(e) => setExtra(e.target.value)}
+                          onChange={(e) => escolher(e.target.value)}
                           className={`${inputClass(field.name)} bg-card text-card-foreground`}
                         >
                           <option value="">Selecione…</option>
@@ -481,7 +546,15 @@ export const CreateUserModal = ({
                             <option value={field.newValue || "__new__"}>{field.newLabel || "Criar novo"}</option>
                           )}
                         </select>
-                        {helpEl}
+                        {falhou ? (
+                          <p className="mt-1 text-xs text-danger">{remoteErrors[field.name]}</p>
+                        ) : carregou && opts.length === 0 ? (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Nenhum cadastro sem login por aqui — só resta criar um novo.
+                          </p>
+                        ) : (
+                          helpEl
+                        )}
                       </div>
                     );
                   }
