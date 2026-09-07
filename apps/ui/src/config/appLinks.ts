@@ -62,6 +62,30 @@ export const CROSS_APP_LINKS: CrossAppLink[] = [
       "Cada pessoa liga e desliga a camada no próprio TodoAPP (preferência showMoneyAppEvents)",
     ],
   },
+
+  // Astral Wave Label → TodoAPP: mesma forma do vínculo acima, agora com a
+  // agenda de lançamentos. O recorte de quem vê o quê é decidido no LADO DO
+  // LABEL, não aqui: DJ enxerga os releases do próprio artista, e a agenda do
+  // selo inteiro é só de quem está em CALENDAR_LABEL_READERS.
+  {
+    providerId: "8",
+    providerName: "Astral Wave Label",
+    consumerId: "4",
+    consumerName: "TodoAPP",
+    summary:
+      "O calendário do TodoAPP mostra, ao lado das tarefas, a agenda de lançamentos da Astral Wave de quem tem conta nos dois — datas agendadas e pedidos de release ainda pendentes.",
+    data: "calendário de releases",
+    ledger:
+      "user_integrations, no banco do TodoAPP: (loginhub_id, app_id=8) → app_user_id, o id da conta da Astral Wave no hub",
+    optIn:
+      "Cadastrado à mão, uma pessoa por vez. Convidar um DJ para o painel do artista não liga nada: sem a linha, o TodoAPP não desenha a camada.",
+    capabilities: [
+      "O backend do TodoAPP chama GET /api/calendar na Astral Wave pela rede interna",
+      "Autentica com x-api-key (ASTRALWAVE_SERVICE_KEY) e x-user-id = id da conta do label no hub",
+      "O recorte é do provedor: sem artista vinculado a resposta é lista vazia, não a agenda dos outros",
+      "Cada pessoa liga e desliga a camada no próprio TodoAPP (preferência showAstralWaveEvents)",
+    ],
+  },
 ];
 
 /** O vínculo visto do lado de um app específico. */
