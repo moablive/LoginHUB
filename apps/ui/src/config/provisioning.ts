@@ -217,10 +217,11 @@ export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
         label: "Módulos liberados",
         type: "checkbox-group",
         required: true,
-        defaultValue: "artist,calendar",
+        defaultValue: "artist,calendar,release",
         options: [
           { value: "artist", label: "Artista — ver e editar o perfil" },
           { value: "calendar", label: "Calendário — agenda e pedidos de release" },
+          { value: "release", label: "Releases — entregar capa e material de marketing" },
           { value: "vendas", label: "Vendas — relatório de royalties" },
           { value: "store_catalogo", label: "Catálogo (Loja)" },
           { value: "store_emails", label: "E-mails (Loja)" },
