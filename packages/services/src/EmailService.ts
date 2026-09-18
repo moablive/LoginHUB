@@ -163,6 +163,28 @@ export class EmailService {
             return true;
         } catch (error) {
             console.error(`[EmailService] Error sending email to ${to}:`, error);
+
+            // O transporte DEDICADO do app foi recusado pelo provedor (caixa que
+            // autentica mas não pode enviar, remetente não reconhecido, credencial
+            // vencida). Até 17/09/2026 isso terminava aqui, e o convite morria em
+            // silêncio: o app 2 ficou 30 dias sem UM e-mail sair. Melhor chegar
+            // do remetente padrão do hub do que não chegar — o log diz o que
+            // consertar, e o `emailSent` da resposta continua honesto.
+            const ehDedicado = transporter !== this.transporter && !!this.transporter;
+            if (ehDedicado) {
+                const padrao = process.env.SMTP_USER || '';
+                console.warn(
+                    `[EmailService] Transporte dedicado recusado; reenviando pelo remetente padrão (${padrao}). ` +
+                    `Confira SMTP_APP_*_USER/PASS e o serviço de e-mail do domínio no provedor.`,
+                );
+                try {
+                    await this.transporter!.sendMail({ from: padrao, to, subject, html: finalHtml, attachments });
+                    console.log(`[EmailService] Email sent successfully to ${to} (from: ${padrao}, fallback)`);
+                    return true;
+                } catch (erro2) {
+                    console.error(`[EmailService] Fallback também falhou para ${to}:`, erro2);
+                }
+            }
             return false;
         }
     }

@@ -4,12 +4,13 @@ import { userApi } from "@loginhub/api-client";
 import axios from "axios";
 import ReactDOMServer from "react-dom/server";
 import { InviteEmailTemplate, MoneyAppInviteEmail } from "../../../templates/emails";
-import { getProvisionedApp } from "../../../config/provisioning";
+import { getProvisionedApp, hubRolesDoApp } from "../../../config/provisioning";
 import { masks } from "../../../utils/masks";
 import type { UserRole } from "@loginhub/schema";
 
 const ROLE_OPTIONS: { value: Exclude<UserRole, "master">; label: string; description: string }[] = [
   { value: "admin", label: "Administrador", description: "Pode gerenciar usuários e configurações do aplicativo." },
+  { value: "operador", label: "Operador", description: "Opera o dia a dia (estoque, tabelas), sem financeiro nem administração." },
   { value: "user", label: "Usuário Padrão", description: "Acesso comum ao aplicativo." },
   { value: "suporte", label: "Suporte", description: "Acesso para atendimento e diagnóstico." },
 ];
@@ -48,6 +49,8 @@ export const CreateUserModal = ({
   // com o cadastro dele — sem isso a pessoa ficaria com login e sem cadastro.
   const provisioned = getProvisionedApp(appId);
   const defaultRole = provisioned ? PROVISION_ROLE : "user";
+  // Só os papéis que fazem sentido neste app, com a descrição no contexto dele.
+  const roleOptions = useMemo(() => hubRolesDoApp(provisioned, ROLE_OPTIONS), [provisioned]);
 
   const [step, setStep] = useState<Step>("form");
   const [formData, setFormData] = useState({
@@ -630,7 +633,7 @@ export const CreateUserModal = ({
                         {appName ? ` da ${appName}` : ""}
                       </option>
                     )}
-                    {ROLE_OPTIONS.map((opt) => (
+                    {roleOptions.map((opt) => (
                       <option key={opt.value} value={opt.value}>
                         {opt.label}
                       </option>
@@ -639,7 +642,7 @@ export const CreateUserModal = ({
                   <p className="mt-1 text-xs text-muted-foreground">
                     {provisionMode
                       ? provisioned!.roleDescription
-                      : ROLE_OPTIONS.find((opt) => opt.value === formData.role)?.description}
+                      : roleOptions.find((opt) => opt.value === formData.role)?.description}
                   </p>
                 </div>
 

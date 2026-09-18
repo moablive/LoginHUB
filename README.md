@@ -43,7 +43,7 @@ Todo o ciclo de vida da conta — convite por e-mail, primeiro acesso via **Magi
 | 🔐 2FA por TOTP | ✅ | Segundo fator compatível com Google Authenticator, Authy, 1Password e Microsoft Authenticator. Secret cifrado em AES-256-GCM, 10 códigos de recuperação, rate limit por conta e corte de sessões na ativação. Ver fluxo 6️⃣. |
 | 🔄 Refresh Session (Sliding 7d) | ✅ | Renovação contínua do JWT com grace period de até 7 dias após a expiração. |
 | 👥 Multi-Tenant Isolado | ✅ | Cada aplicativo possui seus próprios usuários, configurações, logos e URLs de integração. |
-| 🛡️ 4 Níveis de Acesso | ✅ | Níveis padronizados: `master` / `admin` / `user` / `suporte`. |
+| 🛡️ 5 Níveis de Acesso | ✅ | Níveis padronizados: `master` / `admin` / `operador` / `user` / `suporte`. O `operador` entrou em 17/09/2026 para o Sul Alimentos (balcão: estoque e tabelas, sem financeiro nem administração); app que não o trata deve tratá-lo como `user`. |
 | 🚦 Gestão Granular de Status | ✅ | Controle de status em apps (`ativo`/`inativo`) e usuários (`ativo`/`inativo`/`bloqueado`). |
 | 📧 Envio Automático por E-mail (SMTP) | ✅ | Disparo de convites e links de acesso via templates HTML personalizáveis. |
 | 🔗 URLs de Integração (`bot_url` / `platform_url`) | ✅ | Suporte a links diretos para bots (Telegram/WhatsApp) e plataformas web por aplicativo. |
@@ -800,9 +800,20 @@ export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
 
 Pontos que valem atenção ao adicionar um app novo:
 
-- **Só o papel provisionado passa pelo endpoint do app.** Admin, suporte e
-  usuário padrão continuam no fluxo normal do LoginHUB — senão não haveria como
-  convidar um administrador para um app provisionado.
+- **Só o papel provisionado passa pelo endpoint do app.** Os demais continuam
+  no fluxo normal do LoginHUB — senão não haveria como convidar um administrador
+  para um app provisionado. **Quais** demais é o app quem diz, em `hubRoles`
+  (desde 17/09/2026): a Sul Alimentos oferece `operador` e `admin`, com a
+  descrição no contexto dela, e esconde `user`/`suporte` — um `user` criado por
+  ali entraria sem linha em `sellers` e cairia em "acesso não vinculado". Sem
+  `hubRoles`, o app oferece todos. O modal de edição aplica o mesmo filtro
+  (mantendo o papel atual do usuário, para o select não abrir vazio).
+- **Transporte dedicado recusado cai para o remetente padrão.** Até 17/09/2026 a
+  recusa do provedor (`553 Sender address rejected`, credencial vencida) matava
+  o convite em silêncio — o app 2 ficou 30 dias sem um e-mail sair. Agora o
+  `EmailService` reenvia pela conta padrão do hub, avisa no log qual
+  `SMTP_APP_<id>_*` conferir, e `emailSent` continua honesto. É paliativo:
+  o certo é o serviço de e-mail do domínio do app estar ativo no provedor.
 - **Não há etapa de pré-visualização** nesse caminho: quem monta e envia o
   e-mail é o app, com o template dele.
 - **Máscara ≠ número.** Campos com `mask` vão sem formatação para a API; campos

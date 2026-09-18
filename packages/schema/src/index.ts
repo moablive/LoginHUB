@@ -4,7 +4,10 @@ import { pgTable, serial, varchar, integer, timestamp, boolean, text, unique } f
 // ==========================================
 // USER MODELS
 // ==========================================
-export type UserRole = 'master' | 'admin' | 'user' | 'suporte';
+// `operador` entrou em 17/09/2026 para o Sul Alimentos (estoque e tabelas,
+// sem financeiro nem emissão). Os níveis são globais — todo app o vê no
+// seletor; app que não o trata cai no comportamento de `user`.
+export type UserRole = 'master' | 'admin' | 'operador' | 'user' | 'suporte';
 
 export interface User {
     id: string;

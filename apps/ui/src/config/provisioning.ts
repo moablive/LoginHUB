@@ -78,7 +78,27 @@ export interface ProvisionedApp {
     base: { nome: string; email: string },
     extra: Record<string, string>,
   ) => Record<string, unknown>;
+  /**
+   * Quais papéis PADRÃO do hub o app oferece além do provisionado.
+   *
+   * Omitir = todos. Existe porque um papel do hub pode não fazer sentido num
+   * app: na Sul Alimentos, um `user` criado por aqui entra sem linha em
+   * `sellers` e cai em "acesso não vinculado" — o vendedor é SEMPRE o
+   * provisionado. A chave é o papel; o valor, a descrição no contexto do app.
+   */
+  hubRoles?: Partial<Record<"admin" | "operador" | "user" | "suporte", string>>;
 }
+
+/** Os papéis do hub que um app provisionado oferece, já com a descrição certa. */
+export const hubRolesDoApp = (
+  app: ProvisionedApp | null,
+  todos: { value: string; label: string; description: string }[],
+) =>
+  !app?.hubRoles
+    ? todos
+    : todos
+        .filter((o) => o.value in app.hubRoles!)
+        .map((o) => ({ ...o, description: app.hubRoles![o.value as keyof typeof app.hubRoles] || o.description }));
 
 // `sul-api.astralwavelabel.com` era a rota antiga, no túnel geral do servidor,
 // e está NXDOMAIN desde que a Sul Alimentos ganhou túnel e domínio próprios.
@@ -139,6 +159,15 @@ export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
         showWhen: { field: "sellerId", equals: "__new__" },
       },
     ],
+    // Os outros dois papéis da Sul entram pelo fluxo padrão do hub — não têm
+    // cadastro local a criar. `user` e `suporte` ficam de fora: na Sul, quem
+    // não é vendedor provisionado nem operador/admin não tem tela para entrar.
+    hubRoles: {
+      operador:
+        "Opera o balcão da Sul Alimentos: estoque, tabelas de preço, pesagem, emissão de NF-e, pedidos e cadastro de vendedores. Não vê o financeiro.",
+      admin:
+        "Tudo o que o operador faz, mais o financeiro (títulos, calendário de vencimento, baixa) e a limpeza do mural.",
+    },
     // CPF e telefone não entram aqui: o vendedor preenche os próprios dados ao
     // abrir o Magic Link, na tela de definição de senha da Sul Alimentos.
     buildPayload: (base, extra) => {

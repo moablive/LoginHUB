@@ -34,7 +34,10 @@ export const APP_INTEGRATIONS: Record<string, AppIntegration> = {
   // Sul Alimentos — mão dupla: o convite parte daqui e volta como usuário.
   "2": {
     apiName: "Sul Alimentos API",
-    apiHost: "sul-api.astralwavelabel.com",
+    // Era `sul-api.astralwavelabel.com` (túnel geral, hoje NXDOMAIN); o card
+    // mostrou o hostname morto até 17/09/2026 enquanto o convite já ia para o
+    // domínio próprio da Sul. O host de verdade é o de `provisioning.ts`.
+    apiHost: "api.sulalimentos.com",
     direction: "two-way",
     summary:
       "O convite de vendedor sai do painel direto para a API da Sul Alimentos, que cria o cadastro dela e o acesso aqui numa operação só.",

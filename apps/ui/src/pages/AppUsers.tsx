@@ -352,6 +352,10 @@ export const AppUsers = () => {
                               <ShieldCheckIcon className="h-3 w-3 mr-1" />
                               Admin
                             </span>
+                          ) : user.role === 'operador' ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                              Operador
+                            </span>
                           ) : (
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-muted text-foreground border border-border">
                               Usuário
@@ -489,7 +493,7 @@ export const AppUsers = () => {
       />
 
       {/* MODAL DE EDIÇÃO */}
-      <EditUserModal
+      <EditUserModal appId={appId!}
         isOpen={!!userToEdit}
         onClose={() => setUserToEdit(null)}
         user={userToEdit}

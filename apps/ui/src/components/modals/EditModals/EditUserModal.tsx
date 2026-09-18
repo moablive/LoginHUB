@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getProvisionedApp } from "../../../config/provisioning";
 import { XMarkIcon, PhoneIcon } from '@heroicons/react/24/outline';
 import { userApi } from '@loginhub/api-client';
 import { masks } from '../../../utils/masks';
@@ -9,9 +10,15 @@ interface EditUserModalProps {
   onClose: () => void;
   onSuccess: () => void;
   user: User | null;
+  /** O app do usuário — decide quais níveis o select oferece (ver provisioning.ts). */
+  appId?: string;
 }
 
-export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModalProps) => {
+export const EditUserModal = ({ isOpen, onClose, onSuccess, user, appId }: EditUserModalProps) => {
+  const provisioned = getProvisionedApp(appId);
+  // Papel que o app não oferece some do select — mas o papel ATUAL do usuário
+  // fica, senão o formulário abriria com um valor que não existe na lista.
+  const oferece = (r: string) => !provisioned?.hubRoles || r in provisioned.hubRoles || formData.role === r;
   const [formData, setFormData] = useState({
     nome: '',
     email: '',
@@ -112,9 +119,10 @@ export const EditUserModal = ({ isOpen, onClose, onSuccess, user }: EditUserModa
               onChange={e => setFormData({...formData, role: e.target.value})}
               className="w-full px-4 py-2 border border-input rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-card text-card-foreground"
             >
-              <option value="user">Usuário</option>
-              <option value="admin">Administrador</option>
-              <option value="suporte">Suporte</option>
+              {oferece('user') && <option value="user">Usuário</option>}
+              {oferece('operador') && <option value="operador">Operador</option>}
+              {oferece('admin') && <option value="admin">Administrador</option>}
+              {oferece('suporte') && <option value="suporte">Suporte</option>}
               {formData.role === 'master' && <option value="master">Master</option>}
             </select>
           </div>
