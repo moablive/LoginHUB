@@ -1138,10 +1138,6 @@ usam o prefixo `LBS_` no diretório, mesmo quando o produto não usa no nome:**
 | TodoAPP | `LifeBusinessSuit/LBS_TodoAPP` |
 | NotesAPP | `LifeBusinessSuit/LBS_NotesAPP` |
 | TTSAPP | `LifeBusinessSuit/LBS_TTSAPP` |
-| NotifyAPP | `LifeBusinessSuit/LBS_NotifyAPP` |
-
-O NotifyAPP ainda foge do formato dos irmãos: não tem `apps/backend`, o guard
-mora direto em `src/lib/hubAuthServer.ts`.
 
 Em 29/08/2026 a lista foi corrigida: catorze destinos ainda apontavam para os
 nomes sem prefixo, de antes da padronização. As cópias nos apps estavam certas —
@@ -1368,6 +1364,14 @@ revalidação em `usuarios` (onde o master não está, e onde antes dava
 `USUARIO_INVALIDO`) e reemite a sessão desde que `mk` continue batendo. O
 interceptor do `@loginhub/api-client` já renova em qualquer 401 e repete a
 request — então a aba se mantém logada sozinha, sem a chave estar no navegador.
+
+Isso só funciona porque o `adminMiddleware` responde **401 `TOKEN_EXPIRADO`**
+quando a sessão master está assinada certo mas vencida. Até 23/09/2026 ele
+respondia 403 para qualquer falha do JWT, o interceptor não reagia a 403, e o
+painel aberto há mais de 24 h "perdia a conexão" (`GET /api/admin/apps 403` no
+log do nginx, nenhum `/auth/refresh` vindo do painel). Token com assinatura
+inválida continua no 403 comum — o `jsonwebtoken` confere a assinatura antes da
+validade, então só sessão legítima chega ao 401.
 
 TTL de 24 h + 7 dias de graça sobre token expirado: uma aba usada ao menos uma
 vez a cada oito dias nunca pede a chave de novo.

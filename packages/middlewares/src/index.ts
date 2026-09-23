@@ -84,8 +84,18 @@ export const adminMiddleware: RequestHandler = (req, res, next) => {
                 (req as any).user = { ...decoded };
                 return next();
             }
-        } catch {
-            // Token inválido/expirado cai no 403 comum, sem vazar o motivo.
+        } catch (err) {
+            // Expirado responde 401, não 403: é o 401 que faz o interceptor do
+            // api-client chamar o /auth/refresh. Com 403 a sessão master morria
+            // 24h depois do login e o painel aberto ficava "sem conexão" até
+            // um login novo, mesmo com o refresh automático pronto para agir.
+            // Token inválido de verdade continua no 403 comum, sem vazar o motivo.
+            if ((err as Error)?.name === 'TokenExpiredError') {
+                return res.status(401).json({
+                    error: 'TOKEN_EXPIRADO',
+                    message: 'Sessão expirada. Renove o token.',
+                });
+            }
         }
     }
 
