@@ -50,11 +50,11 @@ export function Enroll2FA() {
     return (
         <Moldura titulo="Configure a verificação em duas etapas">
             <p className="mb-6 text-center text-sm text-muted-foreground">
-                Esta conta exige um segundo fator. Escaneie o código com o seu aplicativo
-                autenticador — Google Authenticator, Authy, 1Password ou Microsoft Authenticator.
+                Esta conta exige um segundo fator. Tenha o celular à mão com o
+                Google Authenticator instalado.
             </p>
 
-            <TwoFactorSetup autoIniciar renderQr={(uri) => <QrCode uri={uri} />} />
+            <TwoFactorSetup autoIniciar renderQr={(uri, logo) => <QrCode uri={uri} logo={logo} />} />
 
             {retorno && (
                 <div className="mt-8 border-t border-border pt-6 text-center">

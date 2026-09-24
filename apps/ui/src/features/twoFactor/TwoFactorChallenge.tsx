@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { twoFactorApi } from '@loginhub/api-client';
+import { DigiteDoGoogleAuth } from './GoogleAuthenticator';
 
 interface Props {
     /** Vem de `authApi.login(...)` quando ele devolve `requires2FA`. */
@@ -55,6 +56,8 @@ export function TwoFactorChallenge({ challengeToken, onAutenticado, onCancelar }
                         : 'Digite o código de 6 dígitos do seu aplicativo autenticador.'}
                 </p>
             </div>
+
+            {!usarBackup && <DigiteDoGoogleAuth />}
 
             <input
                 value={codigo}

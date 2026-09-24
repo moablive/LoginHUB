@@ -96,7 +96,7 @@ export function SetupPassword() {
             </div>
             <h2 className="text-xl font-bold text-foreground">Senha definida. Confirme quem é você.</h2>
             <p className="text-muted-foreground mt-2 text-sm">
-              Esta conta já tem verificação em duas etapas. Informe o código do autenticador.
+              Esta conta já tem verificação em duas etapas. Informe o código do Google Authenticator.
             </p>
           </div>
           <TwoFactorChallenge
@@ -122,10 +122,10 @@ export function SetupPassword() {
             </div>
             <h2 className="text-xl font-bold text-foreground">Senha definida. Falta um passo.</h2>
             <p className="text-muted-foreground mt-2 text-sm">
-              Este convite exige verificação em duas etapas. Tenha o celular à mão.
+              Este convite exige verificação em duas etapas. Tenha o celular à mão com o Google Authenticator instalado.
             </p>
           </div>
-          <TwoFactorSetup autoIniciar renderQr={(uri) => <QrCode uri={uri} />} />
+          <TwoFactorSetup autoIniciar renderQr={(uri, logo) => <QrCode uri={uri} logo={logo} />} />
         </div>
       </div>
     );

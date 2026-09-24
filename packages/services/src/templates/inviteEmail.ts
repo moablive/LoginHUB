@@ -81,10 +81,13 @@ export const buildInviteEmail = ({ appName, platformUrl, appLogo, nome }: Invite
                   </a>
                 </p>
                 <p style="margin:0 0 16px;padding:12px 16px;background:#eff6ff;border-left:3px solid #2563eb;color:#1e3a5f;font-size:13px;line-height:1.5;">
-                  <strong>Tenha o celular à mão.</strong> Depois de criar a senha, esta conta
-                  pede verificação em duas etapas: a própria página vai mostrar um QR Code
-                  para você escanear com o app autenticador (Google Authenticator, Authy,
-                  1Password ou Microsoft Authenticator). Leva menos de um minuto.
+                  <strong>Instale o Google Authenticator antes de começar.</strong> Depois de
+                  criar a senha, esta conta pede verificação em duas etapas: a própria página
+                  vai mostrar um QR Code do <strong>${app}</strong> para você escanear com o
+                  Google Authenticator. Leva menos de um minuto.<br />
+                  <a href="https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2" style="color:#2563eb;font-weight:bold;">Baixar para Android</a>
+                  &nbsp;·&nbsp;
+                  <a href="https://apps.apple.com/app/google-authenticator/id388497605" style="color:#2563eb;font-weight:bold;">Baixar para iPhone</a>
                 </p>
                 <p style="margin:0;color:#64748b;font-size:13px;">
                   Este link é de uso único e expira em 24 horas. Se você não esperava

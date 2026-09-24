@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTwoFactor } from './useTwoFactor';
+import { EscaneieComGoogleAuth, OutrosAutenticadores } from './GoogleAuthenticator';
 
 interface Props {
     /**
@@ -9,8 +10,11 @@ interface Props {
      * biblioteca de QR, então cada app usa a sua (`qrcode.react`, `qrcode`...)
      * sem o hub impor a escolha. Sem esta prop, o componente cai na digitação
      * manual do secret — que todo autenticador aceita.
+     *
+     * O segundo argumento é o logo do app (quando o hub o manda), para o QR
+     * sair com a marca no centro.
      */
-    renderQr?: (otpauthUri: string) => React.ReactNode;
+    renderQr?: (otpauthUri: string, logo?: string | null) => React.ReactNode;
     /**
      * Gera o secret assim que a tela abre, sem passar pelo botão "Ativar".
      *
@@ -103,8 +107,10 @@ export function TwoFactorSetup({ renderQr, autoIniciar = false }: Props) {
             <div className="max-w-md space-y-4">
                 <h2 className="text-xl font-semibold text-foreground">Escaneie e confirme</h2>
 
+                <EscaneieComGoogleAuth emissor={dadosSetup.issuer} />
+
                 {renderQr
-                    ? renderQr(dadosSetup.otpauthUri)
+                    ? renderQr(dadosSetup.otpauthUri, dadosSetup.appLogo)
                     : (
                         <p className="text-sm text-muted-foreground">
                             Adicione manualmente no autenticador com a chave abaixo.
@@ -112,8 +118,10 @@ export function TwoFactorSetup({ renderQr, autoIniciar = false }: Props) {
                     )}
 
                 <div className="rounded-md border border-border bg-muted/40 p-3">
-                    <p className="text-xs text-muted-foreground">Conta</p>
-                    <p className="text-sm text-foreground">{dadosSetup.label}</p>
+                    <p className="text-xs text-muted-foreground">Conta no Google Authenticator</p>
+                    <p className="text-sm text-foreground">
+                        <strong>{dadosSetup.issuer}</strong> · {dadosSetup.label}
+                    </p>
                     <p className="mt-2 text-xs text-muted-foreground">Chave (digitação manual)</p>
                     <code className="block break-all font-mono text-sm text-foreground">{dadosSetup.secret}</code>
                 </div>
@@ -144,6 +152,8 @@ export function TwoFactorSetup({ renderQr, autoIniciar = false }: Props) {
                 >
                     {carregando ? 'Confirmando...' : 'Ativar 2FA'}
                 </button>
+
+                <OutrosAutenticadores />
             </div>
         );
     }
@@ -156,7 +166,7 @@ export function TwoFactorSetup({ renderQr, autoIniciar = false }: Props) {
             <div className="max-w-md space-y-4">
                 <h2 className="text-xl font-semibold text-foreground">Gerando o seu código…</h2>
                 <p className="text-sm text-muted-foreground">
-                    Abra o aplicativo autenticador no celular. O QR aparece aqui em instantes.
+                    Abra o Google Authenticator no celular. O QR aparece aqui em instantes.
                 </p>
                 <div className="mx-auto h-[220px] w-[220px] animate-pulse rounded-lg bg-muted" />
             </div>

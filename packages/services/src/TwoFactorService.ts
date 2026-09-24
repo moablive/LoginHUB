@@ -16,7 +16,12 @@ const DIGITOS = 6;
 /** Tolerância de relógio: aceita o step anterior e o próximo (±30s). */
 const JANELA = 1;
 const QTD_BACKUP_CODES = 10;
-const ISSUER = 'LoginHUB';
+/**
+ * Emissor de reserva, só para app sem nome. O normal é o emissor ser o nome
+ * do app: é o título da entrada no Google Authenticator, e com "LoginHUB" em
+ * todas a pessoa não sabia qual código era de qual app.
+ */
+const ISSUER_PADRAO = 'LoginHUB';
 
 // ==========================================
 // CHAVE DE CIFRA
@@ -210,15 +215,20 @@ export class TwoFactorService {
             });
         }
 
-        // O label carrega o nome do app: quem tem o mesmo e-mail em vários
-        // tenants veria N entradas idênticas no autenticador sem isso.
-        const label = `${conta.appNome} (${conta.email})`;
+        // O emissor é o nome do app: é ele que o autenticador mostra como título
+        // da entrada, e é por ele que a tela manda procurar o código. Quem tem o
+        // mesmo e-mail em vários tenants vê uma entrada por app. Contas
+        // cadastradas antes disto seguem como "LoginHUB" — o secret não mudou,
+        // só o nome que ficou gravado no celular.
+        // `trim()`: o nome da Astral Wave já esteve gravado com espaço no fim.
+        const issuer = conta.appNome?.trim() || ISSUER_PADRAO;
+        const label = conta.email;
         const otpauthUri =
-            `otpauth://totp/${encodeURIComponent(ISSUER)}:${encodeURIComponent(label)}` +
-            `?secret=${secret}&issuer=${encodeURIComponent(ISSUER)}` +
+            `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(label)}` +
+            `?secret=${secret}&issuer=${encodeURIComponent(issuer)}` +
             `&algorithm=SHA1&digits=${DIGITOS}&period=${STEP_SEGUNDOS}`;
 
-        return { secret, otpauthUri, label, issuer: ISSUER };
+        return { secret, otpauthUri, label, issuer, appLogo: conta.appLogo ?? null };
     }
 
     /**
@@ -458,6 +468,7 @@ export class TwoFactorService {
             email: usuarios.email,
             appId: usuarios.appId,
             appNome: aplicativos.nome,
+            appLogo: aplicativos.logo,
         })
             .from(usuarios)
             .innerJoin(aplicativos, eq(usuarios.appId, aplicativos.id))

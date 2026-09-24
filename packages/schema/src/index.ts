@@ -217,9 +217,19 @@ export interface TwoFactorSetupResponse {
     secret: string;
     /** URI `otpauth://` — o cliente renderiza o QR Code a partir dela. */
     otpauthUri: string;
-    /** Rótulo mostrado no app autenticador (inclui o app, para multi-tenant). */
+    /** Conta mostrada no app autenticador, embaixo do emissor (o e-mail). */
     label: string;
+    /**
+     * Nome do app — título da entrada no Google Authenticator. A tela de
+     * cadastro manda procurar por ele, então tem que bater com o celular.
+     */
     issuer: string;
+    /**
+     * Logo do app (data URL), para o QR sair com a marca no meio. Opcional:
+     * serve à tela do próprio hub, que atende todos os apps; o app cliente já
+     * tem o seu logo e pode ignorar o campo.
+     */
+    appLogo?: string | null;
 }
 
 export interface TwoFactorActivationResponse {
