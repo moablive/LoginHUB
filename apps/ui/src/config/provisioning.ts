@@ -187,7 +187,7 @@ export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
   "8": {
     roleLabel: "DJ / Artista",
     roleDescription:
-      "Cria o login do DJ no LoginHUB e o amarra a um artista da Astral Wave Label, com os módulos liberados. Escolha um artista existente ainda sem login, ou crie um novo.",
+      "Cria o login do DJ no LoginHUB e o amarra a um artista da Astral Wave Label. Todo DJ entra com o painel completo e, no primeiro acesso, lê e aceita o contrato base antes de qualquer outra coisa (o convite já leva o PDF). Escolha um artista existente ainda sem login, ou crie um novo.",
     endpoint: `${ASTRALWAVE_API}/admin/artists/invite`,
     fields: [
       {
@@ -212,22 +212,6 @@ export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
         required: true,
         showWhen: { field: "artist_id", equals: "__new__" },
       },
-      {
-        name: "allowed_modules",
-        label: "Módulos liberados",
-        type: "checkbox-group",
-        required: true,
-        defaultValue: "artist,calendar,release",
-        options: [
-          { value: "artist", label: "Artista — ver e editar o perfil" },
-          { value: "calendar", label: "Calendário — agenda e pedidos de release" },
-          { value: "release", label: "Releases — entregar capa e material de marketing" },
-          { value: "vendas", label: "Vendas — relatório de royalties" },
-          { value: "store_catalogo", label: "Catálogo (Loja)" },
-          { value: "store_emails", label: "E-mails (Loja)" },
-          { value: "store_vendas", label: "Pedidos (Loja)" },
-        ],
-      },
     ],
     buildPayload: (base, extra) => {
       const isNew = extra.artist_id === "__new__";
@@ -238,10 +222,6 @@ export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
         ...(isNew
           ? { new_artist_name: (extra.new_artist_name || "").trim() }
           : { artist_id: extra.artist_id }),
-        allowed_modules: String(extra.allowed_modules || "")
-          .split(",")
-          .map((m) => m.trim())
-          .filter(Boolean),
       };
     },
   },
