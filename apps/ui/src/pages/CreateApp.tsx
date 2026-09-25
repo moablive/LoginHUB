@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -10,11 +10,12 @@ import {
   IdentificationIcon,
   RocketLaunchIcon,
   LinkIcon,
-  GlobeAltIcon
+  GlobeAltIcon,
+  TagIcon
 } from '@heroicons/react/24/outline';
-import { appApi } from '@loginhub/api-client';
+import { appApi, categoriaApi } from '@loginhub/api-client';
 import { masks } from '../utils/masks';
-import type { CreateAppDTO } from '@loginhub/schema';
+import type { CreateAppDTO, Categoria } from '@loginhub/schema';
 import { SuccessModal } from '../components/modals/SuccessModal/SuccessModal';
 import { AlertModal } from '../components/modals/AlertModal/AlertModal';
 import { LogoUpload } from '../components/LogoUpload/LogoUpload';
@@ -23,6 +24,11 @@ export const CreateApp = () => {
   const navigate = useNavigate();
   const [showSuccess, setShowSuccess] = useState(false);
   const [logo, setLogo] = useState<string | null>(null);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
+
+  useEffect(() => {
+    categoriaApi.getAll().then(setCategorias).catch(e => console.error('Erro ao buscar categorias', e));
+  }, []);
 
   const [alertState, setAlertState] = useState<{
     isOpen: boolean;
@@ -57,7 +63,9 @@ export const CreateApp = () => {
 
   const onSubmit = async (data: CreateAppDTO) => {
     try {
-      await appApi.create({ ...data, logo: logo || undefined });
+      // O <select> devolve string; '' é "Sem categoria".
+      const categoria_id = data.categoria_id ? Number(data.categoria_id) : null;
+      await appApi.create({ ...data, categoria_id, logo: logo || undefined });
       setShowSuccess(true);
     } catch (error: unknown) {
       console.error(error);
@@ -128,6 +136,27 @@ export const CreateApp = () => {
               </div>
 
               <LogoUpload value={logo} onChange={setLogo} />
+
+              {categorias.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Categoria <span className="text-muted-foreground font-normal">(opcional)</span></label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <TagIcon className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <select
+                      {...register('categoria_id')}
+                      className={`${inputClass} bg-card text-card-foreground`}
+                    >
+                      <option value="">Sem categoria</option>
+                      {categorias.map(c => (
+                        <option key={c.id} value={c.id}>{c.nome}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">Grupo em que o aplicativo aparece no painel. Dá para mudar depois, em Editar.</p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Documento (CPF/CNPJ)</label>

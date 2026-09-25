@@ -88,6 +88,16 @@ bump deixa o mecanismo mudo. Detalhes na seção *Versionamento* do README.
   comportamento antigo: com `obrigatorio = false`, `estadoDoLogin` devolveria
   `'sessao'` e a conta entraria SEM segundo fator se alguém lhe desse uma senha.
   Ver `db/004_apps_sem_login_hub.sql`.
+- **Ordem e categorias dos apps são do banco, não da tela.** `categorias` +
+  `aplicativos.categoria_id`/`ordem` (`db/005_categorias_ordem.sql`).
+  `GET /admin/apps` já devolve na ordem do painel; o Dashboard só agrupa.
+  Subir/descer é `PATCH /admin/apps/:id/mover` (troca com o vizinho da MESMA
+  categoria e renumera o grupo 1..n — a coluna nasceu com `DEFAULT 0`, trocar
+  dois números iguais não moveria nada). Apagar categoria devolve os apps para
+  "Sem categoria" no fim, não apaga app. A UI é bundle estático: mudança em
+  `apps/ui` só aparece com `docker compose up -d --build login-hub-ui`, e o
+  `login-hub-api` precisa de `up -d` depois do bump para o banner "nova
+  versão" parar (ele compara a versão da API com a do bundle).
 - **`sessoes_validas_desde`** é o piso de validade das sessões: JWT com `iat`
   anterior é recusado no middleware **e** no refresh. Comparar sempre em
   segundos nos dois lados (o `iat` é truncado; o piso tem milissegundos).

@@ -14,7 +14,11 @@ import type {
   UpdateAppDTO,
   CreateUserDTO,
   UpdateUserDTO as UpdateUserPayload,
-  AuthResult
+  AuthResult,
+  Categoria,
+  CreateCategoriaDTO,
+  UpdateCategoriaDTO,
+  DirecaoMovimento
 } from '@loginhub/schema';
 
 // ==========================================
@@ -428,6 +432,42 @@ export const appApi = {
   },
   delete: async (id: string): Promise<void> => {
     await api.delete(`${APPS_BASE_URL}/${id}`);
+  },
+  /**
+   * Sobe ou desce o app uma posição dentro da própria categoria. `moveu: false`
+   * quando já estava na ponta — recarregue a lista de qualquer jeito.
+   */
+  mover: async (id: string, direcao: DirecaoMovimento): Promise<{ moveu: boolean }> => {
+    const { data } = await api.patch<{ moveu: boolean }>(`${APPS_BASE_URL}/${id}/mover`, { direcao });
+    return data;
+  }
+};
+
+// ==========================================
+// CATEGORIA API — grupos de apps do painel
+// ==========================================
+const CATEGORIAS_BASE_URL = '/admin/categorias';
+
+export const categoriaApi = {
+  getAll: async (): Promise<Categoria[]> => {
+    const { data } = await api.get<Categoria[]>(CATEGORIAS_BASE_URL);
+    return data;
+  },
+  create: async (payload: CreateCategoriaDTO): Promise<Categoria> => {
+    const { data } = await api.post<Categoria>(CATEGORIAS_BASE_URL, payload);
+    return data;
+  },
+  update: async (id: number, payload: UpdateCategoriaDTO): Promise<Categoria> => {
+    const { data } = await api.put<Categoria>(`${CATEGORIAS_BASE_URL}/${id}`, payload);
+    return data;
+  },
+  /** Os apps da categoria voltam para "Sem categoria"; nenhum app é apagado. */
+  delete: async (id: number): Promise<void> => {
+    await api.delete(`${CATEGORIAS_BASE_URL}/${id}`);
+  },
+  mover: async (id: number, direcao: DirecaoMovimento): Promise<{ moveu: boolean }> => {
+    const { data } = await api.patch<{ moveu: boolean }>(`${CATEGORIAS_BASE_URL}/${id}/mover`, { direcao });
+    return data;
   }
 };
 

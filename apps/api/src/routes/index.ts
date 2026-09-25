@@ -3,6 +3,7 @@ import {
   AuthController,
   AppController,
   UserController,
+  CategoriaController,
   TwoFactorController
 } from '../controllers';
 import {
@@ -89,7 +90,16 @@ adminRouter.get('/apps/:id', AppController.getById as any);
 adminRouter.post('/apps', AppController.createApp as any);
 adminRouter.put('/apps/:id', AppController.updateApp as any);
 adminRouter.patch('/apps/:id/status', AppController.toggleAppStatus as any);
+// Sobe/desce uma posição dentro da categoria: `{ direcao: 'cima' | 'baixo' }`.
+adminRouter.patch('/apps/:id/mover', AppController.moverApp as any);
 adminRouter.delete('/apps/:id', AppController.deleteApp as any);
+
+// -- Categorias (grupos de apps do painel; db/005_categorias_ordem.sql)
+adminRouter.get('/categorias', CategoriaController.listar as any);
+adminRouter.post('/categorias', CategoriaController.criar as any);
+adminRouter.put('/categorias/:id', CategoriaController.renomear as any);
+adminRouter.patch('/categorias/:id/mover', CategoriaController.mover as any);
+adminRouter.delete('/categorias/:id', CategoriaController.apagar as any);
 
 // -- Users (nested in apps or standalone)
 adminRouter.get('/apps/:id/users', UserController.getUsersByApp as any);

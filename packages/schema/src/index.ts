@@ -278,6 +278,15 @@ export interface App {
      * coluna "2FA" por "nao se aplica". Ver db/004_apps_sem_login_hub.sql.
      */
     usaLoginHub?: boolean;
+    /**
+     * Grupo do painel (ver db/005_categorias_ordem.sql). `null` = "Sem
+     * categoria", que a lista mostra por último. `categoria_nome` vem junto
+     * para a tela não precisar cruzar com /admin/categorias.
+     */
+    categoria_id?: number | null;
+    categoria_nome?: string | null;
+    /** Posição dentro da categoria (1..n). Só muda por /admin/apps/:id/mover. */
+    ordem?: number;
     status: 'ativo' | 'inativo' | 'bloqueado' | 'ativa' | 'inativa' | 'bloqueada';
     data_cadastro?: string | Date;
     created_at?: Date;
@@ -293,6 +302,7 @@ export interface CreateAppDTO {
     logo?: string;
     bot_url?: string;
     platform_url?: string;
+    categoria_id?: number | null;
     password?: string;
     admin_nome?: string;
     admin_email?: string;
@@ -308,6 +318,32 @@ export interface UpdateAppDTO {
     logo?: string | null | undefined;
     bot_url?: string | null | undefined;
     platform_url?: string | null | undefined;
+    /** `null` tira o app da categoria; `undefined` não mexe. */
+    categoria_id?: number | null | undefined;
+}
+
+/** Direção de um movimento na lista: troca de lugar com o vizinho. */
+export type DirecaoMovimento = 'cima' | 'baixo';
+
+// ==========================================
+// CATEGORIA MODELS
+// ==========================================
+/** Grupo de apps do painel. Ver db/005_categorias_ordem.sql. */
+export interface Categoria {
+    id: number;
+    nome: string;
+    ordem: number;
+    criado_em?: string | Date | null;
+    /** Quantos apps estão no grupo — o painel usa para avisar antes de apagar. */
+    total_apps?: number;
+}
+
+export interface CreateCategoriaDTO {
+    nome: string;
+}
+
+export interface UpdateCategoriaDTO {
+    nome: string;
 }
 
 export interface CreateAppResponse {
@@ -390,6 +426,17 @@ export const niveisAcesso = pgTable('niveis_acesso', {
     nome: varchar('nome', { length: 50 }).notNull().unique(),
 });
 
+/**
+ * Grupos do painel. `ordem` é a posição do grupo na tela; os apps de cada
+ * grupo têm a própria `ordem` em `aplicativos`. Ver db/005_categorias_ordem.sql.
+ */
+export const categorias = pgTable('categorias', {
+    id: serial('id').primaryKey(),
+    nome: varchar('nome', { length: 100 }).notNull().unique(),
+    ordem: integer('ordem').notNull().default(0),
+    criadoEm: timestamp('criado_em').defaultNow(),
+});
+
 export const aplicativos = pgTable('aplicativos', {
     id: serial('id').primaryKey(),
     nome: varchar('nome', { length: 255 }).notNull(),
@@ -405,6 +452,11 @@ export const aplicativos = pgTable('aplicativos', {
     // cofre, e dali em diante quem autentica e a senha mestra, que e a chave de
     // criptografia e o hub nunca ve. Ver db/004_apps_sem_login_hub.sql.
     usaLoginHub: boolean('usa_login_hub').notNull().default(true),
+    // Grupo do painel. NULL = "Sem categoria". Apagar a categoria devolve os
+    // apps para NULL (ON DELETE SET NULL), nunca apaga app.
+    categoriaId: integer('categoria_id').references(() => categorias.id, { onDelete: 'set null' }),
+    // Posicao dentro da categoria (1..n); o servico renumera a cada movimento.
+    ordem: integer('ordem').notNull().default(0),
     dataCadastro: timestamp('data_cadastro').defaultNow(),
     dataAtualizacao: timestamp('data_atualizacao'),
 });

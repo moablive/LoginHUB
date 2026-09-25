@@ -9,13 +9,16 @@ import {
   MagnifyingGlassIcon,
   PencilSquareIcon,
   LinkIcon,
-  PuzzlePieceIcon
+  PuzzlePieceIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+  TagIcon
 } from '@heroicons/react/24/outline';
 
-import { appApi } from '@loginhub/api-client';
+import { appApi, categoriaApi } from '@loginhub/api-client';
 import { authApi } from '@loginhub/api-client';
 import { masks } from '../utils/masks';
-import type { App } from '@loginhub/schema';
+import type { App, Categoria, DirecaoMovimento } from '@loginhub/schema';
 import { getAppIntegration } from '../config/integrations';
 import { getAppLinks } from '../config/appLinks';
 
@@ -25,6 +28,7 @@ import { DeleteModal } from '../components/modals/DeleteModal/DeleteModal';
 import { StatusButton } from '../components/modals/StatusButton';
 import { EditAppModal } from '../components/modals/EditModals/EditAppModal';
 import { AlertModal } from '../components/modals/AlertModal/AlertModal';
+import { CategoriasModal } from '../components/modals/CategoriasModal/CategoriasModal';
 import { IntegrationBadge } from '../components/Integration/IntegrationBadge';
 import { AppLinkBadge } from '../components/Integration/AppLinkBadge';
 
@@ -33,10 +37,14 @@ export const Dashboard = () => {
   
   // Estados
   const [apps, setApps] = useState<App[]>([]);
+  const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   
   // Estados de Modais e Ações
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showCategorias, setShowCategorias] = useState(false);
+  // Id do app cuja seta acabou de ser clicada: trava as setas até a lista voltar.
+  const [movendo, setMovendo] = useState<string | null>(null);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
   
   const [appToDelete, setAppToDelete] = useState<{ id: string, nome: string } | null>(null);
@@ -49,11 +57,13 @@ export const Dashboard = () => {
 
   const showError = (title: string, message: string) => setAlertState({ isOpen: true, title, message });
 
-  // Busca dados iniciais
+  // Busca dados iniciais. A API já devolve os apps na ordem do painel
+  // (categoria, depois `ordem`); a tela só agrupa, nunca reordena.
   const fetchApps = async () => {
     try {
-      const data = await appApi.getAll();
-      setApps(data);
+      const [listaApps, listaCategorias] = await Promise.all([appApi.getAll(), categoriaApi.getAll()]);
+      setApps(listaApps);
+      setCategorias(listaCategorias);
     } catch (error) {
       console.error('Erro ao buscar aplicativos', error);
       // Aqui você poderia adicionar um Toast de erro
@@ -73,6 +83,33 @@ export const Dashboard = () => {
       c.documento.includes(term)
     );
   }, [apps, searchTerm]);
+
+  const buscando = searchTerm.trim().length > 0;
+
+  /**
+   * Grupos na ordem das categorias, com "Sem categoria" por último. Categoria
+   * vazia aparece (para o usuário ver que existe) — exceto durante uma busca,
+   * quando só interessa quem casou com o termo.
+   */
+  const grupos = useMemo(() => {
+    const porCategoria = new Map<number | null, App[]>();
+    for (const app of filteredApps) {
+      const chave = app.categoria_id ?? null;
+      const lista = porCategoria.get(chave) ?? [];
+      lista.push(app);
+      porCategoria.set(chave, lista);
+    }
+    const resultado: Array<{ id: number | null; nome: string; apps: App[] }> = [];
+    for (const c of categorias) {
+      const lista = porCategoria.get(c.id) ?? [];
+      if (lista.length > 0 || !buscando) resultado.push({ id: c.id, nome: c.nome, apps: lista });
+    }
+    const semCategoria = porCategoria.get(null) ?? [];
+    if (semCategoria.length > 0 || (!buscando && categorias.length > 0)) {
+      resultado.push({ id: null, nome: 'Sem categoria', apps: semCategoria });
+    }
+    return resultado;
+  }, [filteredApps, categorias, buscando]);
 
   // --- AÇÕES ---
 
@@ -118,6 +155,23 @@ export const Dashboard = () => {
     } catch (error) {
       console.error(error);
       showError('Erro', 'Não foi possível atualizar o status do aplicativo.');
+    }
+  };
+
+  // --- Ordem dentro da categoria ---
+  // Só troca com o vizinho da MESMA categoria; a API renumera o grupo. Durante
+  // uma busca as setas ficam travadas: o vizinho visível pode não ser o real.
+  const handleMover = async (app: App, direcao: DirecaoMovimento) => {
+    if (movendo || buscando) return;
+    setMovendo(app.id);
+    try {
+      await appApi.mover(app.id, direcao);
+      await fetchApps();
+    } catch (error) {
+      console.error(error);
+      showError('Erro', 'Não foi possível mover o aplicativo.');
+    } finally {
+      setMovendo(null);
     }
   };
 
@@ -210,6 +264,17 @@ export const Dashboard = () => {
             <span className="bg-muted text-muted-foreground text-xs px-2 py-1 rounded-full">{filteredApps.length}</span>
           </h2>
           
+          <div className="flex w-full sm:w-auto items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowCategorias(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-background border border-input text-foreground rounded-xl hover:bg-muted/50 transition font-medium shadow-sm text-sm whitespace-nowrap"
+            title="Criar, renomear e ordenar as categorias"
+          >
+            <TagIcon className="h-5 w-5 text-primary" />
+            Categorias
+            <span className="bg-muted text-muted-foreground text-xs px-2 py-0.5 rounded-full">{categorias.length}</span>
+          </button>
           <div className="relative w-full sm:w-80">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <MagnifyingGlassIcon className="h-5 w-5 text-muted-foreground" />
@@ -221,6 +286,7 @@ export const Dashboard = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 bg-background text-foreground border border-input rounded-xl focus:ring-2 focus:ring-primary focus:border-primary outline-none transition shadow-sm text-base sm:text-sm"
             />
+          </div>
           </div>
         </div>
 
@@ -236,8 +302,8 @@ export const Dashboard = () => {
                 <th className="px-6 py-4 text-right text-xs font-bold text-muted-foreground uppercase tracking-wider">Ações</th>
               </tr>
             </thead>
-            <tbody className="bg-card divide-y divide-border">
-              {filteredApps.length === 0 ? (
+            {filteredApps.length === 0 ? (
+              <tbody className="bg-card">
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
                     <div className="flex flex-col items-center justify-center">
@@ -246,8 +312,29 @@ export const Dashboard = () => {
                     </div>
                   </td>
                 </tr>
-              ) : (
-                filteredApps.map((app) => (
+              </tbody>
+            ) : grupos.map((grupo) => (
+              <tbody key={grupo.id ?? 'sem-categoria'} className="bg-card divide-y divide-border">
+                {/* Cabeçalho do grupo — só aparece quando existe ao menos uma categoria. */}
+                {categorias.length > 0 && (
+                  <tr className="bg-muted/40">
+                    <td colSpan={6} className="px-6 py-2.5">
+                      <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                        <TagIcon className={`h-4 w-4 ${grupo.id === null ? 'opacity-50' : 'text-primary'}`} />
+                        <span className={grupo.id === null ? 'italic' : 'text-foreground'}>{grupo.nome}</span>
+                        <span className="bg-muted text-muted-foreground text-xs px-2 py-0.5 rounded-full normal-case font-medium tracking-normal">{grupo.apps.length}</span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                {grupo.apps.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-4 text-sm text-muted-foreground italic">
+                      Nenhum aplicativo nesta categoria. Edite um aplicativo e escolha esta categoria para agrupá-lo aqui.
+                    </td>
+                  </tr>
+                )}
+                {grupo.apps.map((app, indice) => (
                   <tr key={app.id} className="hover:bg-muted/50 transition duration-150 group">
                     <td className="px-6 py-5 whitespace-nowrap">
                       <div className="flex items-center">
@@ -311,6 +398,28 @@ export const Dashboard = () => {
 
                     <td className="px-6 py-5 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end gap-2">
+                        {/* Subir/descer dentro da categoria. Travado durante busca. */}
+                        <div className="flex flex-col mr-1">
+                          <button
+                            type="button"
+                            onClick={() => handleMover(app, 'cima')}
+                            disabled={buscando || !!movendo || indice === 0}
+                            title={buscando ? 'Limpe a busca para reordenar' : 'Subir'}
+                            className="p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+                          >
+                            <ChevronUpIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMover(app, 'baixo')}
+                            disabled={buscando || !!movendo || indice === grupo.apps.length - 1}
+                            title={buscando ? 'Limpe a busca para reordenar' : 'Descer'}
+                            className="p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+                          >
+                            <ChevronDownIcon className="h-4 w-4" />
+                          </button>
+                        </div>
+
                         <button
                           onClick={() => navigate(`/apps/${app.id}/users`)}
                           className="px-3 py-1.5 text-primary bg-primary/10 rounded-lg hover:bg-primary/20 transition font-semibold text-xs border border-transparent"
@@ -336,9 +445,9 @@ export const Dashboard = () => {
                       </div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
+                ))}
+              </tbody>
+            ))}
           </table>
         </div>
       </div>
@@ -359,10 +468,17 @@ export const Dashboard = () => {
         isLoading={loadingAction === appToDelete?.id}
       />
 
+      <CategoriasModal
+        isOpen={showCategorias}
+        onClose={() => setShowCategorias(false)}
+        onChanged={fetchApps}
+      />
+
       <EditAppModal
         isOpen={!!appToEdit}
         onClose={() => setAppToEdit(null)}
         app={appToEdit}
+        categorias={categorias}
         onSuccess={() => {
           setAppToEdit(null); // Fecha o modal
           fetchApps(); // Recarrega os dados
@@ -379,4 +495,4 @@ export const Dashboard = () => {
 
     </div>
   );
-};
+};

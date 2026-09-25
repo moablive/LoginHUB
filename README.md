@@ -47,6 +47,7 @@ Todo o ciclo de vida da conta — convite por e-mail, primeiro acesso via **Magi
 | 🚦 Gestão Granular de Status | ✅ | Controle de status em apps (`ativo`/`inativo`) e usuários (`ativo`/`inativo`/`bloqueado`). |
 | 📧 Envio Automático por E-mail (SMTP) | ✅ | Disparo de convites e links de acesso via templates HTML personalizáveis. |
 | 🔗 URLs de Integração (`bot_url` / `platform_url`) | ✅ | Suporte a links diretos para bots (Telegram/WhatsApp) e plataformas web por aplicativo. |
+| 🏷️ Categorias e ordem dos aplicativos | ✅ | O painel agrupa os apps em categorias e ordena cada um com setas (subir/descer). A ordem mora no banco (`categorias`, `aplicativos.ordem`); ver [Categorias](#categorias-grupos-de-apps-do-painel). |
 | 🎨 Dracula Dark Mode & Light Mode | ✅ | Alternância dinâmica de tema na UI com suporte nativo ao Dracula Theme. |
 | 📱 PWA Funcional | ✅ | Frontend instalável como Progressive Web App (Service Worker + Web App Manifest). |
 | 🚢 Script de Deploy Automatizado | ✅ | Script `./redeploy.sh` na raiz para deploy interativo ou via CLI com Docker Compose. |
@@ -628,9 +629,29 @@ da API — é aceitável para travar força bruta, mas não sobreviveria a répl
 | `GET` | `/admin/apps` | - | Lista todos os aplicativos com contagem de usuários (`total_usuarios`), `logo`, `bot_url` e `platform_url`. |
 | `GET` | `/admin/apps/:id` | - | Obtém detalhes completos de um aplicativo. |
 | `POST` | `/admin/apps` | `CreateAppDTO` | Cadastra novo aplicativo (+ conta admin inicial opcional). |
-| `PUT` | `/admin/apps/:id` | `UpdateAppDTO` | Atualiza dados (`nome`, `email`, `documento`, `telefone`, `logo`, `bot_url`, `platform_url`). |
+| `PUT` | `/admin/apps/:id` | `UpdateAppDTO` | Atualiza dados (`nome`, `email`, `documento`, `telefone`, `logo`, `bot_url`, `platform_url`, `categoria_id`). Trocar de categoria manda o app para o **fim** do novo grupo. |
 | `PATCH` | `/admin/apps/:id/status` | `{ "status": "ativo" \| "inativo" }` | Altera a situação do aplicativo. |
+| `PATCH` | `/admin/apps/:id/mover` | `{ "direcao": "cima" \| "baixo" }` | Sobe/desce o app **uma posição dentro da própria categoria** (renumera o grupo). Devolve `{ moveu: false }` quando já está na ponta. |
 | `DELETE` | `/admin/apps/:id` | - | Exclui o aplicativo e remove em cascata todos os usuários vinculados. |
+
+> A listagem de `GET /admin/apps` já vem na **ordem do painel**: categoria (pela
+> `ordem` dela, "Sem categoria" por último), depois a `ordem` do app no grupo,
+> depois o `id`. Cada item traz `categoria_id`, `categoria_nome` e `ordem`. O
+> painel só agrupa — não reordena no cliente.
+
+#### Categorias (grupos de apps do painel)
+
+Criadas em 25/09/2026 (`db/005_categorias_ordem.sql`) para agrupar e ordenar os
+apps no painel. Apagar uma categoria **não apaga app**: os apps dela voltam para
+"Sem categoria", no fim, na ordem que tinham. Nome único sem distinção de caixa.
+
+| Método | Path | Body / Params | Descrição |
+|---|---|---|---|
+| `GET` | `/admin/categorias` | - | Lista na ordem da tela, com `total_apps`. |
+| `POST` | `/admin/categorias` | `{ "nome" }` | Cria no fim da lista. `409` se o nome já existe. |
+| `PUT` | `/admin/categorias/:id` | `{ "nome" }` | Renomeia. |
+| `PATCH` | `/admin/categorias/:id/mover` | `{ "direcao": "cima" \| "baixo" }` | Sobe/desce a categoria uma posição. |
+| `DELETE` | `/admin/categorias/:id` | - | Remove; os apps voltam para "Sem categoria". |
 
 #### Usuários
 

@@ -470,7 +470,7 @@ const corsOptions: CorsOptions = {
         console.warn(`[CORS] Origem recusada: ${origin}`);
         return callback(new Error('Bloqueado por CORS: Origem não permitida.'));
     },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     
     allowedHeaders: [
         'Content-Type', 

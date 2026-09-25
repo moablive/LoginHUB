@@ -1,10 +1,17 @@
 import { Request, Response } from 'express';
-import { AuthService, AppService, UserService, twoFactorService } from '@loginhub/services';
-import { LoginInputDTO, CreateAppDTO, UpdateAppDTO, CreateUserDTO, UpdateUserDTO, DbError } from '@loginhub/schema';
+import { AuthService, AppService, UserService, CategoriaService, twoFactorService } from '@loginhub/services';
+import { LoginInputDTO, CreateAppDTO, UpdateAppDTO, CreateUserDTO, UpdateUserDTO, DbError, DirecaoMovimento, CreateCategoriaDTO, UpdateCategoriaDTO } from '@loginhub/schema';
 
 const authService = new AuthService();
 const appService = new AppService();
 const userService = new UserService();
+const categoriaService = new CategoriaService();
+
+/** Corpo de PATCH .../mover: `{ direcao: 'cima' | 'baixo' }`. */
+function direcaoDoCorpo(body: any): DirecaoMovimento | null {
+    const d = body?.direcao;
+    return d === 'cima' || d === 'baixo' ? d : null;
+}
 
 // ==========================================
 // AUTH CONTROLLER
@@ -434,15 +441,18 @@ export class AppController {
 
     static async updateApp(req: Request<{ id: string }, {}, UpdateAppDTO & { logo?: string | null; bot_url?: string | null; platform_url?: string | null }>, res: Response) {
         const { id } = req.params;
-        const { nome, email, documento, telefone, logo, bot_url, platform_url } = req.body;
+        const { nome, email, documento, telefone, logo, bot_url, platform_url, categoria_id } = req.body;
 
         try {
-            const updatedApp = await appService.updateApp(id, { nome, email, documento, telefone: telefone || undefined, logo, bot_url, platform_url });
+            const updatedApp = await appService.updateApp(id, { nome, email, documento, telefone: telefone || undefined, logo, bot_url, platform_url, categoria_id });
             return res.status(200).json(updatedApp);
         } catch (err: unknown) {
             const error = err as DbError;
             if (error.code === 'NOT_FOUND') {
                 return res.status(404).json({ message: 'Aplicativo não encontrada.' });
+            }
+            if (error.code === 'CATEGORIA_NOT_FOUND') {
+                return res.status(422).json({ message: 'Categoria não encontrada.' });
             }
             if (error.code === 'DUPLICATE_ENTRY') {
                 return res.status(409).json({ error: 'Conflito de Dados', message: error.message || 'Documento ou E-mail já em uso.' });
@@ -450,6 +460,79 @@ export class AppController {
             console.error('[AppController] updateApp:', error);
             return res.status(500).json({ message: 'Erro interno ao atualizar app.' });
         }
+    }
+
+    /** PATCH /admin/apps/:id/mover `{ direcao }` — uma posição dentro da categoria. */
+    static async moverApp(req: Request<{ id: string }>, res: Response) {
+        const direcao = direcaoDoCorpo(req.body);
+        if (!direcao) return res.status(400).json({ message: "direcao deve ser 'cima' ou 'baixo'." });
+        try {
+            const r = await appService.moverApp(req.params.id, direcao);
+            return res.status(200).json(r);
+        } catch (err: unknown) {
+            const error = err as DbError;
+            if (error.code === 'NOT_FOUND') return res.status(404).json({ message: 'Aplicativo não encontrada.' });
+            console.error('[AppController] moverApp:', error);
+            return res.status(500).json({ message: 'Erro interno ao mover app.' });
+        }
+    }
+}
+
+// ==========================================
+// CATEGORIA CONTROLLER
+// ==========================================
+/** Grupos de apps do painel (db/005_categorias_ordem.sql). Só o master chega aqui. */
+export class CategoriaController {
+    static async listar(_req: Request, res: Response) {
+        try {
+            return res.status(200).json(await categoriaService.listar());
+        } catch (err) {
+            console.error('[CategoriaController] listar:', err);
+            return res.status(500).json({ message: 'Erro Interno' });
+        }
+    }
+
+    static async criar(req: Request<{}, {}, CreateCategoriaDTO>, res: Response) {
+        try {
+            return res.status(201).json(await categoriaService.criar(req.body ?? {}));
+        } catch (err) {
+            return CategoriaController.responder(res, err as DbError, 'criar');
+        }
+    }
+
+    static async renomear(req: Request<{ id: string }, {}, UpdateCategoriaDTO>, res: Response) {
+        try {
+            return res.status(200).json(await categoriaService.renomear(req.params.id, req.body ?? {}));
+        } catch (err) {
+            return CategoriaController.responder(res, err as DbError, 'renomear');
+        }
+    }
+
+    static async apagar(req: Request<{ id: string }>, res: Response) {
+        try {
+            await categoriaService.apagar(req.params.id);
+            return res.status(200).json({ message: 'Categoria removida. Os apps dela voltaram para "Sem categoria".' });
+        } catch (err) {
+            return CategoriaController.responder(res, err as DbError, 'apagar');
+        }
+    }
+
+    static async mover(req: Request<{ id: string }>, res: Response) {
+        const direcao = direcaoDoCorpo(req.body);
+        if (!direcao) return res.status(400).json({ message: "direcao deve ser 'cima' ou 'baixo'." });
+        try {
+            return res.status(200).json(await categoriaService.mover(req.params.id, direcao));
+        } catch (err) {
+            return CategoriaController.responder(res, err as DbError, 'mover');
+        }
+    }
+
+    private static responder(res: Response, error: DbError, acao: string) {
+        if (error.code === 'NOT_FOUND') return res.status(404).json({ message: 'Categoria não encontrada.' });
+        if (error.code === 'VALIDATION') return res.status(400).json({ message: error.message });
+        if (error.code === 'DUPLICATE_ENTRY') return res.status(409).json({ error: 'Conflito de Dados', message: error.message });
+        console.error(`[CategoriaController] ${acao}:`, error);
+        return res.status(500).json({ message: 'Erro Interno' });
     }
 }
 

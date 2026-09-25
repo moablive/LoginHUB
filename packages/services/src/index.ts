@@ -3,8 +3,8 @@ import crypto from 'crypto';
 import { buildInviteEmail } from './templates/inviteEmail';
 import jwt from 'jsonwebtoken';
 import { db } from '@loginhub/database';
-import { aplicativos, usuarios, niveisAcesso, usuarios2fa } from '@loginhub/schema';
-import { eq, and, ne, sql } from 'drizzle-orm';
+import { aplicativos, usuarios, niveisAcesso, usuarios2fa, categorias } from '@loginhub/schema';
+import { eq, and, ne, sql, asc, isNull } from 'drizzle-orm';
 import { emailService } from './EmailService';
 import { twoFactorService } from './TwoFactorService';
 
@@ -16,6 +16,9 @@ import {
     UserRole,
     CreateAppDTO,
     UpdateAppDTO,
+    DirecaoMovimento,
+    CreateCategoriaDTO,
+    UpdateCategoriaDTO,
     CreateUserDTO,
     UpdateUserDTO,
     TwoFactorChallengeResponse,
@@ -745,6 +748,7 @@ export class AppService {
     public async registerApp(data: CreateAppDTO) {
         try {
             return await db.transaction(async (tx: any) => {
+                const categoriaId = categoriaIdOuNull(data.categoria_id);
                 const appRes = await tx.insert(aplicativos).values({
                     nome: data.nome,
                     documento: data.documento,
@@ -753,6 +757,9 @@ export class AppService {
                     logo: data.logo || null,
                     botUrl: urlBase(data.bot_url),
                     platformUrl: urlBase(data.platform_url),
+                    categoriaId,
+                    // Entra no FIM do grupo escolhido, nunca no meio.
+                    ordem: await proximaOrdemDoGrupo(tx, categoriaId),
                 }).returning({ id: aplicativos.id });
 
                 const appId = appRes[0].id;
@@ -811,11 +818,30 @@ export class AppService {
         }
     }
 
+    /**
+     * Lista na ordem que o painel mostra: categoria (pela `ordem` dela, "Sem
+     * categoria" por último), depois a `ordem` do app dentro do grupo, depois
+     * o id como desempate. A tela NÃO reordena — ela confia nesta sequência,
+     * senão subir/descer no banco não apareceria.
+     */
     public async getAllApps() {
-        const rows = await db.select().from(aplicativos);
+        const rows = await db
+            .select({
+                app: aplicativos,
+                categoriaNome: categorias.nome,
+                categoriaOrdem: categorias.ordem,
+            })
+            .from(aplicativos)
+            .leftJoin(categorias, eq(aplicativos.categoriaId, categorias.id))
+            .orderBy(
+                sql`${categorias.ordem} NULLS LAST`,
+                asc(categorias.id),
+                asc(aplicativos.ordem),
+                asc(aplicativos.id),
+            );
         const allUsers = await db.select({ appId: usuarios.appId }).from(usuarios);
 
-        return rows.map((row: typeof rows[0]) => {
+        return rows.map(({ app: row, categoriaNome }: typeof rows[0]) => {
             const total_usuarios = allUsers.filter((u: typeof allUsers[0]) => u.appId === row.id).length;
             return {
                 ...row,
@@ -823,6 +849,8 @@ export class AppService {
                 data_atualizacao: row.dataAtualizacao,
                 bot_url: row.botUrl,
                 platform_url: row.platformUrl,
+                categoria_id: row.categoriaId,
+                categoria_nome: categoriaNome,
                 total_usuarios
             };
         });
@@ -844,6 +872,7 @@ export class AppService {
             data_atualizacao: rows[0].dataAtualizacao,
             bot_url: rows[0].botUrl,
             platform_url: rows[0].platformUrl,
+            categoria_id: rows[0].categoriaId,
             total_usuarios: allUsers.length
         };
     }
@@ -858,6 +887,21 @@ export class AppService {
             if (data.logo !== undefined) updateData.logo = data.logo || null;
             if (data.bot_url !== undefined) updateData.botUrl = urlBase(data.bot_url);
             if (data.platform_url !== undefined) updateData.platformUrl = urlBase(data.platform_url);
+
+            // Trocar de categoria = sair do grupo atual e entrar no FIM do
+            // novo. Só mexe na ordem se a categoria de fato mudou, senão
+            // editar o nome do app o mandaria para o fim da lista.
+            if (data.categoria_id !== undefined) {
+                const atual = await db.select({ categoriaId: aplicativos.categoriaId })
+                    .from(aplicativos).where(eq(aplicativos.id, Number(id))).limit(1);
+                if (atual.length === 0) throw Object.assign(new Error('Aplicativo não encontrada'), { code: 'NOT_FOUND' });
+                const nova = categoriaIdOuNull(data.categoria_id);
+                if (nova !== atual[0].categoriaId) {
+                    if (nova !== null) await exigirCategoria(nova);
+                    updateData.categoriaId = nova;
+                    updateData.ordem = await proximaOrdemDoGrupo(db, nova);
+                }
+            }
 
             if (Object.keys(updateData).length === 0) return null;
 
@@ -897,6 +941,181 @@ export class AppService {
         const rows = await db.delete(aplicativos).where(eq(aplicativos.id, Number(id))).returning();
         if (rows.length === 0) throw Object.assign(new Error('Aplicativo não encontrada'), { code: 'NOT_FOUND' });
     }
+
+    /**
+     * Sobe ou desce o app UMA posição dentro da própria categoria.
+     *
+     * Renumera o grupo inteiro (1..n) em vez de trocar dois números: a coluna
+     * nasceu com `DEFAULT 0` e apps antigos podem estar empatados; trocar
+     * valores iguais não mudaria nada. No topo (ou no fim) não faz nada e
+     * devolve `moveu: false` — a tela desabilita a seta, mas o clique pode
+     * chegar de uma lista velha.
+     */
+    public async moverApp(id: string, direcao: DirecaoMovimento) {
+        const alvo = await db.select({ id: aplicativos.id, categoriaId: aplicativos.categoriaId })
+            .from(aplicativos).where(eq(aplicativos.id, Number(id))).limit(1);
+        if (alvo.length === 0) throw Object.assign(new Error('Aplicativo não encontrada'), { code: 'NOT_FOUND' });
+
+        const grupo = alvo[0].categoriaId === null
+            ? isNull(aplicativos.categoriaId)
+            : eq(aplicativos.categoriaId, alvo[0].categoriaId);
+
+        return db.transaction(async (tx: any) => {
+            const lista = await tx.select({ id: aplicativos.id })
+                .from(aplicativos).where(grupo)
+                .orderBy(asc(aplicativos.ordem), asc(aplicativos.id));
+            const ids: number[] = lista.map((r: { id: number }) => r.id);
+            const moveu = trocarComVizinho(ids, Number(id), direcao);
+            if (moveu) {
+                for (let i = 0; i < ids.length; i++) {
+                    await tx.update(aplicativos).set({ ordem: i + 1 }).where(eq(aplicativos.id, ids[i]));
+                }
+            }
+            return { moveu };
+        });
+    }
+}
+
+// ==========================================
+// ORDENAÇÃO — helpers partilhados por apps e categorias
+// ==========================================
+
+/** `''`, `undefined`, `0` e `'0'` viram NULL ("Sem categoria"). */
+function categoriaIdOuNull(valor: number | string | null | undefined): number | null {
+    if (valor === undefined || valor === null || valor === '') return null;
+    const n = Number(valor);
+    return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Próxima posição livre no fim do grupo (max(ordem)+1, ou 1 se vazio). */
+async function proximaOrdemDoGrupo(exec: any, categoriaId: number | null): Promise<number> {
+    const grupo = categoriaId === null ? isNull(aplicativos.categoriaId) : eq(aplicativos.categoriaId, categoriaId);
+    const r = await exec.select({ max: sql<number>`coalesce(max(${aplicativos.ordem}), 0)` })
+        .from(aplicativos).where(grupo);
+    return Number(r[0]?.max ?? 0) + 1;
+}
+
+async function exigirCategoria(id: number) {
+    const r = await db.select({ id: categorias.id }).from(categorias).where(eq(categorias.id, id)).limit(1);
+    if (r.length === 0) throw Object.assign(new Error('Categoria não encontrada'), { code: 'CATEGORIA_NOT_FOUND' });
+}
+
+/**
+ * Troca `id` de lugar com o vizinho na direção pedida, no próprio array.
+ * Devolve false quando já está na ponta (nada a fazer).
+ */
+function trocarComVizinho(ids: number[], id: number, direcao: DirecaoMovimento): boolean {
+    const i = ids.indexOf(id);
+    if (i < 0) return false;
+    const j = direcao === 'cima' ? i - 1 : i + 1;
+    if (j < 0 || j >= ids.length) return false;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    return true;
+}
+
+// ==========================================
+// CATEGORIA SERVICE
+// ==========================================
+/**
+ * Grupos de apps do painel. Ver db/005_categorias_ordem.sql.
+ *
+ * Apagar uma categoria nunca apaga app: o `ON DELETE SET NULL` devolve os apps
+ * dela para "Sem categoria". `total_apps` vai na listagem para a tela avisar
+ * quantos vão voltar antes de confirmar.
+ */
+export class CategoriaService {
+    public async listar() {
+        const rows = await db
+            .select({
+                id: categorias.id,
+                nome: categorias.nome,
+                ordem: categorias.ordem,
+                criado_em: categorias.criadoEm,
+            })
+            .from(categorias)
+            .orderBy(asc(categorias.ordem), asc(categorias.id));
+        // Contagem em consulta separada: a subquery correlacionada inline
+        // voltava 0 (o drizzle qualifica a coluna com o nome da tabela
+        // externa). Duas consultas curtas valem mais que um SQL cru frágil.
+        const contagem = await db
+            .select({ categoriaId: aplicativos.categoriaId, total: sql<number>`count(*)` })
+            .from(aplicativos)
+            .groupBy(aplicativos.categoriaId);
+        const porCategoria = new Map<number, number>();
+        for (const c of contagem) if (c.categoriaId !== null) porCategoria.set(c.categoriaId, Number(c.total));
+        return rows.map((r: typeof rows[0]) => ({ ...r, total_apps: porCategoria.get(r.id) ?? 0 }));
+    }
+
+    public async criar(data: CreateCategoriaDTO) {
+        const nome = nomeDeCategoria(data.nome);
+        try {
+            const max = await db.select({ max: sql<number>`coalesce(max(${categorias.ordem}), 0)` }).from(categorias);
+            const rows = await db.insert(categorias)
+                .values({ nome, ordem: Number(max[0]?.max ?? 0) + 1 })
+                .returning();
+            return { ...rows[0], total_apps: 0 };
+        } catch (error: any) {
+            if (error.code === '23505') throw Object.assign(new Error('Já existe uma categoria com esse nome.'), { code: 'DUPLICATE_ENTRY' });
+            throw error;
+        }
+    }
+
+    public async renomear(id: string, data: UpdateCategoriaDTO) {
+        const nome = nomeDeCategoria(data.nome);
+        try {
+            const rows = await db.update(categorias).set({ nome }).where(eq(categorias.id, Number(id))).returning();
+            if (rows.length === 0) throw Object.assign(new Error('Categoria não encontrada'), { code: 'NOT_FOUND' });
+            return rows[0];
+        } catch (error: any) {
+            if (error.code === '23505') throw Object.assign(new Error('Já existe uma categoria com esse nome.'), { code: 'DUPLICATE_ENTRY' });
+            throw error;
+        }
+    }
+
+    /**
+     * Os apps do grupo voltam para "Sem categoria" — no FIM dela, na ordem que
+     * tinham. Sem este passo o `ON DELETE SET NULL` da FK faria o mesmo, mas
+     * cada app chegaria com a `ordem` antiga e empataria com quem já estava lá.
+     */
+    public async apagar(id: string) {
+        await db.transaction(async (tx: any) => {
+            const existe = await tx.select({ id: categorias.id }).from(categorias).where(eq(categorias.id, Number(id))).limit(1);
+            if (existe.length === 0) throw Object.assign(new Error('Categoria não encontrada'), { code: 'NOT_FOUND' });
+
+            const orfaos = await tx.select({ id: aplicativos.id }).from(aplicativos)
+                .where(eq(aplicativos.categoriaId, Number(id)))
+                .orderBy(asc(aplicativos.ordem), asc(aplicativos.id));
+            let ordem = await proximaOrdemDoGrupo(tx, null);
+            for (const app of orfaos) {
+                await tx.update(aplicativos).set({ categoriaId: null, ordem: ordem++ }).where(eq(aplicativos.id, app.id));
+            }
+            await tx.delete(categorias).where(eq(categorias.id, Number(id)));
+        });
+    }
+
+    /** Mesma mecânica do `AppService.moverApp`, sobre a lista de categorias. */
+    public async mover(id: string, direcao: DirecaoMovimento) {
+        return db.transaction(async (tx: any) => {
+            const lista = await tx.select({ id: categorias.id }).from(categorias)
+                .orderBy(asc(categorias.ordem), asc(categorias.id));
+            const ids: number[] = lista.map((r: { id: number }) => r.id);
+            if (!ids.includes(Number(id))) throw Object.assign(new Error('Categoria não encontrada'), { code: 'NOT_FOUND' });
+            const moveu = trocarComVizinho(ids, Number(id), direcao);
+            if (moveu) {
+                for (let i = 0; i < ids.length; i++) {
+                    await tx.update(categorias).set({ ordem: i + 1 }).where(eq(categorias.id, ids[i]));
+                }
+            }
+            return { moveu };
+        });
+    }
+}
+
+function nomeDeCategoria(valor: unknown): string {
+    const nome = String(valor ?? '').trim();
+    if (!nome) throw Object.assign(new Error('Nome da categoria é obrigatório.'), { code: 'VALIDATION' });
+    if (nome.length > 100) throw Object.assign(new Error('Nome da categoria: no máximo 100 caracteres.'), { code: 'VALIDATION' });
+    return nome;
 }
 
 /**

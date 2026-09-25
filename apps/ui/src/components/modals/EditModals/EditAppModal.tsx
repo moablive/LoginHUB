@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { appApi } from '@loginhub/api-client';
 import { masks } from '../../../utils/masks';
-import type { App } from '@loginhub/schema';
+import type { App, Categoria } from '@loginhub/schema';
 import { LogoUpload } from '../../LogoUpload/LogoUpload';
 
 interface EditAppModalProps {
@@ -10,16 +10,20 @@ interface EditAppModalProps {
   onClose: () => void;
   onSuccess: () => void;
   app: App | null;
+  /** Grupos do painel, já na ordem da tela. Vazio = o seletor não aparece. */
+  categorias?: Categoria[];
 }
 
-export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalProps) => {
+export const EditAppModal = ({ isOpen, onClose, onSuccess, app, categorias = [] }: EditAppModalProps) => {
   const [formData, setFormData] = useState({
     nome: '',
     email: '',
     documento: '',
     telefone: '',
     platform_url: '',
-    bot_url: ''
+    bot_url: '',
+    // '' = "Sem categoria". Vai como null para a API.
+    categoria_id: ''
   });
   const [logo, setLogo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -33,7 +37,8 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
         documento: app.documento,
         telefone: app.telefone || '',
         platform_url: app.platform_url || '',
-        bot_url: app.bot_url || ''
+        bot_url: app.bot_url || '',
+        categoria_id: app.categoria_id ? String(app.categoria_id) : ''
       });
       setLogo(app.logo ?? null);
       setError(null);
@@ -59,6 +64,7 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
         logo: logo ?? null,
         platform_url: formData.platform_url.trim() || null,
         bot_url: formData.bot_url.trim() || null,
+        categoria_id: formData.categoria_id ? Number(formData.categoria_id) : null,
       });
 
       onSuccess();
@@ -100,6 +106,23 @@ export const EditAppModal = ({ isOpen, onClose, onSuccess, app }: EditAppModalPr
           </div>
 
           <LogoUpload value={logo} onChange={setLogo} />
+
+          {categorias.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">Categoria</label>
+              <select
+                value={formData.categoria_id}
+                onChange={e => setFormData({...formData, categoria_id: e.target.value})}
+                className="w-full px-4 py-2 border border-input rounded-lg bg-card text-card-foreground focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+              >
+                <option value="">Sem categoria</option>
+                {categorias.map(c => (
+                  <option key={c.id} value={c.id}>{c.nome}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground">Grupo em que o aplicativo aparece no painel. Ao trocar, ele entra no fim do novo grupo.</p>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Documento (CNPJ)</label>
