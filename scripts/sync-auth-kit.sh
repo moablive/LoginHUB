@@ -53,6 +53,8 @@ Sul_Alimentos/sul-alimentos/apps/bot/src/lib/hubAuthClient.ts|client
 Sul_Alimentos/sul-alimentos/apps/bot/src/lib/hubAuthBot.ts|bot
 server/dashboard/apps/api/src/lib/hubAuthServer.ts|server
 server/dashboard/packages/api-client/src/hubAuthClient.ts|client
+Moving/MovingUP/apps/api/src/lib/hubAuthServer.ts|server
+Moving/MovingUP/apps/web/src/lib/hubAuthClient.ts|client
 LifeBusinessSuit/LBS_MoneyAPP/apps/bot/src/lib/hubAuthClient.ts|client
 LifeBusinessSuit/LBS_MoneyAPP/apps/bot/src/lib/hubAuthBot.ts|bot
 LifeBusinessSuit/LBS_TodoAPP/apps/bot/src/lib/hubAuthClient.ts|client
