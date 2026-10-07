@@ -87,6 +87,23 @@ export interface ProvisionedApp {
    * provisionado. A chave é o papel; o valor, a descrição no contexto do app.
    */
   hubRoles?: Partial<Record<"admin" | "operador" | "user" | "suporte", string>>;
+  /**
+   * De onde o painel descobre quais usuários do app TAMBÉM têm cadastro nele
+   * (07/10/2026), para marcá-los na lista.
+   *
+   * O papel do hub não conta essa história: "Vendedor" não é papel daqui, é
+   * uma linha na base da Sul. Quem é admin lá e também vende aparecia só como
+   * "Admin", e a dúvida "preciso criar um usuário de vendedor para mim?" nasce
+   * justamente daí — a resposta é não, e agora a tela diz isso.
+   */
+  roster?: {
+    /** GET que devolve os cadastros do app (vai com o Bearer master). */
+    source: string;
+    /** Campo do item comparado com o e-mail do usuário do hub. */
+    matchField?: string;
+    /** Texto do selo. */
+    label: string;
+  };
 }
 
 /** Os papéis do hub que um app provisionado oferece, já com a descrição certa. */
@@ -167,6 +184,14 @@ export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
         "Opera o balcão da Sul Alimentos: estoque, tabelas de preço, pesagem, emissão de NF-e, pedidos e cadastro de vendedores. Não vê o financeiro.",
       admin:
         "Tudo o que o operador faz, mais o financeiro (títulos, calendário de vencimento, baixa) e a limpeza do mural.",
+    },
+    // Marca na lista quem, além do papel do hub, tem cadastro de vendedor na
+    // Sul. O vínculo é o e-mail — é por ele que o `/vendedor/me` da Sul acha o
+    // cadastro a partir do token.
+    roster: {
+      source: `${SUL_ALIMENTOS_API}/vendedor/vinculos`,
+      matchField: "email",
+      label: "Vendedor",
     },
     // CPF e telefone não entram aqui: o vendedor preenche os próprios dados ao
     // abrir o Magic Link, na tela de definição de senha da Sul Alimentos.

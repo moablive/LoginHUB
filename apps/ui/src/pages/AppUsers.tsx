@@ -33,6 +33,7 @@ import { IntegrationLink } from '../components/Integration/IntegrationLink';
 import { AppLinkPanel } from '../components/Integration/AppLinkPanel';
 import { getAppIntegration } from '../config/integrations';
 import { getAppLinks } from '../config/appLinks';
+import { getProvisionedApp } from '../config/provisioning';
 
 export const AppUsers = () => {
   const { id: appId } = useParams<{ id: string }>(); 
@@ -42,6 +43,12 @@ export const AppUsers = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [app, setApp] = useState<App | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Quem, entre estes usuários, também tem cadastro no app (ex.: vendedor da
+  // Sul). Guardado como Set de e-mail em minúsculas: a comparação é por e-mail
+  // porque é assim que o app acha o cadastro a partir do token.
+  const [roster, setRoster] = useState<Set<string>>(new Set());
+  const rosterCfg = getProvisionedApp(appId)?.roster ?? null;
   
   // Estados de Modais
   const [showFormModal, setShowFormModal] = useState(false);
@@ -100,6 +107,28 @@ export const AppUsers = () => {
       setLoading(false);
     }
   }, [appId]);
+
+  // O selo não pode travar a tela: se o app estiver fora do ar, a lista segue
+  // sem ele — a informação é um reforço, não o conteúdo da página.
+  useEffect(() => {
+    if (!rosterCfg) { setRoster(new Set()); return; }
+    const token = localStorage.getItem('awl_token');
+    let vivo = true;
+    void (async () => {
+      try {
+        const { data } = await axios.get(rosterCfg.source, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          timeout: 20000,
+        });
+        const campo = rosterCfg.matchField || 'email';
+        const itens: Array<Record<string, unknown>> = Array.isArray(data) ? data : [];
+        if (vivo) setRoster(new Set(itens.map((i) => String(i[campo] ?? '').toLowerCase()).filter(Boolean)));
+      } catch {
+        if (vivo) setRoster(new Set());
+      }
+    })();
+    return () => { vivo = false; };
+  }, [rosterCfg]);
 
   useEffect(() => {
     fetchData();
@@ -347,6 +376,7 @@ export const AppUsers = () => {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                           {user.role === 'admin' ? (
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/30">
                               <ShieldCheckIcon className="h-3 w-3 mr-1" />
@@ -361,6 +391,12 @@ export const AppUsers = () => {
                               Usuário
                             </span>
                           )}
+                          {rosterCfg && roster.has((user.email || '').toLowerCase()) && (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-sky-500/20 text-sky-700 dark:text-sky-400 border border-sky-500/30">
+                              {rosterCfg.label}
+                            </span>
+                          )}
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
                           {user.telefone || '-'}
