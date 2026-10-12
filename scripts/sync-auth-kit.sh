@@ -32,18 +32,15 @@ MODO="${1:-sync}"
 # Os bots de Telegram recebem DOIS arquivos, no MESMO diretório: o `hubAuthBot`
 # é uma camada fina sobre o `hubAuthClient` e o importa por caminho relativo.
 # Separar os dois quebra a cópia.
-#
-# editores-web fica de fora desta lista: não tem build de TypeScript, então
-# recebe o JS transpilado (ver TRANSPILE, abaixo).
 DESTINOS=$(cat <<'LISTA'
 LifeBusinessSuit/LBS_MoneyAPP/apps/backend/src/lib/hubAuthServer.ts|server
 LifeBusinessSuit/LBS_MoneyAPP/apps/frontend/src/lib/hubAuthClient.ts|client
 LifeBusinessSuit/LBS_TodoAPP/apps/backend/src/lib/hubAuthServer.ts|server
 LifeBusinessSuit/LBS_TodoAPP/apps/frontend/src/lib/hubAuthClient.ts|client
+LifeBusinessSuit/LBS_NaoTeEsquece/apps/backend/src/lib/hubAuthServer.ts|server
+LifeBusinessSuit/LBS_NaoTeEsquece/apps/frontend/src/lib/hubAuthClient.ts|client
 LifeBusinessSuit/LBS_NotesAPP/apps/backend/src/lib/hubAuthServer.ts|server
 LifeBusinessSuit/LBS_NotesAPP/apps/frontend/src/lib/hubAuthClient.ts|client
-LifeBusinessSuit/LBS_TTSAPP/apps/backend/src/lib/hubAuthServer.ts|server
-LifeBusinessSuit/LBS_TTSAPP/apps/frontend/src/lib/hubAuthClient.ts|client
 Astral_Wave/astralwavelabel/api/src/shared/lib/hubAuthServer.ts|server
 Astral_Wave/astralwavelabel/apps/artist/src/lib/hubAuthClient.ts|client
 Astral_Wave/astralwavelabel/apps/site/src/lib/hubAuthClient.ts|client
@@ -63,17 +60,6 @@ LifeBusinessSuit/LBS_NotesAPP/apps/bot/src/lib/hubAuthClient.ts|client
 LifeBusinessSuit/LBS_NotesAPP/apps/bot/src/lib/hubAuthBot.ts|bot
 LISTA
 )
-
-# Consumidor sem TypeScript nem bundler: editores-web recebe os dois arquivos
-# transpilados a partir da MESMA fonte.
-#
-#   hubAuthServer.js  CommonJS  — o proxy é `require()` puro
-#   auth.js           ESM       — o login.html carrega com <script type="module">
-#
-# O nome `auth.js` não é arbitrário: é o único caminho de asset que o
-# `authMiddleware` do proxy libera sem sessão (junto de `/login*`).
-TRANSPILE_DEST="$BASE/server/editores-web/auth-proxy/src/hubAuthServer.js"
-TRANSPILE_CLIENT_DEST="$BASE/server/editores-web/auth-proxy/src/auth.js"
 
 divergentes=0
 copiados=0
@@ -102,48 +88,8 @@ for linha in $DESTINOS; do
     fi
 done
 
-# --- editores-web: TS → CJS -------------------------------------------------
-# `--module CommonJS` porque o proxy é `require()` puro, sem bundler nem tsc.
-if [ "$MODO" != "--check" ]; then
-    tmp="$(mktemp -d)"
-    npx --prefix "$RAIZ" tsc "$SERVER" \
-        --outDir "$tmp" --module CommonJS --target ES2020 \
-        --esModuleInterop --skipLibCheck --declaration false >/dev/null 2>&1 || true
-
-    if [ -f "$tmp/hubAuthServer.js" ]; then
-        mkdir -p "$(dirname "$TRANSPILE_DEST")"
-        {
-            echo "// GERADO por LoginHUB/scripts/sync-auth-kit.sh — não edite à mão."
-            echo "// Fonte: LoginHUB/packages/auth-kit/src/hubAuthServer.ts"
-            cat "$tmp/hubAuthServer.js"
-        } > "$TRANSPILE_DEST"
-        copiados=$((copiados + 1))
-        echo "→ server/editores-web/auth-proxy/src/hubAuthServer.js (CommonJS)"
-    else
-        echo "!! falhou ao transpilar o guard para editores-web" >&2
-    fi
-
-    # O cliente sai como ESM: `hubAuthClient.ts` não importa nada, então o
-    # módulo gerado roda direto no browser, sem bundler nem shim.
-    npx --prefix "$RAIZ" tsc "$CLIENT" \
-        --outDir "$tmp/esm" --module ES2020 --target ES2020 \
-        --lib ES2020,DOM --skipLibCheck --declaration false >/dev/null 2>&1 || true
-
-    if [ -f "$tmp/esm/hubAuthClient.js" ]; then
-        mkdir -p "$(dirname "$TRANSPILE_CLIENT_DEST")"
-        {
-            echo "// GERADO por LoginHUB/scripts/sync-auth-kit.sh — não edite à mão."
-            echo "// Fonte: LoginHUB/packages/auth-kit/src/hubAuthClient.ts"
-            cat "$tmp/esm/hubAuthClient.js"
-        } > "$TRANSPILE_CLIENT_DEST"
-        copiados=$((copiados + 1))
-        echo "→ server/editores-web/auth-proxy/src/auth.js (ESM)"
-    else
-        echo "!! falhou ao transpilar o cliente para editores-web" >&2
-    fi
-
-    rm -rf "$tmp"
-fi
+# O editores-web (proxy de VNC) recebia aqui o JS transpilado; descontinuado em 01/10/2026,
+# o resto está em /root/recuperado/editores-web.
 
 if [ "$MODO" = "--check" ]; then
     if [ "$divergentes" -gt 0 ]; then

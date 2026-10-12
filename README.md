@@ -845,6 +845,15 @@ Pontos que valem atenção ao adicionar um app novo:
 - A URL base da Sul Alimentos pode ser sobrescrita por
   `VITE_SUL_ALIMENTOS_API_URL` no `.env`; sem ela vale o padrão de produção
   embutido no código.
+- **O app pode marcar os seus na lista de usuários** (`roster`, 07/10/2026). O
+  papel do hub não conta a história toda: "Vendedor" não é papel daqui, é uma
+  linha na base do app — quem era admin na Sul e também vendia aparecia só como
+  `Admin`, e a dúvida "preciso criar um usuário de vendedor para mim?" nascia
+  justamente aí. Declarando `roster: { source, matchField, label }`, a tela
+  busca esse GET uma vez (com o Bearer master), casa pelo e-mail e desenha um
+  **segundo selo** ao lado do papel. A Sul aponta para
+  `GET /api/vendedor/vinculos`. Se o app estiver fora do ar o selo
+  simplesmente não aparece — a lista nunca deixa de carregar por causa dele.
 
 ---
 
@@ -1158,7 +1167,7 @@ usam o prefixo `LBS_` no diretório, mesmo quando o produto não usa no nome:**
 | MoneyAPP | `LifeBusinessSuit/LBS_MoneyAPP` |
 | TodoAPP | `LifeBusinessSuit/LBS_TodoAPP` |
 | NotesAPP | `LifeBusinessSuit/LBS_NotesAPP` |
-| TTSAPP | `LifeBusinessSuit/LBS_TTSAPP` |
+| NaoTeEsquece | `LifeBusinessSuit/LBS_NaoTeEsquece` |
 
 Em 29/08/2026 a lista foi corrigida: catorze destinos ainda apontavam para os
 nomes sem prefixo, de antes da padronização. As cópias nos apps estavam certas —
