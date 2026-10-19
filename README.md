@@ -399,7 +399,7 @@ mais fácil de o mecanismo inteiro virar decoração.
 
 A Central de Deploys do `server/dashboard` **não** usa o `./redeploy.sh` daqui:
 ela roda o `redeploy.sh` genérico do painel, que descobre a stack pelo
-`docker-compose.yml` (aparece como `server/LoginHUB`) e executa
+`docker-compose.yml` (aparece como `projects/LifeBusinessSuit/LBS_LoginHUB`) e executa
 `docker compose --env-file .env up -d --build` nesta pasta. Não há `shared.env`
 acima, então a camada de variáveis é idêntica à do script local.
 

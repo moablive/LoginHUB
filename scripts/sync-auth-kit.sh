@@ -19,7 +19,10 @@ set -euo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FONTE="$RAIZ/packages/auth-kit/src"
-BASE="$(cd "$RAIZ/../.." && pwd)"   # /mnt/nvme2tb/docker-services
+# Raiz absoluta: o LoginHUB mora em projects/LifeBusinessSuit/LBS_LoginHUB desde
+# 19/10/2026 e os destinos ficam em projects/ e server/, então subir pastas a
+# partir daqui não serve (era assim, e os destinos da LBS davam FALTA).
+BASE="/mnt/nvme2tb/docker-services"
 
 SERVER="$FONTE/hubAuthServer.ts"
 CLIENT="$FONTE/hubAuthClient.ts"
@@ -32,32 +35,31 @@ MODO="${1:-sync}"
 # Os bots de Telegram recebem DOIS arquivos, no MESMO diretório: o `hubAuthBot`
 # é uma camada fina sobre o `hubAuthClient` e o importa por caminho relativo.
 # Separar os dois quebra a cópia.
+#
+# A Sul Alimentos saiu desta lista: o sistema dela mora no servidor bonatoeferraz
+# e recebe o auth-kit por lá.
 DESTINOS=$(cat <<'LISTA'
-LifeBusinessSuit/LBS_MoneyAPP/apps/backend/src/lib/hubAuthServer.ts|server
-LifeBusinessSuit/LBS_MoneyAPP/apps/frontend/src/lib/hubAuthClient.ts|client
-LifeBusinessSuit/LBS_TodoAPP/apps/backend/src/lib/hubAuthServer.ts|server
-LifeBusinessSuit/LBS_TodoAPP/apps/frontend/src/lib/hubAuthClient.ts|client
-LifeBusinessSuit/LBS_NaoTeEsquece/apps/backend/src/lib/hubAuthServer.ts|server
-LifeBusinessSuit/LBS_NaoTeEsquece/apps/frontend/src/lib/hubAuthClient.ts|client
-LifeBusinessSuit/LBS_NotesAPP/apps/backend/src/lib/hubAuthServer.ts|server
-LifeBusinessSuit/LBS_NotesAPP/apps/frontend/src/lib/hubAuthClient.ts|client
-Astral_Wave/astralwavelabel/api/src/shared/lib/hubAuthServer.ts|server
-Astral_Wave/astralwavelabel/apps/artist/src/lib/hubAuthClient.ts|client
-Astral_Wave/astralwavelabel/apps/site/src/lib/hubAuthClient.ts|client
-Sul_Alimentos/sul-alimentos/apps/api/src/lib/hubAuthServer.ts|server
-Sul_Alimentos/sul-alimentos/packages/http-client/src/hubAuthClient.ts|client
-Sul_Alimentos/sul-alimentos/apps/bot/src/lib/hubAuthClient.ts|client
-Sul_Alimentos/sul-alimentos/apps/bot/src/lib/hubAuthBot.ts|bot
-server/dashboard/apps/api/src/lib/hubAuthServer.ts|server
-server/dashboard/packages/api-client/src/hubAuthClient.ts|client
-Moving/MovingUP/apps/api/src/lib/hubAuthServer.ts|server
-Moving/MovingUP/apps/web/src/lib/hubAuthClient.ts|client
-LifeBusinessSuit/LBS_MoneyAPP/apps/bot/src/lib/hubAuthClient.ts|client
-LifeBusinessSuit/LBS_MoneyAPP/apps/bot/src/lib/hubAuthBot.ts|bot
-LifeBusinessSuit/LBS_TodoAPP/apps/bot/src/lib/hubAuthClient.ts|client
-LifeBusinessSuit/LBS_TodoAPP/apps/bot/src/lib/hubAuthBot.ts|bot
-LifeBusinessSuit/LBS_NotesAPP/apps/bot/src/lib/hubAuthClient.ts|client
-LifeBusinessSuit/LBS_NotesAPP/apps/bot/src/lib/hubAuthBot.ts|bot
+projects/LifeBusinessSuit/LBS_MoneyAPP/apps/backend/src/lib/hubAuthServer.ts|server
+projects/LifeBusinessSuit/LBS_MoneyAPP/apps/frontend/src/lib/hubAuthClient.ts|client
+projects/LifeBusinessSuit/LBS_TodoAPP/apps/backend/src/lib/hubAuthServer.ts|server
+projects/LifeBusinessSuit/LBS_TodoAPP/apps/frontend/src/lib/hubAuthClient.ts|client
+projects/LifeBusinessSuit/LBS_NaoTeEsquece/apps/backend/src/lib/hubAuthServer.ts|server
+projects/LifeBusinessSuit/LBS_NaoTeEsquece/apps/frontend/src/lib/hubAuthClient.ts|client
+projects/LifeBusinessSuit/LBS_NotesAPP/apps/backend/src/lib/hubAuthServer.ts|server
+projects/LifeBusinessSuit/LBS_NotesAPP/apps/frontend/src/lib/hubAuthClient.ts|client
+projects/Astral_Wave/astralwavelabel/api/src/shared/lib/hubAuthServer.ts|server
+projects/Astral_Wave/astralwavelabel/apps/artist/src/lib/hubAuthClient.ts|client
+projects/Astral_Wave/astralwavelabel/apps/site/src/lib/hubAuthClient.ts|client
+projects/moabinhoia/apps/api/src/lib/hubAuthServer.ts|server
+projects/moabinhoia/packages/api-client/src/hubAuthClient.ts|client
+projects/Moving/MovingUP/apps/api/src/lib/hubAuthServer.ts|server
+projects/Moving/MovingUP/apps/web/src/lib/hubAuthClient.ts|client
+projects/LifeBusinessSuit/LBS_MoneyAPP/apps/bot/src/lib/hubAuthClient.ts|client
+projects/LifeBusinessSuit/LBS_MoneyAPP/apps/bot/src/lib/hubAuthBot.ts|bot
+projects/LifeBusinessSuit/LBS_TodoAPP/apps/bot/src/lib/hubAuthClient.ts|client
+projects/LifeBusinessSuit/LBS_TodoAPP/apps/bot/src/lib/hubAuthBot.ts|bot
+projects/LifeBusinessSuit/LBS_NotesAPP/apps/bot/src/lib/hubAuthClient.ts|client
+projects/LifeBusinessSuit/LBS_NotesAPP/apps/bot/src/lib/hubAuthBot.ts|bot
 LISTA
 )
 

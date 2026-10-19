@@ -12,6 +12,10 @@
 # Todos usam a mesma imagem `loginhub-base`, construída pelo Dockerfile da raiz.
 # =============================================================================
 
+# Nome fixo da stack: sem ele o compose usa o nome da pasta, e a pasta virou
+# LBS_LoginHUB quando o LoginHUB entrou na LifeBusinessSuit (19/10/2026).
+name: loginhub
+
 # Bloco reutilizado pelos três serviços.
 #
 # Cada node_modules vira volume anônimo para NÃO ser encoberto pelo do host: o
