@@ -50,6 +50,8 @@ projects/LifeBusinessSuit/LBS_NotesAPP/apps/frontend/src/lib/hubAuthClient.ts|cl
 projects/Astral_Wave/astralwavelabel/api/src/shared/lib/hubAuthServer.ts|server
 projects/Astral_Wave/astralwavelabel/apps/artist/src/lib/hubAuthClient.ts|client
 projects/Astral_Wave/astralwavelabel/apps/site/src/lib/hubAuthClient.ts|client
+projects/Astral_Wave/astralwavelabel/apps/cloudshell/gateway/src/hubAuthServer.ts|server
+projects/Astral_Wave/astralwavelabel/apps/cloudshell/web/src/lib/hubAuthClient.ts|client
 projects/moabinhoia/apps/api/src/lib/hubAuthServer.ts|server
 projects/moabinhoia/packages/api-client/src/hubAuthClient.ts|client
 projects/Moving/MovingUP/apps/api/src/lib/hubAuthServer.ts|server
