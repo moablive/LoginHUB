@@ -526,3 +526,47 @@ export const usuarios2faBackupCodes = pgTable('usuarios_2fa_backup_codes', {
 }, (table) => ({
     usuarioCodigoUnique: unique('usuarios_2fa_backup_codes_unique').on(table.usuarioId, table.codigoHmac),
 }));
+
+/**
+ * Lista negra do login (28/10/2026). Uma linha ABERTA (`liberadoEm` nulo) por
+ * (app, tipo, alvo): enquanto `bloqueadoEm` é nulo ela é só a contagem de
+ * falhas da janela; preenchido, o alvo está barrado até alguém liberar pelo
+ * app (`POST /admin/bloqueios/:id/liberar`). Ver db/006_login_bloqueios.sql.
+ */
+export const loginBloqueios = pgTable('login_bloqueios', {
+    id: serial('id').primaryKey(),
+    appId: integer('app_id').notNull().default(0),
+    /** 'ip' | 'conta' */
+    tipo: varchar('tipo', { length: 10 }).notNull(),
+    /** O IP, ou o e-mail/CPF da conta. */
+    alvo: varchar('alvo', { length: 255 }).notNull(),
+    /** ip → última conta tentada; conta → último IP de onde veio. */
+    detalhe: varchar('detalhe', { length: 255 }),
+    /** 'senha' | '2fa' — de onde veio a última falha. */
+    origem: varchar('origem', { length: 10 }).notNull().default('senha'),
+    tentativas: integer('tentativas').notNull().default(0),
+    janelaInicio: timestamp('janela_inicio').defaultNow().notNull(),
+    ultimaTentativa: timestamp('ultima_tentativa').defaultNow().notNull(),
+    bloqueadoEm: timestamp('bloqueado_em'),
+    liberadoEm: timestamp('liberado_em'),
+    liberadoPor: varchar('liberado_por', { length: 255 }),
+    criadoEm: timestamp('criado_em').defaultNow().notNull(),
+});
+
+export type LoginBloqueioTipo = 'ip' | 'conta';
+
+/** Uma linha da lista negra, como o `/admin/apps/:id/bloqueios` devolve. */
+export interface LoginBloqueio {
+    id: number;
+    appId: number;
+    tipo: LoginBloqueioTipo;
+    alvo: string;
+    detalhe: string | null;
+    origem: 'senha' | '2fa';
+    tentativas: number;
+    janelaInicio: string;
+    ultimaTentativa: string;
+    bloqueadoEm: string | null;
+    liberadoEm: string | null;
+    liberadoPor: string | null;
+}

@@ -520,3 +520,27 @@ export const metricsEndpoint: RequestHandler = async (req, res) => {
   res.set('Content-Type', register.contentType);
   res.end(await register.metrics());
 };
+
+// ==========================================
+// 6. IP DO CLIENTE
+// ==========================================
+/**
+ * O IP de quem está tentando entrar — para a lista negra (BloqueioService).
+ *
+ * O hub fica atrás do túnel Cloudflare, e o Express não está com `trust
+ * proxy`: `req.ip` é o IP do cloudflared, o mesmo para todo mundo. Bloquear
+ * por ele bloquearia a internet inteira na quinta senha errada. O Cloudflare
+ * carimba o IP real em `cf-connecting-ip`; sem ele (chamada de dentro da
+ * rede docker, ou de outro proxy), vale `x-real-ip`, o primeiro do
+ * `x-forwarded-for` e por fim o `req.ip`.
+ */
+export const ipDoCliente = (req: { headers: Record<string, unknown>; ip?: string | undefined }): string => {
+    const um = (v: unknown): string => (Array.isArray(v) ? String(v[0] ?? '') : String(v ?? '')).trim();
+    const cf = um(req.headers['cf-connecting-ip']);
+    if (cf) return cf.slice(0, 64);
+    const real = um(req.headers['x-real-ip']);
+    if (real) return real.slice(0, 64);
+    const xff = um(req.headers['x-forwarded-for']).split(',')[0]?.trim();
+    if (xff) return xff.slice(0, 64);
+    return (req.ip || 'sem-ip').replace(/^::ffff:/, '').slice(0, 64);
+};

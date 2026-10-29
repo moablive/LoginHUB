@@ -116,6 +116,16 @@ bump deixa o mecanismo mudo. Detalhes na seção *Versionamento* do README.
   `docker exec server_cofre_backend node scripts/smoke.mjs`.
 - **O login master (`master@infra.local`) não tem linha em `usuarios`** e por
   isso fica fora do 2FA. É protegido só pela `MASTER_API_KEY`.
+- **Lista negra do login é por app e não expira** (28/10/2026,
+  `BloqueioService`, `db/006_login_bloqueios.sql`): 5 falhas do mesmo IP
+  bloqueiam o IP, 10 na mesma conta em 1 h bloqueiam a conta, e só
+  `POST /admin/bloqueios/:id/liberar` solta. Senha errada e código 2FA errado
+  somam no MESMO balde — separar reabriria o caminho "senha certa + 1 milhão
+  de códigos". O IP é o `cf-connecting-ip` (`ipDoCliente`), nunca `req.ip`:
+  atrás do cloudflared ele é o mesmo para todo mundo, e bloquear por ele
+  barraria a internet inteira. O bloqueio nasce no hub e o app dono é avisado
+  por webhook (`LOGIN_BLOQUEIO_WEBHOOKS`/`LOGIN_BLOQUEIO_WEBHOOK_KEY` no
+  `.env`); a lista e o Liberar ficam no painel do app (Sul: "Lista negra").
 
 ## Migrações
 

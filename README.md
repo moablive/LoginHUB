@@ -668,6 +668,15 @@ apps no painel. Apagar uma categoria **não apaga app**: os apps dela voltam par
 
 ---
 
+#### Lista negra do login (28/10/2026)
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `GET` | `/admin/apps/:id/bloqueios` | Bloqueios do app: bloqueados, contagens abertas e liberados (30 dias) |
+| `POST` | `/admin/bloqueios/:id/liberar` | Libera. Corpo `{ "por": "quem", "app_id": 2 }` — com `app_id`, só libera linha daquele app |
+
+Quem está barrado recebe `423 { error: "ACESSO_BLOQUEADO" }` no `/auth/login` e no `/auth/2fa/verify*`.
+
 ## 🔄 Fluxos de Autenticação e Regras de Negócio
 
 ### 1️⃣ Fluxo de Login e Desambiguação Multi-Tenant
@@ -1432,6 +1441,7 @@ vez a cada oito dias nunca pede a chave de novo.
 - **TOTP sem dependência externa**: RFC 6238 sobre `crypto` nativo, validado contra os 6 vetores de teste oficiais da RFC (inclusive `T=20000000000`, que exige contador de 64 bits).
 - **Body Limit**: Express configurado com `5mb` para suportar upload de logos base64 otimizadas.
 - **Proteção HTTP**: Middlewares `helmet()` e CORS configurados.
+- **Lista negra do login (28/10/2026)**: por app, 5 senhas (ou códigos 2FA) erradas do mesmo IP bloqueiam o IP; 10 erros na mesma conta em 1 h, de qualquer IP, bloqueiam a conta. Bloqueio não expira: sai só por `POST /admin/bloqueios/:id/liberar` (o app dono lista com `GET /admin/apps/:id/bloqueios` e libera pelo painel dele). Resposta de quem está barrado: `423 ACESSO_BLOQUEADO`, sem dizer se a conta existe. O IP real vem do `cf-connecting-ip` do Cloudflare (`ipDoCliente`); a contagem zera no acerto e depois de 1 h parada. Quando um bloqueio nasce o hub avisa o app por webhook (`LOGIN_BLOQUEIO_WEBHOOKS="2=https://…;3=https://…"`, chave em `x-api-key` = `LOGIN_BLOQUEIO_WEBHOOK_KEY`). Tabela `login_bloqueios` (`db/006_login_bloqueios.sql`), código em `packages/services/src/BloqueioService.ts`. O `rateLimitLogin` (10 por conta/15 min) continua por cima, como freio de ritmo.
 
 ---
 

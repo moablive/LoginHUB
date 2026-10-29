@@ -9,6 +9,7 @@ import { emailService } from './EmailService';
 import { twoFactorService } from './TwoFactorService';
 
 export { TwoFactorService, twoFactorService } from './TwoFactorService';
+export { BloqueioService, bloqueioService, LIMITE_POR_IP, LIMITE_POR_CONTA } from './BloqueioService';
 import {
     LoginInputDTO,
     LoginResponseDTO,

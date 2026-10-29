@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
-import { AuthService, AppService, UserService, CategoriaService, twoFactorService } from '@loginhub/services';
+import { AuthService, AppService, UserService, CategoriaService, twoFactorService, bloqueioService } from '@loginhub/services';
+import { ipDoCliente } from '@loginhub/middlewares';
 import { LoginInputDTO, CreateAppDTO, UpdateAppDTO, CreateUserDTO, UpdateUserDTO, DbError, DirecaoMovimento, CreateCategoriaDTO, UpdateCategoriaDTO } from '@loginhub/schema';
 
 const authService = new AuthService();
@@ -12,6 +13,18 @@ function direcaoDoCorpo(body: any): DirecaoMovimento | null {
     const d = body?.direcao;
     return d === 'cima' || d === 'baixo' ? d : null;
 }
+
+/**
+ * Resposta de quem está na lista negra (ver BloqueioService). O texto não
+ * diz se a conta existe nem se foi o IP ou a conta que barrou: é o mesmo
+ * aviso para o atacante e para o funcionário que errou a senha — e este
+ * último sabe a quem ligar.
+ */
+const responderBloqueado = (res: Response) =>
+    res.status(423).json({
+        error: 'ACESSO_BLOQUEADO',
+        message: 'Acesso bloqueado após muitas tentativas. Fale com o escritório para liberar.',
+    });
 
 // ==========================================
 // AUTH CONTROLLER
@@ -31,7 +44,14 @@ export class AuthController {
                 });
             }
 
+            // Lista negra (28/10/2026): IP ou conta barrados nem chegam a
+            // conferir a senha. Por app — o `app_id` do pedido; sem ele, 0.
+            const ip = ipDoCliente(req);
+            const appIdNum = Number(app_id) || 0;
+            if (await bloqueioService.estaBloqueado(appIdNum, ip, email)) return responderBloqueado(res);
+
             const result = await authService.login({ email, password, app_id });
+            await bloqueioService.registrarSucesso(appIdNum, ip, email);
             return res.status(200).json(result);
 
         } catch (error: unknown) {
@@ -39,8 +59,15 @@ export class AuthController {
             console.error('[AuthController] Erro:', err.message);
 
             switch (err.message) {
-                case 'CREDENCIAIS_INVALIDAS':
+                case 'CREDENCIAIS_INVALIDAS': {
+                    // Soma a falha; se foi a que estourou o limite, já responde
+                    // bloqueado — senão a pessoa só descobre na próxima.
+                    const novos = await bloqueioService
+                        .registrarFalha(Number(req.body?.app_id) || 0, ipDoCliente(req), req.body?.email, 'senha')
+                        .catch((e) => { console.error('[bloqueio] falha ao registrar:', e); return []; });
+                    if (novos.length) return responderBloqueado(res);
                     return res.status(401).json({ error: 'Acesso Negado', message: 'E-mail ou senha incorretos.' });
+                }
                 case 'APP_BLOQUEADO':
                     return res.status(403).json({ error: 'Acesso Suspenso', message: 'Sua app está inativa. Contate o suporte.' });
                 case 'USUARIO_BLOQUEADO':
@@ -200,6 +227,35 @@ export class AuthController {
  * tem 2FA" entregaria de graça, a quem tem só a senha, a informação de quais
  * contas valem a pena atacar.
  */
+/**
+ * O segundo fator com a lista negra por volta (28/10/2026): código errado
+ * soma no mesmo balde da senha errada — senão a senha certa + 1 milhão de
+ * códigos continuaria sendo um caminho. Quem está barrado nem confere.
+ */
+const verificarComListaNegra = async (
+    req: Request,
+    res: Response,
+    challengeToken: string,
+    entrada: { codigo?: string; backupCode?: string },
+) => {
+    const ip = ipDoCliente(req);
+    const dono = await bloqueioService.contaDoDesafio(challengeToken);
+    if (dono && (await bloqueioService.estaBloqueado(dono.appId, ip, dono.email))) return responderBloqueado(res);
+    try {
+        const sessao = await authService.verificarSegundoFator(challengeToken, entrada);
+        if (dono) await bloqueioService.registrarSucesso(dono.appId, ip, dono.email);
+        return res.status(200).json(sessao);
+    } catch (err) {
+        const msg = (err as Error).message;
+        if (dono && (msg === 'CODIGO_INVALIDO' || msg === 'CODIGO_REUTILIZADO')) {
+            const novos = await bloqueioService.registrarFalha(dono.appId, ip, dono.email, '2fa')
+                .catch((e) => { console.error('[bloqueio] falha ao registrar (2fa):', e); return []; });
+            if (novos.length) return responderBloqueado(res);
+        }
+        throw err;
+    }
+};
+
 const responder2FA = (res: Response, erro: Error) => {
     switch (erro.message) {
         case 'TWOFA_NAO_CONFIGURADO':
@@ -282,8 +338,7 @@ export class TwoFactorController {
             if (!challengeToken) throw new Error('CHALLENGE_INVALIDO');
             if (!codigo) throw new Error('CODIGO_AUSENTE');
 
-            const sessao = await authService.verificarSegundoFator(String(challengeToken), { codigo: String(codigo) });
-            return res.status(200).json(sessao);
+            return await verificarComListaNegra(req, res, String(challengeToken), { codigo: String(codigo) });
         } catch (err) {
             return responder2FA(res, err as Error);
         }
@@ -296,8 +351,7 @@ export class TwoFactorController {
             if (!challengeToken) throw new Error('CHALLENGE_INVALIDO');
             if (!backupCode) throw new Error('CODIGO_AUSENTE');
 
-            const sessao = await authService.verificarSegundoFator(String(challengeToken), { backupCode: String(backupCode) });
-            return res.status(200).json(sessao);
+            return await verificarComListaNegra(req, res, String(challengeToken), { backupCode: String(backupCode) });
         } catch (err) {
             return responder2FA(res, err as Error);
         }
@@ -697,6 +751,48 @@ export class UserController {
             }
             console.error(`[UserController] resetTwoFactor (ID: ${id}):`, err);
             return res.status(500).json({ error: 'Erro Interno', message: 'Falha ao reiniciar o 2FA do usuário.' });
+        }
+    }
+}
+
+
+// ==========================================
+// BLOQUEIO CONTROLLER (lista negra do login)
+// ==========================================
+/**
+ * Rotas de administração da lista negra, com a chave mestra (adminMiddleware):
+ * o app dono lista os bloqueios dele e libera pelo painel dele — é lá que o
+ * escritório sabe quem é funcionário e quem é ataque. Ver BloqueioService.
+ */
+export class BloqueioController {
+    /** GET /admin/apps/:id/bloqueios */
+    static async listar(req: Request<{ id: string }>, res: Response) {
+        try {
+            const appId = Number(req.params.id);
+            if (!Number.isInteger(appId)) return res.status(400).json({ error: 'ID inválido.' });
+            return res.status(200).json(await bloqueioService.listar(appId));
+        } catch (err) {
+            console.error(`[BloqueioController] listar (app ${req.params.id}):`, err);
+            return res.status(500).json({ error: 'Erro Interno' });
+        }
+    }
+
+    /** POST /admin/bloqueios/:id/liberar — corpo `{ por: "quem liberou", app_id?: 2 }`. */
+    static async liberar(req: Request<{ id: string }>, res: Response) {
+        try {
+            const id = Number(req.params.id);
+            if (!Number.isInteger(id)) return res.status(400).json({ error: 'ID inválido.' });
+            const por = String(req.body?.por ?? '').trim() || 'admin';
+            // `app_id` no corpo amarra a liberação ao app: um app não libera linha de outro.
+            const appId = req.body?.app_id === undefined || req.body?.app_id === null ? null : Number(req.body.app_id);
+            const linha = await bloqueioService.liberar(id, appId, por);
+            return res.status(200).json(linha);
+        } catch (err) {
+            if ((err as Error).message === 'BLOQUEIO_NAO_ENCONTRADO') {
+                return res.status(404).json({ error: 'Não Encontrado', message: 'Bloqueio não encontrado ou já liberado.' });
+            }
+            console.error(`[BloqueioController] liberar (${req.params.id}):`, err);
+            return res.status(500).json({ error: 'Erro Interno' });
         }
     }
 }
