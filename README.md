@@ -677,6 +677,8 @@ apps no painel. Apagar uma categoria **não apaga app**: os apps dela voltam par
 
 Quem está barrado recebe `423 { error: "ACESSO_BLOQUEADO" }` no `/auth/login` e no `/auth/2fa/verify*`.
 
+No painel do hub a lista aparece na página de usuários de cada app (`BloqueiosPanel`): bloqueados com o botão Liberar, quem está errando sem ter travado e os liberados dos últimos 30 dias.
+
 ## 🔄 Fluxos de Autenticação e Regras de Negócio
 
 ### 1️⃣ Fluxo de Login e Desambiguação Multi-Tenant

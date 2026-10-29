@@ -18,7 +18,8 @@ import type {
   Categoria,
   CreateCategoriaDTO,
   UpdateCategoriaDTO,
-  DirecaoMovimento
+  DirecaoMovimento,
+  LoginBloqueio
 } from '@loginhub/schema';
 
 // ==========================================
@@ -517,4 +518,22 @@ export const userApi = {
     const { data } = await api.post<{ message: string; emailSent: boolean; magicLinkToken?: string }>(`${USERS_BASE_URL}/${id}/reset-password`, { emailHtml });
     return data;
   }
+};
+
+// ==========================================
+// LISTA NEGRA DO LOGIN (28/10/2026)
+// ==========================================
+/** Bloqueios por app: 5 falhas por IP, 10 por conta em 1 h; só sai por `liberar`. */
+export const bloqueioApi = {
+  getByAppId: async (appId: string): Promise<LoginBloqueio[]> => {
+    const { data } = await api.get<LoginBloqueio[]>(`/admin/apps/${appId}/bloqueios`);
+    return data;
+  },
+  liberar: async (id: number, por: string, appId?: string): Promise<LoginBloqueio> => {
+    const { data } = await api.post<LoginBloqueio>(`/admin/bloqueios/${id}/liberar`, {
+      por,
+      ...(appId ? { app_id: Number(appId) } : {}),
+    });
+    return data;
+  },
 };

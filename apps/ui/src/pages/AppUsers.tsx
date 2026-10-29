@@ -34,6 +34,7 @@ import { AppLinkPanel } from '../components/Integration/AppLinkPanel';
 import { getAppIntegration } from '../config/integrations';
 import { getAppLinks } from '../config/appLinks';
 import { getProvisionedApp } from '../config/provisioning';
+import { BloqueiosPanel } from '../components/Seguranca/BloqueiosPanel';
 
 export const AppUsers = () => {
   const { id: appId } = useParams<{ id: string }>(); 
@@ -329,6 +330,10 @@ export const AppUsers = () => {
           <AppLinkPanel appId={appId} />
         </div>
       )}
+
+      {/* Lista negra do login do app (28/10/2026): quem o hub barrou por
+          tentativas demais, com o Liberar — o app dono tem a mesma lista. */}
+      {app && app.usaLoginHub !== false && <BloqueiosPanel appId={appId} />}
 
       {/* TABELA */}
       <div className="max-w-7xl mx-auto">
