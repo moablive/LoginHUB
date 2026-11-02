@@ -56,6 +56,7 @@ projects/moabinhoia/apps/api/src/lib/hubAuthServer.ts|server
 projects/moabinhoia/packages/api-client/src/hubAuthClient.ts|client
 projects/Moving/MovingUP/apps/api/src/lib/hubAuthServer.ts|server
 projects/Moving/MovingUP/apps/web/src/lib/hubAuthClient.ts|client
+projects/escritorios3d/apps/backend/src/auth/hubAuthServer.ts|server
 projects/LifeBusinessSuit/LBS_MoneyAPP/apps/bot/src/lib/hubAuthClient.ts|client
 projects/LifeBusinessSuit/LBS_MoneyAPP/apps/bot/src/lib/hubAuthBot.ts|bot
 projects/LifeBusinessSuit/LBS_TodoAPP/apps/bot/src/lib/hubAuthClient.ts|client
