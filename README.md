@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🛡️ LoginHUB
+<img src="logo.png" alt="LoginHUB" width="128" height="128" />
+
+# LoginHUB
 
 **Plataforma de autenticação e gestão de identidade centralizada da Astral Wave Label**
 
