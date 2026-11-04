@@ -36,8 +36,13 @@ COPY package*.json ./
 COPY packages ./packages
 COPY apps/ui ./apps/ui
 
-# Instala todas as dependências do monorepo
-RUN npm install
+# Instala todas as dependências do monorepo.
+#
+# Sem o package-lock.json, igual ao Dockerfile da raiz: o lock é gerado no host
+# (glibc/Manjaro) e não traz o binário nativo do rollup para Alpine/musl
+# (@rollup/rollup-linux-x64-musl) — com ele o `vite build` morre aqui.
+# Ref: npm/cli#4828.
+RUN rm -f package-lock.json && npm install
 
 # --- INJEÇÃO DE VARIÁVEIS (VITE) ---
 #

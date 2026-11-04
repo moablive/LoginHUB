@@ -12,15 +12,17 @@ const { podeInstalar, modo, passos, rotulo, instalando, instalar, dispensar } = 
 <template>
   <Transition
     enter-active-class="transition duration-250 ease-out"
-    enter-from-class="-translate-y-3 opacity-0"
+    enter-from-class="translate-y-3 opacity-0"
     leave-active-class="transition duration-200 ease-in"
-    leave-to-class="-translate-y-3 opacity-0"
+    leave-to-class="translate-y-3 opacity-0"
   >
-    <!-- Um degrau abaixo do aviso de versão: se os dois aparecerem, atualizar
-         vem na frente de instalar. -->
+    <!-- Embaixo, acima do botão de tema, e não no topo como no artist: aqui o
+         topo é da barra de navegação, e o banner cobria o "Novo" e o "Sair".
+         Mesmo lugar do aviso de versão, um degrau abaixo dele: se os dois
+         aparecerem, atualizar vem na frente de instalar. -->
     <div
       v-if="podeInstalar"
-      class="material fixed inset-x-3 top-[max(0.75rem,env(safe-area-inset-top))] z-[54] rounded-[14px] p-4 text-label shadow-folha ring-1 ring-separator sm:left-auto sm:right-5 sm:w-[360px]"
+      class="material fixed inset-x-3 bottom-[max(5.5rem,calc(env(safe-area-inset-bottom)+4.5rem))] z-[54] rounded-[14px] p-4 text-label shadow-folha ring-1 ring-separator sm:left-auto sm:right-5 sm:w-[360px]"
       role="region"
       aria-label="Instalar aplicativo"
     >
