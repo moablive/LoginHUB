@@ -28,7 +28,7 @@ Monorepo npm workspaces:
 
 ```
 apps/api            Express + rotas/controllers
-apps/ui             React + Vite (painel do MASTER apenas — não é tela de usuário final)
+apps/ui             Vue 3 + Vite, layout Apple HIG (painel do MASTER + telas públicas de convite e 2FA)
 packages/schema     Drizzle (tabelas) + DTOs/tipos compartilhados
 packages/database   conexão Drizzle/pg
 packages/services   AuthService, UserService, AppService, TwoFactorService, EmailService

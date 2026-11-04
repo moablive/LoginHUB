@@ -1,86 +1,147 @@
-/* AWLSRV_LoginHub_UI/src/index.css */
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-
-/* Se precisar de estilos globais personalizados, coloque aqui.
-  Mas REMOVA as regras padrões de 'button', 'a', 'body' que vieram com o template.
-*/
-
+/*
+ * Tokens da Apple HIG (skill apple-hig-design, valores oficiais de 25/10/2026).
+ *
+ * Cor por papel: `--label-*` é texto, `--fundo-*` é fundo, `--separador` é só
+ * linha (nunca texto). Trocar de tema é trocar este bloco.
+ *
+ * No tema claro as cores semânticas usam as variantes de ALTO CONTRASTE da
+ * Apple (#0071e3, #d70015, #248a3d, #c93400): as padrão (#007aff, #ff3b30,
+ * #34c759, #ff9500) ficam abaixo de 4,5:1 sobre branco e reprovam como texto
+ * de 17px. No escuro as padrão já passam.
+ */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --danger: 0 84.2% 60.2%;
-    --danger-foreground: 210 40% 98%;
-    --success: 142.1 76.2% 36.3%;
-    --success-foreground: 355.7 100% 97.3%;
-    /* `bg-warning`, `text-warning` e `border-warning` já eram usados em
-       AppUsers e TwoFactorSetup sem existir token nenhum — o Tailwind não
-       emitia regra e o aviso saía sem cor. */
-    --warning: 37.7 92.1% 50.2%;
-    --warning-foreground: 20.9 91.7% 14.1%;
-    --radius: 0.75rem;
+    color-scheme: light;
+
+    --label-1: rgb(0 0 0);
+    --label-2: rgb(60 60 67 / 0.76);
+    --label-3: rgb(60 60 67 / 0.36);
+    --separador: rgb(60 60 67 / 0.22);
+
+    /* systemGroupedBackground / secondary / tertiary */
+    --fundo-1: #f2f2f7;
+    --fundo-2: #ffffff;
+    --fundo-3: #f2f2f7;
+
+    /* systemFill (controles) */
+    --fill-1: rgb(120 120 128 / 0.16);
+    --fill-2: rgb(118 118 128 / 0.10);
+
+    --acento: 0 113 227;
+    --sucesso: 36 138 61;
+    --alerta: 201 52 0;
+    --erro: 215 0 21;
+    --indigo: 54 52 163;
+
+    /* material das barras (vidro só na camada de controle) */
+    --material: rgb(249 249 249 / 0.78);
   }
- 
+
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 5.2% 7.1%;
-    --card-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --danger: 0 72.2% 50.6%;
-    --danger-foreground: 210 40% 98%;
-    --success: 142.1 70.6% 45.3%;
-    --success-foreground: 144.9 80.4% 10%;
-    --warning: 47.9 95.8% 53.1%;
-    --warning-foreground: 20.9 91.7% 14.1%;
-  }
-}
+    color-scheme: dark;
 
-@layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
-    font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  }
-}
+    --label-1: rgb(255 255 255);
+    --label-2: rgb(235 235 245 / 0.66);
+    --label-3: rgb(235 235 245 / 0.32);
+    --separador: rgb(84 84 88 / 0.65);
 
-@layer base {
+    --fundo-1: #000000;
+    --fundo-2: #1c1c1e;
+    --fundo-3: #2c2c2e;
+
+    --fill-1: rgb(120 120 128 / 0.36);
+    --fill-2: rgb(118 118 128 / 0.24);
+
+    --acento: 10 132 255;
+    --sucesso: 48 209 88;
+    --alerta: 255 159 10;
+    --erro: 255 69 58;
+    --indigo: 125 122 255;
+
+    --material: rgb(22 22 24 / 0.78);
+  }
+
+  /* A HIG exige variante de alto contraste, não só claro/escuro. */
+  @media (prefers-contrast: more) {
+    :root {
+      --label-2: rgb(60 60 67 / 0.9);
+      --separador: rgb(60 60 67 / 0.6);
+    }
+    .dark {
+      --label-2: rgb(235 235 245 / 0.86);
+      --separador: rgb(140 140 146 / 0.9);
+    }
+  }
+
   html {
     /* Evita que o iOS reescale a fonte ao girar o aparelho para paisagem. */
     -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
   }
+
   body {
+    @apply bg-canvas font-sans text-body text-label antialiased;
     /* O painel tem tabela larga; sem isto um `whitespace-nowrap` estoura a
        viewport e o celular fica com scroll horizontal na página inteira. */
     overflow-x: hidden;
   }
-  /* Alvo de toque mínimo. Os botões de ação da tabela eram `p-2` num ícone de
-     20px = 36px de alvo; abaixo dos 44px que iOS e Android recomendam, é onde
-     nasce o "cliquei e pegou o botão errado". */
+
+  * {
+    border-color: var(--separador);
+  }
+
+  :focus-visible {
+    outline: 3px solid rgb(var(--acento) / 0.55);
+    outline-offset: 2px;
+  }
+
+  /* Alvo de toque mínimo de 44pt (HIG) em tudo que é clicável no celular. */
   @media (pointer: coarse) {
     button,
     [role='button'],
-    a.btn {
+    a.toque {
       min-height: 44px;
     }
+  }
+
+  /* "Reduzir movimento" é preferência de acessibilidade, não enfeite. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* Material translúcido das barras e folhas flutuantes. */
+  .material {
+    background: var(--material);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+  }
+
+  /* Linha de 0,5px como a das tabelas do iOS (1px em tela comum). */
+  .linha-fina {
+    border-color: var(--separador);
+    border-width: 0;
+    border-bottom-width: 1px;
+  }
+  @media (min-resolution: 2dppx) {
+    .linha-fina {
+      border-bottom-width: 0.5px;
+    }
+  }
+
+  /* Rodapé que não fica atrás da barra de gestos. */
+  .pb-seguro {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
 }

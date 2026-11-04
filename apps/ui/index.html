@@ -2,35 +2,43 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    
+
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- iOS não lê o ícone do manifest: a tela de início usa o apple-touch-icon. -->
     <link rel="apple-touch-icon" href="/pwa-192x192.png" />
-    
+
     <!-- viewport-fit=cover: sem ele o notch/barra de gestos come o rodapé, onde
-         moram o ThemeToggle e o aviso de nova versão.
+         moram o botão de tema e os avisos.
          interactive-widget=resizes-content: faz o teclado virtual ENCOLHER o
-         layout em vez de deslizar a página por baixo dele — é o que impedia o
-         campo focado de ficar atrás do teclado dentro das modais `fixed`.
+         layout em vez de deslizar a página por baixo dele — é o que impede o
+         campo focado de ficar atrás do teclado dentro das folhas `fixed`.
          Sem maximum-scale de propósito: travar o zoom quebra acessibilidade. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
-    
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0b" />
-    <meta name="description" content="LoginHub Manager Application" />
-    
-    <title>LoginHub | Manager</title>
+
+    <!-- Mesmas cores do fundo da tela (systemGroupedBackground). -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2f2f7" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
+    <meta name="description" content="LoginHub — identidade central da Astral Wave" />
+
+    <!-- PWA no iPhone/iPad: abrir em janela própria e com barra translúcida. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="LoginHub" />
+
+    <title>LoginHub</title>
     <script>
-      (function() {
+      (function () {
         try {
-          var isDark = localStorage.getItem('theme') === 'dark' || 
-                      (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
-          if (isDark) document.documentElement.classList.add('dark');
+          var escuro = localStorage.getItem('theme') === 'dark' ||
+            (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (escuro) document.documentElement.classList.add('dark');
         } catch (e) {}
       })();
     </script>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -15,9 +15,9 @@
 # modal fecha, o QR de 2FA é descartado. É o "cliquei num campo e fechou".
 #
 # Servindo o bundle estático não existe WebSocket, não existe reload
-# espontâneo, o React não roda em modo de desenvolvimento (sem efeito duplo do
-# StrictMode) e o celular baixa ~260 kB comprimidos em vez de ~4,4 MB
-# espalhados em 60+ requisições pelo túnel.
+# espontâneo, o Vue não roda em modo de desenvolvimento e o celular baixa
+# ~100 kB comprimidos em vez de megabytes espalhados em 60+ requisições pelo
+# túnel.
 #
 # Uso (o compose padrão continua sendo o de hot reload):
 #
@@ -80,7 +80,7 @@ FROM nginx:alpine
 # Remove as configurações padrão do Nginx
 RUN rm -rf /etc/nginx/conf.d/*
 
-# Configuração do Nginx: SPA (React Router) + proxy /api para o backend.
+# Configuração do Nginx: SPA (Vue Router) + proxy /api para o backend.
 COPY apps/ui/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copia apenas os arquivos estáticos gerados no app web

@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { fileURLToPath, URL } from 'node:url'
+import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // Onde o dev server manda as chamadas /api. No Docker o compose aponta para o
@@ -20,7 +21,7 @@ const hmr = hmrClientPort
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
-    react(),
+    vue(),
     VitePWA({
       registerType: 'autoUpdate',
       // `injectManifest` com `injectionPoint: undefined` = nenhum precache.
@@ -46,10 +47,17 @@ export default defineConfig({
       manifest: {
         name: 'LoginHub',
         short_name: 'LoginHub',
-        description: 'LoginHub Manager Application',
-        theme_color: '#2563EB',
-        background_color: '#ffffff',
+        description: 'Identidade central da Astral Wave: apps, usuários e 2FA',
+        lang: 'pt-BR',
+        // Mesmas cores da tela (systemGroupedBackground): a splash do Android
+        // e a barra de status não "piscam" outra cor ao abrir.
+        theme_color: '#f2f2f7',
+        background_color: '#f2f2f7',
         display: 'standalone',
+        start_url: '/',
+        scope: '/',
+        id: '/',
+        orientation: 'any',
         icons: [
           {
             src: 'pwa-192x192.png',
@@ -71,6 +79,9 @@ export default defineConfig({
       }
     })
   ],
+  resolve: {
+    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+  },
   envDir: '../../',
   server: {
     // Bind em 0.0.0.0: sem isto o vite só escuta em localhost e o container

@@ -6,7 +6,7 @@
 
 **Plataforma de autenticação e gestão de identidade centralizada da Astral Wave Label**
 
-<img src="https://skillicons.dev/icons?i=ts,react,vite,tailwind,nodejs,express,postgres,docker,nginx,git&perline=10" />
+<img src="https://skillicons.dev/icons?i=ts,vue,vite,tailwind,nodejs,express,postgres,docker,nginx,git&perline=10" />
 
 <br/><br/>
 
@@ -73,7 +73,7 @@ A API e a UI do LoginHUB rodam em containers Docker na rede interna `awl_network
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           LOGINHUB FRONTEND (UI)                            │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │ React + Vite (dev server, HMR) + Tailwind + PWA + Dracula Theme       │  │
+│  │ Vue 3 + Vite + Tailwind (tokens Apple HIG) + PWA instalável          │  │
 │  │ (Dashboard, Gestão de Tenants, Usuários, Convites & Magic Links)      │  │
 │  └───────────────────────────────────┬───────────────────────────────────┘  │
 │                                      │ /api (Proxy do Vite dev server)      │
@@ -112,12 +112,14 @@ LoginHUB/
 │   │   │   └── controllers/      # Handlers HTTP (AuthController, AppController, UserController)
 │   │   ├── Dockerfile
 │   │   └── docker-compose.yml
-│   └── ui/                       # React + Vite + PWA (porta 80 interna / 3006 externa)
+│   └── ui/                       # Vue 3 + Vite + PWA (porta 80 interna / 3006 externa)
 │       ├── nginx.conf            # Proxy reverso (/api → server_loginhub_backend:3000)
 │       ├── src/
-│       │   ├── pages/            # Login, Dashboard, AppUsers, CreateApp, SetupPassword
-│       │   ├── components/       # Modais, LogoUpload, Layout, Header (Dracula Toggle)
-│       │   ├── templates/emails/ # Templates React → HTML para disparo de convites
+│       │   ├── pages/            # LoginPage, DashboardPage, AppUsersPage, CreateAppPage, SetupPasswordPage, Enroll2FAPage
+│       │   ├── components/ui/    # Sistema de design Apple HIG (UiButton, UiTextField, UiSheet, UiAlert, UiNavBar, UiSection…)
+│       │   ├── components/       # apps/, users/, integration/, seguranca/, AuthShell, StatusButton, ThemeToggle
+│       │   ├── templates/emails/ # Templates TS → HTML para disparo de convites
+│       │   ├── features/pwa/     # useInstalarPwa + InstallBanner (oferta de instalação)
 │       │   └── features/version/ # useVersionCheck + UpdateBanner + VersionBadge
 │       ├── Dockerfile
 │       └── docker-compose.yml
@@ -1336,8 +1338,30 @@ Disponível em: [`https://loginhub.astralwavelabel.com/login`](https://loginhub.
 - 📨 Visualização prévia de e-mail de convite renderizado dinamicamente antes do envio.
 - 🤝 Convite com provisionamento: em apps configurados em `config/provisioning.ts`, o modal
   pede os campos que o app exige (CPF, comissão...) e delega a criação a ele. Ver fluxo 5️⃣.
-- 🧛 **Dracula Dark Mode**: Chaveador de tema escuro/claro integrado.
-- 📱 **PWA**: Instalável como aplicativo nativo em desktops e dispositivos móveis.
+- 🌗 **Tema claro/escuro**: segue o sistema; o botão do canto inferior direito fixa a escolha.
+- 📱 **PWA com oferta de instalação** (`features/pwa`, mesmo modelo do artist.astralwavelabel.com):
+  Chrome/Edge no Android e no desktop abrem o diálogo nativo em um clique; no iPhone e no iPad
+  (Chrome inclusive, e o iPadOS que se anuncia como Mac) o banner vira passo a passo do menu
+  certo. "Agora não" vale 30 dias, por host; instalado, o banner some.
+
+### Interface: Vue 3 + Apple HIG (desde 04/11/2026)
+
+O painel saiu de React para **Vue 3** (`<script setup>`, Vue Router, `@heroicons/vue`). O layout
+segue a skill **apple-hig-design** (Human Interface Guidelines):
+
+| Regra da HIG | Onde mora |
+|---|---|
+| Escala tipográfica do iOS (Body 17, Large Title 34…) | `tailwind.config.js` → `text-body`, `text-headline`, `text-large-title`… |
+| Cor por papel, não por tom (`label`, `label-2`, `canvas`, `surface`, `separator`, `accent`, `danger`…) | `src/index.css` (claro, escuro e alto contraste) |
+| Contraste AA: no claro, as variantes de alto contraste da Apple (#0071e3, #d70015, #248a3d, #c93400) | `src/index.css` |
+| Alvo de toque de 44pt | `min-h-toque` em botão, linha e campo |
+| Barra de navegação com título grande que encolhe ao rolar | `components/ui/UiNavBar.vue` |
+| Seções agrupadas ("inset grouped") e linhas de lista | `UiSection.vue`, `UiRow.vue` |
+| Folha que sobe de baixo no celular / cartão no desktop | `UiSheet.vue` (todo formulário em modal) |
+| Alerta do iOS (substituiu as seis modais antigas) | `UiAlert.vue` |
+| "Reduzir movimento" respeitado | `src/index.css` |
+
+Validação: `npm run build -w ui` (roda `vue-tsc` antes do `vite build`).
 
 ---
 
