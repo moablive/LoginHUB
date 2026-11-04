@@ -47,6 +47,10 @@ services:
     image: loginhub-base
     container_name: server_loginhub_packages
     restart: always
+    # Regra 14 do Ômega: camada e tecnologia (tela Gocker do Escritórios 3D)
+    labels:
+      awl.camada: "back"
+      awl.tecnologia: "node"
     command: sh -c "npm run build:packages && touch /tmp/packages-ready && npm run watch:packages"
     volumes: *monorepo-volumes
     networks:
@@ -64,6 +68,10 @@ services:
     image: loginhub-base
     container_name: server_loginhub_backend
     restart: always
+    # Regra 14 do Ômega: camada e tecnologia (tela Gocker do Escritórios 3D)
+    labels:
+      awl.camada: "back"
+      awl.tecnologia: "node"
     command: npm run dev -w api
 
     # Porta do host só para debug direto (http://IP:3005/api). O tráfego real
@@ -120,6 +128,10 @@ services:
     image: loginhub-base
     container_name: server_loginhub_frontend
     restart: always
+    # Regra 14 do Ômega: camada e tecnologia (tela Gocker do Escritórios 3D)
+    labels:
+      awl.camada: "front"
+      awl.tecnologia: "vue"
 
     # O vite escuta na 80 dentro do container — a MESMA porta que o nginx usava.
     # Assim a rota do túnel (server_loginhub_frontend:80) e o mapeamento 3006
