@@ -11,7 +11,7 @@ import UiAlert from '@/components/ui/UiAlert.vue';
 /**
  * Lista negra do login de um app (28/10/2026).
  *
- * A regra mora no hub (`BloqueioService`): 5 senhas ou códigos 2FA errados do
+ * A regra mora no hub (`BloqueioService`): 3 senhas ou códigos 2FA errados do
  * mesmo IP bloqueiam o IP; 10 erros na mesma conta em 1 h bloqueiam a conta;
  * nada expira — só o botão Liberar solta. O app dono tem a mesma lista no
  * painel dele (a Sul, por exemplo, em "Lista negra"); aqui é a visão do
@@ -95,7 +95,7 @@ async function liberar() {
           <UiBadge :tom="bloqueados.length ? 'danger' : 'neutro'">{{ bloqueados.length }} bloqueado(s)</UiBadge>
         </div>
         <p class="mt-0.5 text-footnote text-label-2">
-          5 senhas ou códigos errados do mesmo IP bloqueiam o IP; 10 erros na mesma conta em 1 h bloqueiam a conta. Só sai por Liberar.
+          3 senhas ou códigos errados do mesmo IP bloqueiam o IP; 10 erros na mesma conta em 1 h bloqueiam a conta. Só sai por Liberar.
         </p>
       </div>
     </div>

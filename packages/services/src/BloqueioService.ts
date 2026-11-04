@@ -28,7 +28,8 @@ import { and, eq, isNull, desc, sql } from 'drizzle-orm';
  * `avisarApp`): é o app quem fala com a equipe (Telegram da Sul, sininho).
  */
 
-export const LIMITE_POR_IP = 5;
+// 3 desde 04/11/2026 (pedido do dono: "baixe para 3 tentativas"; era 5).
+export const LIMITE_POR_IP = 3;
 export const LIMITE_POR_CONTA = 10;
 export const JANELA_MS = 60 * 60 * 1000;
 

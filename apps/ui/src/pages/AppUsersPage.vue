@@ -2,6 +2,9 @@
 import { computed, ref, watch } from 'vue';
 import axios from 'axios';
 import {
+  ChevronDownIcon,
+  ChevronUpDownIcon,
+  ChevronUpIcon,
   ClipboardDocumentIcon,
   DevicePhoneMobileIcon,
   EllipsisHorizontalIcon,
@@ -145,12 +148,61 @@ watch(
   { immediate: true },
 );
 
+// Ordenação pelas colunas da tabela (04/11/2026). No desktop é o toque no
+// cabeçalho (de novo inverte); no celular, o seletor ao lado da busca.
+type ColunaOrdem = 'nome' | 'acesso' | 'contato' | 'status' | '2fa';
+const COLUNAS: { valor: ColunaOrdem; rotulo: string }[] = [
+  { valor: 'nome', rotulo: 'Nome' },
+  { valor: 'acesso', rotulo: 'Acesso' },
+  { valor: 'contato', rotulo: 'Contato' },
+  { valor: 'status', rotulo: 'Status' },
+  { valor: '2fa', rotulo: '2FA' },
+];
+const ordem = ref<{ coluna: ColunaOrdem; crescente: boolean }>({ coluna: 'nome', crescente: true });
+
+function ordenarPor(coluna: ColunaOrdem) {
+  ordem.value =
+    ordem.value.coluna === coluna
+      ? { coluna, crescente: !ordem.value.crescente }
+      : { coluna, crescente: true };
+}
+
+// Do mais ao menos poderoso: "Acesso crescente" põe os admins no topo.
+const PESO_PAPEL: Record<string, number> = { master: 0, admin: 1, suporte: 2, operador: 3, motorista: 4, user: 5 };
+const porNome = new Intl.Collator('pt-BR', { sensitivity: 'base' });
+
+function chaveDe(u: User, coluna: ColunaOrdem): number | string {
+  switch (coluna) {
+    case 'acesso':
+      return PESO_PAPEL[u.role] ?? 9;
+    case 'contato':
+      // Sem telefone vai para o fim na ordem crescente.
+      return (u.telefone || '').replace(/\D/g, '') || '\uffff';
+    case 'status':
+      return u.status === 'ativo' ? 0 : 1;
+    case '2fa':
+      return u.dois_fatores?.ativo ? 0 : 1;
+    default:
+      return u.nome;
+  }
+}
+
 const filtrados = computed(() => {
   const t = busca.value.trim().toLowerCase();
-  if (!t) return users.value;
-  return users.value.filter(
-    (u) => u.nome.toLowerCase().includes(t) || u.email.toLowerCase().includes(t) || (u.telefone || '').includes(t),
-  );
+  const lista = !t
+    ? [...users.value]
+    : users.value.filter(
+        (u) => u.nome.toLowerCase().includes(t) || u.email.toLowerCase().includes(t) || (u.telefone || '').includes(t),
+      );
+  const { coluna, crescente } = ordem.value;
+  const sinal = crescente ? 1 : -1;
+  return lista.sort((a, b) => {
+    const ka = chaveDe(a, coluna);
+    const kb = chaveDe(b, coluna);
+    const c = typeof ka === 'number' && typeof kb === 'number' ? ka - kb : porNome.compare(String(ka), String(kb));
+    // Empate (mesmo papel, mesmo status…) desempata pelo nome, sempre A→Z.
+    return c !== 0 ? c * sinal : porNome.compare(a.nome, b.nome);
+  });
 });
 
 const temIntegracao = computed(() => !!getAppIntegration(props.id));
@@ -343,8 +395,28 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
         <span v-if="busca && !loading" class="text-footnote text-label-2">{{ filtrados.length }} de {{ users.length }}</span>
       </template>
 
-      <div v-if="users.length > 0" class="px-4 py-3">
+      <div v-if="users.length > 0" class="flex items-center gap-2 px-4 py-3">
         <UiSearchField v-model="busca" placeholder="Buscar por nome, e-mail ou telefone" />
+        <!-- Celular: a tabela some, então a ordem escolhe-se aqui. -->
+        <div class="flex shrink-0 items-center gap-1 md:hidden">
+          <select
+            :value="ordem.coluna"
+            aria-label="Ordenar por"
+            class="h-10 rounded-[10px] border-0 bg-fill-2 pl-3 pr-8 text-subhead text-label focus:ring-2 focus:ring-accent"
+            @change="ordem = { coluna: ($event.target as HTMLSelectElement).value as ColunaOrdem, crescente: true }"
+          >
+            <option v-for="c in COLUNAS" :key="c.valor" :value="c.valor">{{ c.rotulo }}</option>
+          </select>
+          <button
+            type="button"
+            class="flex h-10 w-10 items-center justify-center rounded-[10px] bg-fill-2 text-accent"
+            :aria-label="ordem.crescente ? 'Ordem crescente. Inverter' : 'Ordem decrescente. Inverter'"
+            @click="ordem = { ...ordem, crescente: !ordem.crescente }"
+          >
+            <ChevronUpIcon v-if="ordem.crescente" class="h-5 w-5" />
+            <ChevronDownIcon v-else class="h-5 w-5" />
+          </button>
+        </div>
       </div>
 
       <div v-if="loading" class="flex flex-col items-center gap-3 px-4 py-12 text-label-2">
@@ -397,11 +469,25 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
           <table class="min-w-full">
             <thead>
               <tr class="text-left text-footnote font-medium text-label-2">
-                <th class="px-4 py-2.5 font-medium">Nome</th>
-                <th class="px-4 py-2.5 font-medium">Acesso</th>
-                <th class="px-4 py-2.5 font-medium">Contato</th>
-                <th class="px-4 py-2.5 font-medium">Status</th>
-                <th class="px-4 py-2.5 font-medium">2FA</th>
+                <th
+                  v-for="c in COLUNAS"
+                  :key="c.valor"
+                  class="px-2 py-1 font-medium"
+                  :aria-sort="ordem.coluna === c.valor ? (ordem.crescente ? 'ascending' : 'descending') : 'none'"
+                >
+                  <button
+                    type="button"
+                    class="inline-flex min-h-[36px] items-center gap-1 rounded-lg px-2 hover:bg-fill-2 hover:text-label"
+                    :class="ordem.coluna === c.valor ? 'text-label' : ''"
+                    :title="`Ordenar por ${c.rotulo}`"
+                    @click="ordenarPor(c.valor)"
+                  >
+                    {{ c.rotulo }}
+                    <ChevronUpIcon v-if="ordem.coluna === c.valor && ordem.crescente" class="h-3.5 w-3.5 text-accent" />
+                    <ChevronDownIcon v-else-if="ordem.coluna === c.valor" class="h-3.5 w-3.5 text-accent" />
+                    <ChevronUpDownIcon v-else class="h-3.5 w-3.5 opacity-40" />
+                  </button>
+                </th>
                 <th class="px-4 py-2.5 text-right font-medium"><span class="sr-only">Ações</span></th>
               </tr>
             </thead>
