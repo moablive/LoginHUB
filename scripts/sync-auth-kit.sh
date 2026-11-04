@@ -19,9 +19,9 @@ set -euo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FONTE="$RAIZ/packages/auth-kit/src"
-# Raiz absoluta: o LoginHUB mora em projects/LifeBusinessSuit/LBS_LoginHUB desde
-# 19/10/2026 e os destinos ficam em projects/ e server/, então subir pastas a
-# partir daqui não serve (era assim, e os destinos da LBS davam FALTA).
+# Raiz absoluta: o LoginHUB mora em server/LoginHUB (voltou em 04/11/2026; de 19/10 a
+# 04/11 esteve em projects/LifeBusinessSuit/LBS_LoginHUB) e os destinos ficam em
+# projects/ e server/, então subir pastas a partir daqui não serve.
 BASE="/mnt/nvme2tb/docker-services"
 
 SERVER="$FONTE/hubAuthServer.ts"
