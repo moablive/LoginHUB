@@ -7,11 +7,14 @@ import { aplicativos, usuarios, niveisAcesso, usuarios2fa, categorias } from '@l
 import { eq, and, ne, sql, asc, isNull } from 'drizzle-orm';
 import { emailService } from './EmailService';
 import { twoFactorService } from './TwoFactorService';
+import { aparelhoService } from './AparelhoService';
 
 export { TwoFactorService, twoFactorService } from './TwoFactorService';
 export { BloqueioService, bloqueioService, LIMITE_POR_IP, LIMITE_POR_CONTA } from './BloqueioService';
+export { AparelhoService, aparelhoService, ehContaDeCpf } from './AparelhoService';
 import {
     LoginInputDTO,
+    AparelhoDoLogin,
     LoginResponseDTO,
     JWTPayload,
     UserRole,
@@ -114,7 +117,7 @@ const emitirSessaoMaster = (masterKey: string): LoginResponseDTO => {
 // 1. AUTH SERVICE
 // ==========================================
 export class AuthService {
-    public async login(data: LoginInputDTO): Promise<LoginResponseDTO | TwoFactorChallengeResponse | TwoFactorSetupRequiredResponse> {
+    public async login(data: LoginInputDTO, ip: string | null = null): Promise<LoginResponseDTO | TwoFactorChallengeResponse | TwoFactorSetupRequiredResponse> {
         // Mesmo e-mail pode existir em apps diferentes (unique composto).
         // Se o cliente passa app_id, filtra direto. Senão e houver ambiguidade, devolve a lista
         // de apps disponíveis para o cliente escolher.
@@ -188,20 +191,25 @@ export class AuthService {
         // administrativo basta). Ver db/004_apps_sem_login_hub.sql.
         if (user.app_usa_login_hub === false) throw new Error('APP_NAO_AUTENTICA_NO_HUB');
 
+        // Um aparelho por conta de CPF (04/11/2026): outro aparelho é recusado já
+        // aqui, antes do 2FA — mas só o login completo prende (ver AparelhoService).
+        const aparelho = aparelhoService.normalizar(data.aparelho_id, data.aparelho_nome, ip);
+        await aparelhoService.conferir(user, aparelho);
+
         // Senha conferiu — mas isso pode não bastar.
         const estado = await twoFactorService.estadoDoLogin(user.id.toString());
         const appId = user.app_id ? user.app_id.toString() : '0';
 
         // 2FA ativo: o JWT de sessão NÃO sai daqui. O cliente recebe um desafio
         // de vida curta e só troca por sessão depois de provar o segundo fator.
-        if (estado === 'desafio') return this.emitirChallenge(user.id.toString(), appId);
+        if (estado === 'desafio') return this.emitirChallenge(user.id.toString(), appId, aparelho);
 
         // 2FA exigido pelo convite e nunca configurado (alguém abandonou o
         // convite no meio). Devolvemos uma sessão curta só para concluir o
         // enrolamento, em vez de barrar sem saída.
         if (estado === 'enrolar') return this.emitirTokenDeEnrolamento(user.id.toString(), user.email, appId, user.role_nome);
 
-        return this.emitirSessao(user);
+        return this.emitirSessao(user, 86400, await aparelhoService.prender(user, aparelho));
     }
 
     /**
@@ -249,7 +257,7 @@ export class AuthService {
         app_nome: string;
         app_status: string | null;
         role_nome: string | null;
-    }, ttlSegundos: number = 86400): Promise<LoginResponseDTO> {
+    }, ttlSegundos: number = 86400, apa?: string): Promise<LoginResponseDTO> {
         db.update(usuarios)
           .set({ ultimoAcesso: new Date() })
           .where(eq(usuarios.id, user.id))
@@ -266,7 +274,8 @@ export class AuthService {
             sub: user.id.toString(),
             email: user.email,
             app_id: user.app_id ? user.app_id.toString() : "0",
-            role: user.role_nome || 'user'
+            role: user.role_nome || 'user',
+            ...(apa ? { apa } : {}),
         };
 
         const token = jwt.sign(payload, jwtSecret, { expiresIn: ttlSegundos });
@@ -289,7 +298,7 @@ export class AuthService {
     }
 
     /** Passe de etapa única para a verificação de 2FA. Não abre nenhuma rota. */
-    private emitirChallenge(usuarioId: string, appId: string): TwoFactorChallengeResponse {
+    private emitirChallenge(usuarioId: string, appId: string, aparelho?: AparelhoDoLogin): TwoFactorChallengeResponse {
         const jwtSecret = process.env.JWT_SECRET;
         if (!jwtSecret) {
             console.error("JWT_SECRET missing in .env");
@@ -297,7 +306,9 @@ export class AuthService {
         }
 
         const challengeToken = jwt.sign(
-            { sub: usuarioId, app_id: appId, action: '2fa-challenge' },
+            // O aparelho viaja assinado no desafio: quem conclui o 2FA é o mesmo
+            // que passou da senha, e é ele que fica preso à conta.
+            { sub: usuarioId, app_id: appId, action: '2fa-challenge', apa: aparelho?.id ?? undefined, apn: aparelho?.nome ?? undefined },
             jwtSecret,
             { expiresIn: CHALLENGE_TTL_SEGUNDOS },
         );
@@ -410,6 +421,7 @@ export class AuthService {
     public async verificarSegundoFator(
         challengeToken: string,
         entrada: { codigo?: string; backupCode?: string },
+        ip: string | null = null,
     ): Promise<LoginResponseDTO> {
         const jwtSecret = process.env.JWT_SECRET;
         if (!jwtSecret) {
@@ -417,7 +429,7 @@ export class AuthService {
             throw new Error('ERRO_INTERNO');
         }
 
-        let decoded: { sub?: string; action?: string };
+        let decoded: { sub?: string; action?: string; apa?: string; apn?: string };
         try {
             decoded = jwt.verify(challengeToken, jwtSecret) as typeof decoded;
         } catch {
@@ -454,11 +466,30 @@ export class AuthService {
         if (user.app_status !== 'ativo') throw new Error('APP_BLOQUEADO');
         if (user.status !== 'ativo') throw new Error('USUARIO_BLOQUEADO');
 
-        return this.emitirSessao(user);
+        // Login completo: aqui o aparelho fica preso à conta de CPF (ou é recusado,
+        // se outro concluiu o login entre a senha e o código).
+        const aparelho = aparelhoService.normalizar(decoded.apa, decoded.apn, ip);
+        await aparelhoService.conferir(user, aparelho);
+        return this.emitirSessao(user, 86400, await aparelhoService.prender(user, aparelho));
     }
 
-    public async logout(token: string | undefined): Promise<void> {
+    /**
+     * Logout: a sessão é JWT e continua sem estado, mas a conta de CPF solta o
+     * aparelho — se o token for do aparelho preso. Token vencido também serve
+     * (sair de um app parado há dias tem de soltar), o que importa é a assinatura.
+     */
+    public async logout(token: string | undefined, ip: string | null = null): Promise<void> {
         if (!token) return;
+        const jwtSecret = process.env.JWT_SECRET;
+        if (!jwtSecret) return;
+        let decoded: JWTPayload & { action?: string };
+        try {
+            decoded = jwt.verify(token, jwtSecret, { ignoreExpiration: true }) as typeof decoded;
+        } catch {
+            return;
+        }
+        if (decoded.action || !decoded.apa || !decoded.sub || isNaN(Number(decoded.sub))) return;
+        await aparelhoService.sair(Number(decoded.sub), decoded.apa, ip);
     }
 
     /**
@@ -498,7 +529,7 @@ export class AuthService {
         return { sub: String(decoded.sub), piso: piso ? piso.toISOString() : null };
     }
 
-    public async refreshToken(oldToken: string): Promise<LoginResponseDTO> {
+    public async refreshToken(oldToken: string, ip: string | null = null): Promise<LoginResponseDTO> {
         const jwtSecret = process.env.JWT_SECRET;
         if (!jwtSecret) {
             console.error("JWT_SECRET missing in .env");
@@ -584,11 +615,18 @@ export class AuthService {
         if (user.app_status !== 'ativo') throw new Error('APP_BLOQUEADO');
         if (user.status !== 'ativo') throw new Error('USUARIO_BLOQUEADO');
 
+        // Conta de CPF: só renova a sessão do aparelho preso. Liberado pelo app,
+        // solto por logout ou token de antes desta regra (sem `apa`) → login de novo.
+        if (!(await aparelhoService.sessaoValida(user, decoded.apa, ip))) {
+            throw new Error('SESSAO_REVOGADA');
+        }
+
         const payload: JWTPayload = {
             sub: user.id.toString(),
             email: user.email,
             app_id: user.app_id ? user.app_id.toString() : "0",
-            role: user.role_nome || 'user'
+            role: user.role_nome || 'user',
+            ...(decoded.apa ? { apa: decoded.apa } : {}),
         };
 
         const token = jwt.sign(payload, jwtSecret, { expiresIn: '24h' });

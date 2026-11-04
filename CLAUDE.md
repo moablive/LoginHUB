@@ -127,6 +127,16 @@ bump deixa o mecanismo mudo. Detalhes na seção *Versionamento* do README.
   por webhook (`LOGIN_BLOQUEIO_WEBHOOKS`/`LOGIN_BLOQUEIO_WEBHOOK_KEY` no
   `.env`); a lista e o Liberar ficam no painel do app (Sul: "Lista negra").
 
+- **Um aparelho por conta de CPF** (04/11/2026, `AparelhoService`,
+  `db/007_login_aparelhos.sql`): conta com 11 dígitos no lugar do e-mail fica
+  presa ao primeiro aparelho que CONCLUIR o login (depois do 2FA — nunca na
+  senha, senão quem sabe o CPF tranca o dono fora). Outro aparelho → 409
+  `APARELHO_EM_USO`; sem `aparelho_id` → 409 `APARELHO_DESCONHECIDO`. O refresh
+  só renova sessão de CPF com a claim `apa` igual ao aparelho preso (sem `apa`,
+  só enquanto nenhum aparelho estiver preso). Registro guardado 6 meses (LGPD). Solta no
+  logout com o token do aparelho preso ou no `POST /admin/aparelhos/:id/liberar`.
+  Registro de tudo (nome + IP) em `login_aparelhos`. E-mail não é preso.
+
 ## Migrações
 
 `db/*.sql` são aplicadas manualmente no Postgres, em ordem. Não há runner nem

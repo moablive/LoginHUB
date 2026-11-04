@@ -19,7 +19,8 @@ import type {
   CreateCategoriaDTO,
   UpdateCategoriaDTO,
   DirecaoMovimento,
-  LoginBloqueio
+  LoginBloqueio,
+  AparelhosDoApp
 } from '@loginhub/schema';
 
 // ==========================================
@@ -524,6 +525,23 @@ export const userApi = {
 // LISTA NEGRA DO LOGIN (28/10/2026)
 // ==========================================
 /** Bloqueios por app: 5 falhas por IP, 10 por conta em 1 h; só sai por `liberar`. */
+/**
+ * Um aparelho por conta de CPF (04/11/2026): quem está preso a qual aparelho
+ * (nome + IP) e o registro dos logins; `liberar` solta a conta do aparelho.
+ */
+export const aparelhoApi = {
+  getByAppId: async (appId: string): Promise<AparelhosDoApp> => {
+    const { data } = await api.get<AparelhosDoApp>(`/admin/apps/${appId}/aparelhos`);
+    return data;
+  },
+  liberar: async (usuarioId: number | string, por: string, appId?: string): Promise<void> => {
+    await api.post(`/admin/aparelhos/${usuarioId}/liberar`, {
+      por,
+      ...(appId ? { app_id: Number(appId) } : {}),
+    });
+  },
+};
+
 export const bloqueioApi = {
   getByAppId: async (appId: string): Promise<LoginBloqueio[]> => {
     const { data } = await api.get<LoginBloqueio[]>(`/admin/apps/${appId}/bloqueios`);

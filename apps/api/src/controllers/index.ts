@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { AuthService, AppService, UserService, CategoriaService, twoFactorService, bloqueioService } from '@loginhub/services';
+import { AuthService, AppService, UserService, CategoriaService, twoFactorService, bloqueioService, aparelhoService } from '@loginhub/services';
 import { ipDoCliente } from '@loginhub/middlewares';
 import { LoginInputDTO, CreateAppDTO, UpdateAppDTO, CreateUserDTO, UpdateUserDTO, DbError, DirecaoMovimento, CreateCategoriaDTO, UpdateCategoriaDTO } from '@loginhub/schema';
 
@@ -35,7 +35,7 @@ export class AuthController {
         res: Response
     ) {
         try {
-            const { email, password, app_id } = req.body;
+            const { email, password, app_id, aparelho_id, aparelho_nome } = req.body;
 
             if (!email || !password) {
                 return res.status(400).json({
@@ -50,7 +50,7 @@ export class AuthController {
             const appIdNum = Number(app_id) || 0;
             if (await bloqueioService.estaBloqueado(appIdNum, ip, email)) return responderBloqueado(res);
 
-            const result = await authService.login({ email, password, app_id });
+            const result = await authService.login({ email, password, app_id, aparelho_id, aparelho_nome }, ip);
             await bloqueioService.registrarSucesso(appIdNum, ip, email);
             return res.status(200).json(result);
 
@@ -81,6 +81,9 @@ export class AuthController {
                         error: 'APP_NAO_AUTENTICA_NO_HUB',
                         message: 'Este aplicativo nao usa o login do LoginHUB. Entre pelo proprio aplicativo.',
                     });
+                case 'APARELHO_EM_USO':
+                case 'APARELHO_DESCONHECIDO':
+                    return responderAparelho(res, err);
                 case 'AMBIGUOUS_EMAIL':
                     return res.status(409).json({
                         error: 'AMBIGUOUS_EMAIL',
@@ -94,6 +97,10 @@ export class AuthController {
     }
 
     static async logout(req: Request, res: Response) {
+        // Conta de CPF solta o aparelho (04/11/2026). Falha aqui não impede sair.
+        const parts = (req.headers.authorization ?? '').split(' ');
+        await authService.logout(parts.length === 2 ? parts[1] : undefined, ipDoCliente(req))
+            .catch((e: Error) => console.error('[AuthController] logout:', e.message));
         return res.status(200).json({ message: 'Logout realizado.', action: 'CLEAR_LOCAL_STORAGE' });
     }
 
@@ -127,7 +134,7 @@ export class AuthController {
         }
 
         try {
-            const result = await authService.refreshToken(parts[1]);
+            const result = await authService.refreshToken(parts[1], ipDoCliente(req));
             return res.status(200).json(result);
         } catch (err: unknown) {
             const error = err as Error;
@@ -242,7 +249,7 @@ const verificarComListaNegra = async (
     const dono = await bloqueioService.contaDoDesafio(challengeToken);
     if (dono && (await bloqueioService.estaBloqueado(dono.appId, ip, dono.email))) return responderBloqueado(res);
     try {
-        const sessao = await authService.verificarSegundoFator(challengeToken, entrada);
+        const sessao = await authService.verificarSegundoFator(challengeToken, entrada, ip);
         if (dono) await bloqueioService.registrarSucesso(dono.appId, ip, dono.email);
         return res.status(200).json(sessao);
     } catch (err) {
@@ -256,8 +263,31 @@ const verificarComListaNegra = async (
     }
 };
 
+/**
+ * Um aparelho por conta de CPF (04/11/2026). 409: a conta existe e a senha
+ * bateu — o que impede é o outro aparelho, e o app mostra o nome dele para a
+ * pessoa saber onde sair (ou pedir ao escritório o "Liberar").
+ */
+const responderAparelho = (res: Response, erro: Error & { aparelhoNome?: string | null }) => {
+    if (erro.message === 'APARELHO_DESCONHECIDO') {
+        return res.status(409).json({
+            error: 'APARELHO_DESCONHECIDO',
+            message: 'Atualize o aplicativo para entrar (toque em "Reload forçado" ou feche e abra de novo).',
+        });
+    }
+    const onde = erro.aparelhoNome ? ` (${erro.aparelhoNome})` : '';
+    return res.status(409).json({
+        error: 'APARELHO_EM_USO',
+        aparelhoNome: erro.aparelhoNome ?? null,
+        message: `Este CPF já está conectado em outro aparelho${onde}. Saia nele ou peça ao escritório para liberar.`,
+    });
+};
+
 const responder2FA = (res: Response, erro: Error) => {
     switch (erro.message) {
+        case 'APARELHO_EM_USO':
+        case 'APARELHO_DESCONHECIDO':
+            return responderAparelho(res, erro);
         case 'TWOFA_NAO_CONFIGURADO':
             console.error('[2FA] TWOFA_ENC_KEY ausente ou fora do formato (32 bytes em hex ou base64).');
             return res.status(500).json({ error: 'Configuração', message: '2FA não está configurado neste servidor.' });
@@ -792,6 +822,43 @@ export class BloqueioController {
                 return res.status(404).json({ error: 'Não Encontrado', message: 'Bloqueio não encontrado ou já liberado.' });
             }
             console.error(`[BloqueioController] liberar (${req.params.id}):`, err);
+            return res.status(500).json({ error: 'Erro Interno' });
+        }
+    }
+}
+
+// ==========================================
+// APARELHOS (04/11/2026) — um aparelho por conta de CPF
+// ==========================================
+export class AparelhoController {
+    /** GET /admin/apps/:id/aparelhos — quem está preso a qual aparelho + registro recente. */
+    static async listar(req: Request<{ id: string }>, res: Response) {
+        try {
+            const appId = Number(req.params.id);
+            if (!Number.isInteger(appId)) return res.status(400).json({ error: 'ID inválido.' });
+            return res.status(200).json(await aparelhoService.listar(appId));
+        } catch (err) {
+            console.error(`[AparelhoController] listar (app ${req.params.id}):`, err);
+            return res.status(500).json({ error: 'Erro Interno' });
+        }
+    }
+
+    /** POST /admin/aparelhos/:usuarioId/liberar — corpo `{ por, app_id }`. Solta a conta e derruba as sessões dela. */
+    static async liberar(req: Request<{ usuarioId: string }>, res: Response) {
+        try {
+            const usuarioId = Number(req.params.usuarioId);
+            if (!Number.isInteger(usuarioId)) return res.status(400).json({ error: 'ID inválido.' });
+            const por = String(req.body?.por ?? '').trim().slice(0, 200) || 'admin';
+            // app_id obrigatório (parecer do Conselho): amarra a liberação ao app dono.
+            const appId = Number(req.body?.app_id);
+            if (!Number.isInteger(appId) || appId <= 0) return res.status(400).json({ error: 'app_id obrigatório.' });
+            await aparelhoService.liberar(usuarioId, appId, por);
+            return res.status(200).json({ ok: true });
+        } catch (err) {
+            if ((err as Error).message === 'APARELHO_NAO_ENCONTRADO') {
+                return res.status(404).json({ error: 'Não Encontrado', message: 'Esta conta não está presa a nenhum aparelho.' });
+            }
+            console.error(`[AparelhoController] liberar (${req.params.usuarioId}):`, err);
             return res.status(500).json({ error: 'Erro Interno' });
         }
     }

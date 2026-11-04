@@ -683,6 +683,29 @@ Quem está barrado recebe `423 { error: "ACESSO_BLOQUEADO" }` no `/auth/login` e
 
 No painel do hub a lista aparece na página de usuários de cada app (`BloqueiosPanel`): bloqueados com o botão Liberar, quem está errando sem ter travado e os liberados dos últimos 30 dias.
 
+#### Um aparelho por conta de CPF (04/11/2026)
+
+Pedido do dono da Sul Alimentos: conta de **CPF** (11 dígitos no lugar do e-mail) só fica logada em **um aparelho**, e todo login fica registrado com o **nome do aparelho e o IP** (`db/007_login_aparelhos.sql`, `packages/services/src/AparelhoService.ts`).
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `GET` | `/admin/apps/:id/aparelhos` | `{ presos, registro }`: quem está preso a qual aparelho (nome, IP, desde, último acesso) e os últimos 200 eventos |
+| `POST` | `/admin/aparelhos/:usuarioId/liberar` | Solta a conta do aparelho. Corpo `{ "por": "quem", "app_id": 2 }` — com `app_id`, só solta conta daquele app |
+
+- O app manda no `POST /auth/login` os campos `aparelho_id` (id aleatório guardado no navegador, `[A-Za-z0-9_-]{8,64}`) e `aparelho_nome` (ex.: `Android · SM-A146M · Chrome`). No `auth-kit` é a opção `aparelho` do `createHubAuth`.
+- **Prende só no login completo** (depois do 2FA): o aparelho viaja assinado no `challengeToken` (`apa`/`apn`) e o `verify` prende. Prender na senha deixaria quem sabe só o CPF tomar o lugar do dono.
+- Outro aparelho: `409 { error: "APARELHO_EM_USO", aparelhoNome, message }` já na senha (e de novo no `verify`, se outro concluiu no meio). Conta de CPF sem `aparelho_id` (app antigo): `409 APARELHO_DESCONHECIDO`. Recusa não soma na lista negra (a senha estava certa).
+- A sessão de CPF leva a claim `apa`; o `/auth/refresh` só renova se `apa` ainda for o aparelho preso — liberado ou solto por logout → `SESSAO_REVOGADA`.
+- **Solta** no `POST /auth/logout` com o token do aparelho preso (o kit avisa no `logout()`), ou pelo `liberar` do app (na Sul: tela Lista negra → Aparelhos).
+- Tabelas: `usuarios_aparelho` (uma linha por usuário: `aparelho_id`, `aparelho_nome`, `ip`, `desde`, `ultimo_acesso`) e `login_aparelhos` (registro: `entrou`, `recusado`, `saiu`, `liberado`, com nome, IP e detalhe). O IP é o `ipDoCliente` e fica só no registro: celular troca de IP a toda hora, a regra é pelo id.
+- Sessão **sem** `apa` (emitida antes desta regra, ou pela conclusão do enrolamento/reset) renova enquanto nenhum aparelho estiver preso à conta; quando um aparelho prende, ela para de renovar — ninguém cai no dia da mudança.
+- **Soltar derruba:** logout no aparelho preso e Liberar carimbam o piso de sessão (`usuarios_2fa.sessoes_validas_desde`): o aparelho velho cai no próximo request/refresh (apps com `/auth/session-floor`: até 60 s).
+- `liberar` exige `app_id` (400 sem ele). A recusa por corrida sai do próprio `INSERT … ON CONFLICT … RETURNING` (sem janela entre gravar e conferir).
+- `emitirSessaoDelegada` (bot, 600 s, chave própria) não passa pela regra e não leva `apa`: para conta de CPF presa o bot ainda abre sessão curta; o refresh dela cai em `SESSAO_REVOGADA`.
+- **Transição datada:** o ramo "token sem `apa` renova enquanto ninguém estiver preso" existe só para não derrubar quem estava logado em 04/11/2026. Quando todas as contas de CPF tiverem aparelho preso, tirar o ramo (`if (!apa) return !p` → `return false`).
+- **Retenção (LGPD):** a coluna `conta` do registro só é preenchida sem usuário conhecido (senão vem de `usuarios`); `login_aparelhos` guarda 6 meses; o expurgo roda junto com as gravações (no máximo 1x/hora).
+- Contas de e-mail não são presas. O id é do **navegador**, não do hardware: limpar os dados do site, outro navegador, ou o iPhone com o Safari e o app da tela de início (armazenamentos separados) contam como outro aparelho.
+
 ## 🔄 Fluxos de Autenticação e Regras de Negócio
 
 ### 1️⃣ Fluxo de Login e Desambiguação Multi-Tenant

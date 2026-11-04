@@ -95,7 +95,7 @@ async function liberar() {
           <UiBadge :tom="bloqueados.length ? 'danger' : 'neutro'">{{ bloqueados.length }} bloqueado(s)</UiBadge>
         </div>
         <p class="mt-0.5 text-footnote text-label-2">
-          3 senhas ou códigos errados do mesmo IP bloqueiam o IP; 10 erros na mesma conta em 1 h bloqueiam a conta. Só sai por Liberar.
+          3 senhas ou códigos errados do mesmo IP bloqueiam o IP; 10 erros na mesma conta em 1 h bloqueiam a conta. Sai da lista por Liberar (bloqueado) ou Remover (ainda errando).
         </p>
       </div>
     </div>
@@ -130,7 +130,13 @@ async function liberar() {
         <GlobeAltIcon v-if="b.tipo === 'ip'" class="h-5 w-5 shrink-0" />
         <UserIcon v-else class="h-5 w-5 shrink-0" />
         <p class="min-w-0 flex-1 truncate font-mono text-subhead text-label">{{ b.alvo }}</p>
-        <p class="shrink-0 text-footnote">{{ b.tentativas }} de {{ b.tipo === 'ip' ? 5 : 10 }} · {{ quando(b.ultimaTentativa) }}</p>
+        <p class="shrink-0 text-footnote">{{ b.tentativas }} de {{ b.tipo === 'ip' ? 3 : 10 }} · {{ quando(b.ultimaTentativa) }}</p>
+        <!-- Tirar da lista também quem ainda está só errando (04/11/2026, pedido
+             do dono): zera a contagem antes de virar bloqueio. -->
+        <UiButton variante="plain" tamanho="small" :carregando="liberando === b.id" @click="aLiberar = b">
+          <LockOpenIcon v-if="liberando !== b.id" class="h-4 w-4" />
+          Remover
+        </UiButton>
       </div>
     </template>
 
@@ -149,9 +155,9 @@ async function liberar() {
     :aberto="!!aLiberar"
     tom="warning"
     :icone="LockOpenIcon"
-    :titulo="aLiberar ? `Liberar ${quem(aLiberar)}?` : ''"
-    mensagem="A pessoa volta a poder tentar entrar."
-    confirmar="Liberar"
+    :titulo="aLiberar ? `${aLiberar.bloqueadoEm ? 'Liberar' : 'Remover da lista'} ${quem(aLiberar)}?` : ''"
+    :mensagem="aLiberar?.bloqueadoEm ? 'A pessoa volta a poder tentar entrar.' : 'A contagem de erros zera.'"
+    :confirmar="aLiberar?.bloqueadoEm ? 'Liberar' : 'Remover'"
     :carregando="liberando !== null"
     texto-carregando="Liberando…"
     @fechar="aLiberar = null"

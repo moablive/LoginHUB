@@ -124,6 +124,13 @@ export interface HubAuthConfig {
     tokenKey?: string;
     userKey?: string;
     appKey?: string;
+    /**
+     * Aparelho deste login (04/11/2026). Conta de CPF só fica logada em um
+     * aparelho: o hub recusa (409 APARELHO_EM_USO) o CPF já conectado em outro,
+     * e recusa conta de CPF que chega sem id. Devolva um id estável guardado
+     * neste navegador e um nome legível ("Android · SM-A146M · Chrome").
+     */
+    aparelho?: () => { id: string; nome: string } | Promise<{ id: string; nome: string }>;
 }
 
 // ==========================================
@@ -166,7 +173,7 @@ export function createHubAuth(config: HubAuthConfig) {
     /** Renovação em voo, compartilhada por todos os chamadores. Ver `refresh`. */
     let refreshEmVoo: Promise<string | null> | null = null;
 
-    async function chamar<T>(rota: string, opcoes: { body?: unknown; token?: string; metodo?: string } = {}): Promise<T> {
+    async function chamar<T>(rota: string, opcoes: { body?: unknown; token?: string; metodo?: string; keepalive?: boolean } = {}): Promise<T> {
         if (!base) {
             throw new HubApiError(
                 500,
@@ -184,6 +191,9 @@ export function createHubAuth(config: HubAuthConfig) {
                 method: opcoes.metodo ?? 'POST',
                 headers,
                 body: opcoes.body === undefined ? undefined : JSON.stringify(opcoes.body),
+                // Só o logout usa: o app troca de tela logo depois e um fetch comum
+                // seria cortado no unload — o aviso que solta o aparelho não chegaria.
+                ...(opcoes.keepalive ? { keepalive: true } : {}),
             });
         } catch {
             throw new HubApiError(0, 'REDE', 'Não foi possível falar com o servidor de login.');
@@ -245,6 +255,11 @@ export function createHubAuth(config: HubAuthConfig) {
             const body: Record<string, unknown> = { email, password };
             if (config.appId !== undefined && config.appId !== null && config.appId !== '') {
                 body.app_id = String(config.appId);
+            }
+            if (config.aparelho) {
+                const a = await config.aparelho();
+                body.aparelho_id = a.id;
+                body.aparelho_nome = a.nome;
             }
 
             const data = await chamar<Record<string, unknown>>('/auth/login', { body });
@@ -357,7 +372,13 @@ export function createHubAuth(config: HubAuthConfig) {
             return refreshEmVoo;
         },
 
+        /**
+         * Sai e avisa o hub — é o aviso que solta o aparelho de uma conta de CPF.
+         * O aviso vai sem esperar: falhar a rede não pode prender ninguém logado.
+         */
         logout(): void {
+            const token = getToken();
+            if (token) chamar('/auth/logout', { body: {}, token, keepalive: true }).catch(() => undefined);
             limparSessao();
         },
 

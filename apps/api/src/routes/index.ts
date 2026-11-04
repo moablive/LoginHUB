@@ -5,7 +5,8 @@ import {
   UserController,
   CategoriaController,
   TwoFactorController,
-  BloqueioController
+  BloqueioController,
+  AparelhoController
 } from '../controllers';
 import {
   adminMiddleware,
@@ -108,6 +109,10 @@ adminRouter.get('/apps/:id/users', UserController.getUsersByApp as any);
 // -- Lista negra do login (28/10/2026): o app lista e libera os bloqueios dele.
 adminRouter.get('/apps/:id/bloqueios', BloqueioController.listar as any);
 adminRouter.post('/bloqueios/:id/liberar', BloqueioController.liberar as any);
+
+// -- Um aparelho por conta de CPF (04/11/2026): o app lista e libera.
+adminRouter.get('/apps/:id/aparelhos', AparelhoController.listar as any);
+adminRouter.post('/aparelhos/:usuarioId/liberar', AparelhoController.liberar as any);
 
 adminRouter.get('/users', UserController.getAllUsers as any);
 adminRouter.post('/users', UserController.addUser as any);

@@ -18,8 +18,8 @@ import {
   UserIcon,
   UserPlusIcon,
 } from '@heroicons/vue/24/outline';
-import { appApi, userApi } from '@loginhub/api-client';
-import type { App, User } from '@loginhub/schema';
+import { appApi, userApi, aparelhoApi } from '@loginhub/api-client';
+import type { App, User, AparelhosDoApp } from '@loginhub/schema';
 import { ResetPasswordEmail } from '@/templates/emails';
 import { getAppIntegration } from '@/config/integrations';
 import { getAppLinks } from '@/config/appLinks';
@@ -38,6 +38,7 @@ import StatusButton from '@/components/StatusButton.vue';
 import IntegrationLink from '@/components/integration/IntegrationLink.vue';
 import AppLinkPanel from '@/components/integration/AppLinkPanel.vue';
 import BloqueiosPanel from '@/components/seguranca/BloqueiosPanel.vue';
+import AparelhosPanel from '@/components/seguranca/AparelhosPanel.vue';
 import CreateUserSheet from '@/components/users/CreateUserSheet.vue';
 import EditUserSheet from '@/components/users/EditUserSheet.vue';
 
@@ -95,8 +96,29 @@ function mostrarLinkManual(title: string, magicLinkToken: string) {
   };
 }
 
+// --- aparelhos (04/11/2026): conta de CPF presa a um aparelho ---
+// Carregados à parte: hub sem a rota (ou fora do ar) não trava a lista.
+const aparelhos = ref<AparelhosDoApp>({ presos: [], registro: [] });
+const carregandoAparelhos = ref(false);
+const erroAparelhos = ref('');
+const aparelhoDe = computed(() => new Map(aparelhos.value.presos.map((p) => [String(p.usuarioId), p])));
+
+async function carregarAparelhos() {
+  if (!props.id) return;
+  carregandoAparelhos.value = true;
+  try {
+    aparelhos.value = await aparelhoApi.getByAppId(props.id);
+    erroAparelhos.value = '';
+  } catch {
+    erroAparelhos.value = 'Não foi possível carregar os aparelhos.';
+  } finally {
+    carregandoAparelhos.value = false;
+  }
+}
+
 // --- carregamento ---
 async function fetchData() {
+  void carregarAparelhos();
   if (!props.id) return;
   try {
     const [usersData, appData] = await Promise.all([userApi.getByAppId(props.id), appApi.getById(props.id)]);
@@ -390,6 +412,16 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
          tentativas demais, com o Liberar — o app dono tem a mesma lista. -->
     <BloqueiosPanel v-if="app && app.usaLoginHub !== false" :app-id="id" />
 
+    <!-- Um aparelho por CPF (04/11/2026): quem está em qual aparelho, com Liberar. -->
+    <AparelhosPanel
+      v-if="app && app.usaLoginHub !== false"
+      :app-id="id"
+      :dados="aparelhos"
+      :carregando="carregandoAparelhos"
+      :erro="erroAparelhos"
+      @recarregar="carregarAparelhos"
+    />
+
     <UiSection titulo="Usuários" lista>
       <template #acao>
         <span v-if="busca && !loading" class="text-footnote text-label-2">{{ filtrados.length }} de {{ users.length }}</span>
@@ -444,6 +476,9 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
           <div class="min-w-0 flex-1">
             <p class="truncate text-body font-medium">{{ user.nome }}</p>
             <p class="truncate text-subhead text-label-2">{{ user.email }}</p>
+            <p v-if="aparelhoDe.get(String(user.id))" class="truncate text-footnote text-label-2">
+              <DevicePhoneMobileIcon class="inline h-3.5 w-3.5" /> {{ aparelhoDe.get(String(user.id))?.aparelhoNome || 'aparelho sem nome' }}
+            </p>
             <div class="mt-1.5 flex flex-wrap gap-1.5">
               <UiBadge v-if="user.status === 'ativo'" tom="success">Ativo</UiBadge>
               <UiBadge v-else tom="danger">Bloqueado</UiBadge>
@@ -501,6 +536,15 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
                     <div class="min-w-0">
                       <p class="text-subhead font-medium">{{ user.nome }}</p>
                       <p class="text-footnote text-label-2">{{ user.email }}</p>
+                      <p
+                        v-if="aparelhoDe.get(String(user.id))"
+                        class="text-footnote text-label-2"
+                        :title="`Conectado neste aparelho desde ${new Date(aparelhoDe.get(String(user.id))!.desde).toLocaleString('pt-BR')}`"
+                      >
+                        <DevicePhoneMobileIcon class="inline h-3.5 w-3.5" />
+                        {{ aparelhoDe.get(String(user.id))?.aparelhoNome || 'aparelho sem nome' }}
+                        <span v-if="aparelhoDe.get(String(user.id))?.ip" class="font-mono"> · {{ aparelhoDe.get(String(user.id))?.ip }}</span>
+                      </p>
                     </div>
                   </div>
                 </td>

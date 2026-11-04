@@ -63,6 +63,20 @@ export interface LoginInputDTO {
      *   escolher qual app está tentando logar.
      */
     app_id?: string | undefined;
+    /**
+     * Aparelho de onde vem o login (04/11/2026, Sul Alimentos). Conta de CPF
+     * só fica logada em um aparelho: o app gera um id, guarda no navegador e
+     * manda junto com um nome legível. Sem id, conta de CPF não entra.
+     */
+    aparelho_id?: string | undefined;
+    aparelho_nome?: string | undefined;
+}
+
+/** Aparelho de um login, já limpo (ver `AparelhoService.normalizar`). */
+export interface AparelhoDoLogin {
+    id: string | null;
+    nome: string | null;
+    ip: string | null;
 }
 
 export interface AvailableAppSummary {
@@ -113,6 +127,11 @@ export interface JWTPayload {
     exp?: number;
     /** Só na sessão master. Ver `masterKeyFingerprint`. */
     mk?: string;
+    /**
+     * Id do aparelho preso à conta de CPF (`usuarios_aparelho`). O refresh
+     * confere: aparelho liberado ou trocado → `SESSAO_REVOGADA`.
+     */
+    apa?: string;
 }
 
 /** E-mail do login master. Não existe em `usuarios` — é conta do .env. */
@@ -569,4 +588,60 @@ export interface LoginBloqueio {
     bloqueadoEm: string | null;
     liberadoEm: string | null;
     liberadoPor: string | null;
+}
+
+/**
+ * Aparelho preso a uma conta de CPF (04/11/2026, db/007_login_aparelhos.sql).
+ * Uma linha por usuário: enquanto existir, só esse aparelho entra. Sai no
+ * logout feito nele ou no "Liberar" do app.
+ */
+export const usuariosAparelho = pgTable('usuarios_aparelho', {
+    usuarioId: integer('usuario_id').primaryKey().references(() => usuarios.id, { onDelete: 'cascade' }),
+    appId: integer('app_id').notNull().default(0),
+    aparelhoId: varchar('aparelho_id', { length: 64 }).notNull(),
+    aparelhoNome: varchar('aparelho_nome', { length: 255 }),
+    ip: varchar('ip', { length: 64 }),
+    desde: timestamp('desde').defaultNow().notNull(),
+    ultimoAcesso: timestamp('ultimo_acesso').defaultNow().notNull(),
+});
+
+/** Registro dos logins por aparelho: entrou, recusado, saiu, liberado. */
+export const loginAparelhos = pgTable('login_aparelhos', {
+    id: serial('id').primaryKey(),
+    appId: integer('app_id').notNull().default(0),
+    usuarioId: integer('usuario_id').references(() => usuarios.id, { onDelete: 'cascade' }),
+    conta: varchar('conta', { length: 255 }),
+    /** 'entrou' | 'recusado' | 'saiu' | 'liberado' */
+    evento: varchar('evento', { length: 20 }).notNull(),
+    aparelhoId: varchar('aparelho_id', { length: 64 }),
+    aparelhoNome: varchar('aparelho_nome', { length: 255 }),
+    ip: varchar('ip', { length: 64 }),
+    detalhe: varchar('detalhe', { length: 255 }),
+    criadoEm: timestamp('criado_em').defaultNow().notNull(),
+});
+
+export type LoginAparelhoEvento = 'entrou' | 'recusado' | 'saiu' | 'liberado';
+
+/** Como o `/admin/apps/:id/aparelhos` devolve: os presos e o registro recente. */
+export interface AparelhosDoApp {
+    presos: Array<{
+        usuarioId: number;
+        nome: string;
+        conta: string;
+        aparelhoNome: string | null;
+        ip: string | null;
+        desde: string;
+        ultimoAcesso: string;
+    }>;
+    registro: Array<{
+        id: number;
+        usuarioId: number | null;
+        nome: string | null;
+        conta: string | null;
+        evento: LoginAparelhoEvento;
+        aparelhoNome: string | null;
+        ip: string | null;
+        detalhe: string | null;
+        criadoEm: string;
+    }>;
 }
