@@ -79,6 +79,9 @@ async function salvar() {
         <option v-if="oferece('operador')" value="operador">Operador</option>
         <option v-if="oferece('admin')" value="admin">Administrador</option>
         <option v-if="oferece('suporte')" value="suporte">Suporte</option>
+        <!-- Papel da Sul Alimentos que o hub não oferece no convite padrão:
+             sem a opção, o select de um motorista abria em branco. -->
+        <option v-if="form.role === 'motorista'" value="motorista">Motorista</option>
         <option v-if="form.role === 'master'" value="master">Master</option>
       </UiSelect>
 

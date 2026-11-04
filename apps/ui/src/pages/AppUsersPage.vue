@@ -377,6 +377,9 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
               <UiBadge v-else tom="danger">Bloqueado</UiBadge>
               <UiBadge v-if="user.role === 'admin'" tom="indigo"><ShieldCheckIcon class="h-3 w-3" /> Admin</UiBadge>
               <UiBadge v-else-if="user.role === 'operador'" tom="warning">Operador</UiBadge>
+              <!-- `motorista` é papel da Sul Alimentos (28/10/2026); sem esta
+                   linha os motoristas apareciam como "Usuário". -->
+              <UiBadge v-else-if="user.role === 'motorista'" tom="accent">Motorista</UiBadge>
               <UiBadge v-else>Usuário</UiBadge>
               <UiBadge v-if="ehDoRoster(user)" tom="accent">{{ rosterCfg?.label }}</UiBadge>
               <UiBadge v-if="app?.usaLoginHub === false">2FA não se aplica</UiBadge>
@@ -419,6 +422,7 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
                   <div class="flex flex-wrap items-center gap-1.5">
                     <UiBadge v-if="user.role === 'admin'" tom="indigo"><ShieldCheckIcon class="h-3 w-3" /> Admin</UiBadge>
                     <UiBadge v-else-if="user.role === 'operador'" tom="warning">Operador</UiBadge>
+                    <UiBadge v-else-if="user.role === 'motorista'" tom="accent">Motorista</UiBadge>
                     <UiBadge v-else>Usuário</UiBadge>
                     <UiBadge v-if="ehDoRoster(user)" tom="accent">{{ rosterCfg?.label }}</UiBadge>
                   </div>
