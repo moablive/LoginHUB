@@ -20,6 +20,7 @@ import type { App, Categoria, DirecaoMovimento } from '@loginhub/schema';
 import { masks } from '@/utils/masks';
 import { getAppIntegration } from '@/config/integrations';
 import { getAppLinks } from '@/config/appLinks';
+import { fundoDoLogo } from '@/config/logoFundo';
 import UiNavBar from '@/components/ui/UiNavBar.vue';
 import UiButton from '@/components/ui/UiButton.vue';
 import UiSearchField from '@/components/ui/UiSearchField.vue';
@@ -288,7 +289,8 @@ const seta =
                 v-if="app.logo"
                 :src="app.logo"
                 :alt="app.nome"
-                class="h-12 w-12 shrink-0 rounded-[12px] bg-white object-contain p-1 ring-1 ring-separator"
+                class="h-12 w-12 shrink-0 rounded-[12px] object-contain p-1 ring-1 ring-separator"
+                :class="fundoDoLogo(app.id)"
               />
               <div
                 v-else

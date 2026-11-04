@@ -13,6 +13,7 @@ import { userApi } from '@loginhub/api-client';
 import type { UserRole } from '@loginhub/schema';
 import { InviteEmailTemplate, MoneyAppInviteEmail } from '@/templates/emails';
 import { getProvisionedApp, hubRolesDoApp, type ProvisionField } from '@/config/provisioning';
+import { fundoDoLogo } from '@/config/logoFundo';
 import { masks } from '@/utils/masks';
 import UiSheet from '@/components/ui/UiSheet.vue';
 import UiButton from '@/components/ui/UiButton.vue';
@@ -370,7 +371,7 @@ const descricaoPapel = computed(() =>
     @fechar="emit('fechar')"
   >
     <template v-if="step === 'form' && appLogo" #cabecalho>
-      <img :src="appLogo" :alt="appName || 'Logo'" class="order-first h-10 w-10 shrink-0 rounded-[9px] object-contain ring-1 ring-separator" />
+      <img :src="appLogo" :alt="appName || 'Logo'" class="order-first h-10 w-10 shrink-0 rounded-[9px] object-contain p-0.5 ring-1 ring-separator" :class="fundoDoLogo(appId)" />
     </template>
 
     <!-- ETAPA 1: formulário -->
