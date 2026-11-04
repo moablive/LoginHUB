@@ -39,6 +39,7 @@ import IntegrationLink from '@/components/integration/IntegrationLink.vue';
 import AppLinkPanel from '@/components/integration/AppLinkPanel.vue';
 import BloqueiosPanel from '@/components/seguranca/BloqueiosPanel.vue';
 import AparelhosPanel from '@/components/seguranca/AparelhosPanel.vue';
+import AcessoUsuarioSheet from '@/components/seguranca/AcessoUsuarioSheet.vue';
 import CreateUserSheet from '@/components/users/CreateUserSheet.vue';
 import EditUserSheet from '@/components/users/EditUserSheet.vue';
 
@@ -102,6 +103,33 @@ const aparelhos = ref<AparelhosDoApp>({ presos: [], registro: [] });
 const carregandoAparelhos = ref(false);
 const erroAparelhos = ref('');
 const aparelhoDe = computed(() => new Map(aparelhos.value.presos.map((p) => [String(p.usuarioId), p])));
+// Último "entrou" de cada um (o registro vem do mais novo ao mais velho): é o
+// que aparece para quem não tem aparelho preso — conta de e-mail, ou CPF que saiu.
+const ultimoLoginDe = computed(() => {
+  const m = new Map<string, AparelhosDoApp['registro'][number]>();
+  for (const r of aparelhos.value.registro) {
+    if (r.evento === 'entrou' && r.usuarioId != null && !m.has(String(r.usuarioId))) m.set(String(r.usuarioId), r);
+  }
+  return m;
+});
+// Ficha de acesso: tocar no nome abre onde a pessoa está autenticada.
+const userAcesso = ref<User | null>(null);
+
+function ondeEsta(u: User): { texto: string; ip: string | null; conectado: boolean } | null {
+  const p = aparelhoDe.value.get(String(u.id));
+  if (p) return { texto: p.aparelhoNome || 'aparelho sem nome', ip: p.ip, conectado: true };
+  const r = ultimoLoginDe.value.get(String(u.id));
+  if (r) return { texto: `último login ${quandoCurto(r.criadoEm)} · ${r.aparelhoNome || 'aparelho sem nome'}`, ip: r.ip, conectado: false };
+  return null;
+}
+
+function quandoCurto(iso: string): string {
+  const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (min < 1) return 'agora';
+  if (min < 60) return `há ${min} min`;
+  if (min < 1440) return `há ${Math.round(min / 60)} h`;
+  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+}
 
 async function carregarAparelhos() {
   if (!props.id) return;
@@ -470,15 +498,23 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
       <template v-else>
         <!-- celular: lista agrupada, ações na folha do ⋯ -->
         <div v-for="user in filtrados" :key="`m-${user.id}`" class="flex items-center gap-3 px-4 py-3 md:hidden">
-          <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fill text-headline font-semibold text-label-2">
+          <button
+            type="button"
+            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fill text-headline font-semibold text-label-2"
+            :aria-label="`Onde ${user.nome} está autenticado`"
+            @click="userAcesso = user"
+          >
             {{ iniciais(user.nome) }}
-          </span>
+          </button>
           <div class="min-w-0 flex-1">
-            <p class="truncate text-body font-medium">{{ user.nome }}</p>
-            <p class="truncate text-subhead text-label-2">{{ user.email }}</p>
-            <p v-if="aparelhoDe.get(String(user.id))" class="truncate text-footnote text-label-2">
-              <DevicePhoneMobileIcon class="inline h-3.5 w-3.5" /> {{ aparelhoDe.get(String(user.id))?.aparelhoNome || 'aparelho sem nome' }}
-            </p>
+            <button type="button" class="block w-full min-w-0 text-left" :aria-label="`Onde ${user.nome} está autenticado`" @click="userAcesso = user">
+              <span class="block truncate text-body font-medium">{{ user.nome }}</span>
+              <span class="block truncate text-subhead text-label-2">{{ user.email }}</span>
+              <span v-if="ondeEsta(user)" class="block truncate text-footnote" :class="ondeEsta(user)!.conectado ? 'text-success' : 'text-label-2'">
+                <DevicePhoneMobileIcon class="inline h-3.5 w-3.5" /> {{ ondeEsta(user)!.texto }}
+              </span>
+              <span v-else class="block truncate text-footnote text-label-3">sem login no registro</span>
+            </button>
             <div class="mt-1.5 flex flex-wrap gap-1.5">
               <UiBadge v-if="user.status === 'ativo'" tom="success">Ativo</UiBadge>
               <UiBadge v-else tom="danger">Bloqueado</UiBadge>
@@ -533,19 +569,16 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
                     <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-fill text-subhead font-semibold text-label-2">
                       {{ iniciais(user.nome) }}
                     </span>
-                    <div class="min-w-0">
-                      <p class="text-subhead font-medium">{{ user.nome }}</p>
-                      <p class="text-footnote text-label-2">{{ user.email }}</p>
-                      <p
-                        v-if="aparelhoDe.get(String(user.id))"
-                        class="text-footnote text-label-2"
-                        :title="`Conectado neste aparelho desde ${new Date(aparelhoDe.get(String(user.id))!.desde).toLocaleString('pt-BR')}`"
-                      >
+                    <button type="button" class="min-w-0 text-left" :title="`Ver onde ${user.nome} está autenticado`" @click="userAcesso = user">
+                      <span class="block text-subhead font-medium hover:text-accent hover:underline">{{ user.nome }}</span>
+                      <span class="block text-footnote text-label-2">{{ user.email }}</span>
+                      <span v-if="ondeEsta(user)" class="block text-footnote" :class="ondeEsta(user)!.conectado ? 'text-success' : 'text-label-2'">
                         <DevicePhoneMobileIcon class="inline h-3.5 w-3.5" />
-                        {{ aparelhoDe.get(String(user.id))?.aparelhoNome || 'aparelho sem nome' }}
-                        <span v-if="aparelhoDe.get(String(user.id))?.ip" class="font-mono"> · {{ aparelhoDe.get(String(user.id))?.ip }}</span>
-                      </p>
-                    </div>
+                        {{ ondeEsta(user)!.texto }}
+                        <span v-if="ondeEsta(user)!.ip" class="font-mono"> · {{ ondeEsta(user)!.ip }}</span>
+                      </span>
+                      <span v-else class="block text-footnote text-label-3">sem login no registro</span>
+                    </button>
                   </div>
                 </td>
                 <td class="whitespace-nowrap px-4 py-3">
@@ -629,6 +662,9 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
     <UiSheet :aberto="!!userAcoes" :titulo="userAcoes?.nome || ''" :subtitulo="userAcoes?.email" largura="sm" @fechar="userAcoes = null">
       <div v-if="userAcoes" class="space-y-6">
         <UiSection lista>
+          <UiRow clicavel titulo="Onde está autenticado" subtitulo="Aparelho, IP e histórico de logins" @click="acao((u) => (userAcesso = u))">
+            <template #icone><DevicePhoneMobileIcon class="text-success" /></template>
+          </UiRow>
           <UiRow clicavel titulo="Editar dados" @click="acao((u) => (userToEdit = u))">
             <template #icone><PencilSquareIcon class="text-accent" /></template>
           </UiRow>
@@ -674,6 +710,14 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
       :app-logo="app?.logo"
       @fechar="showFormModal = false"
       @sucesso="aoConvidar"
+    />
+
+    <AcessoUsuarioSheet
+      :user="userAcesso"
+      :app-id="id"
+      :app2fa="app?.usaLoginHub !== false"
+      @fechar="userAcesso = null"
+      @recarregar="carregarAparelhos"
     />
 
     <EditUserSheet :aberto="!!userToEdit" :user="userToEdit" :app-id="id" @fechar="userToEdit = null" @sucesso="aoEditar" />

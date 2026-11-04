@@ -689,7 +689,7 @@ Pedido do dono da Sul Alimentos: conta de **CPF** (11 dígitos no lugar do e-mai
 
 | Método | Rota | Descrição |
 |---|---|---|
-| `GET` | `/admin/apps/:id/aparelhos` | `{ presos, registro }`: quem está preso a qual aparelho (nome, IP, desde, último acesso) e os últimos 200 eventos |
+| `GET` | `/admin/apps/:id/aparelhos` | `{ presos, registro }`: quem está preso a qual aparelho (nome, IP, desde, último acesso) e os últimos 200 eventos; com `?usuario=ID`, só os dessa pessoa (ficha de acesso) |
 | `POST` | `/admin/aparelhos/:usuarioId/liberar` | Solta a conta do aparelho. Corpo `{ "por": "quem", "app_id": 2 }` — com `app_id`, só solta conta daquele app |
 
 - O app manda no `POST /auth/login` os campos `aparelho_id` (id aleatório guardado no navegador, `[A-Za-z0-9_-]{8,64}`) e `aparelho_nome` (ex.: `Android · SM-A146M · Chrome`). No `auth-kit` é a opção `aparelho` do `createHubAuth`.
@@ -704,7 +704,8 @@ Pedido do dono da Sul Alimentos: conta de **CPF** (11 dígitos no lugar do e-mai
 - `emitirSessaoDelegada` (bot, 600 s, chave própria) não passa pela regra e não leva `apa`: para conta de CPF presa o bot ainda abre sessão curta; o refresh dela cai em `SESSAO_REVOGADA`.
 - **Transição datada:** o ramo "token sem `apa` renova enquanto ninguém estiver preso" existe só para não derrubar quem estava logado em 04/11/2026. Quando todas as contas de CPF tiverem aparelho preso, tirar o ramo (`if (!apa) return !p` → `return false`).
 - **Retenção (LGPD):** a coluna `conta` do registro só é preenchida sem usuário conhecido (senão vem de `usuarios`); `login_aparelhos` guarda 6 meses; o expurgo roda junto com as gravações (no máximo 1x/hora).
-- Contas de e-mail não são presas. O id é do **navegador**, não do hardware: limpar os dados do site, outro navegador, ou o iPhone com o Safari e o app da tela de início (armazenamentos separados) contam como outro aparelho.
+- **Ficha de acesso no painel** (v1.1.8): tocar no nome do usuário (em Usuários do app) abre onde ele está autenticado — o aparelho preso com IP, desde e último acesso, e o **Liberar** — ou, sem aparelho preso, o último login; embaixo, o histórico de logins dele (entrou/recusado/saiu/liberado). A lista mostra a mesma linha em todo usuário (verde = conectado, cinza = último login).
+- Contas de e-mail não são presas, mas desde a v1.1.8 o login completo delas também entra no registro (`entrou`, detalhe "conta de e-mail (não fica presa)"), para o painel mostrar onde todo membro está autenticado. O id é do **navegador**, não do hardware: limpar os dados do site, outro navegador, ou o iPhone com o Safari e o app da tela de início (armazenamentos separados) contam como outro aparelho.
 
 ## 🔄 Fluxos de Autenticação e Regras de Negócio
 

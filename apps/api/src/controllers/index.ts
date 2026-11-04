@@ -831,12 +831,14 @@ export class BloqueioController {
 // APARELHOS (04/11/2026) — um aparelho por conta de CPF
 // ==========================================
 export class AparelhoController {
-    /** GET /admin/apps/:id/aparelhos — quem está preso a qual aparelho + registro recente. */
+    /** GET /admin/apps/:id/aparelhos[?usuario=ID] — quem está preso a qual aparelho + registro recente (com `usuario`, só o dessa pessoa). */
     static async listar(req: Request<{ id: string }>, res: Response) {
         try {
             const appId = Number(req.params.id);
             if (!Number.isInteger(appId)) return res.status(400).json({ error: 'ID inválido.' });
-            return res.status(200).json(await aparelhoService.listar(appId));
+            const usuario = req.query.usuario === undefined ? undefined : Number(req.query.usuario);
+            if (usuario !== undefined && (!Number.isInteger(usuario) || usuario <= 0)) return res.status(400).json({ error: 'usuario inválido.' });
+            return res.status(200).json(await aparelhoService.listar(appId, 200, usuario));
         } catch (err) {
             console.error(`[AparelhoController] listar (app ${req.params.id}):`, err);
             return res.status(500).json({ error: 'Erro Interno' });

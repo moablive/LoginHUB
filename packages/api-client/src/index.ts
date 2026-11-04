@@ -530,8 +530,11 @@ export const userApi = {
  * (nome + IP) e o registro dos logins; `liberar` solta a conta do aparelho.
  */
 export const aparelhoApi = {
-  getByAppId: async (appId: string): Promise<AparelhosDoApp> => {
-    const { data } = await api.get<AparelhosDoApp>(`/admin/apps/${appId}/aparelhos`);
+  /** Com `usuarioId`: só a ficha dessa pessoa (aparelho preso + os últimos 200 eventos dela). */
+  getByAppId: async (appId: string, usuarioId?: number | string): Promise<AparelhosDoApp> => {
+    const { data } = await api.get<AparelhosDoApp>(`/admin/apps/${appId}/aparelhos`, {
+      params: usuarioId !== undefined ? { usuario: usuarioId } : undefined,
+    });
     return data;
   },
   liberar: async (usuarioId: number | string, por: string, appId?: string): Promise<void> => {

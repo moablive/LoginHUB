@@ -95,8 +95,16 @@ export class AparelhoService {
      * Devolve o id a pôr no token (`apa`), ou undefined para conta de e-mail.
      */
     async prender(user: { id: number; email: string; app_id: number | null }, aparelho: AparelhoDoLogin): Promise<string | undefined> {
-        if (!ehContaDeCpf(user.email) || !aparelho.id) return undefined;
         const appId = user.app_id ?? 0;
+        if (!ehContaDeCpf(user.email)) {
+            // Conta de e-mail não fica presa, mas o login entra no registro
+            // (04/11/2026, pedido do dono): o painel mostra onde TODO membro
+            // está autenticado, não só quem entra por CPF.
+            // Sem await: o registro não segura o login (parecer do Conselho).
+            void this.registrar({ appId, usuarioId: user.id, conta: user.email, evento: 'entrou', aparelho, detalhe: 'conta de e-mail (não fica presa)' });
+            return undefined;
+        }
+        if (!aparelho.id) return undefined;
         const agora = new Date();
         // ON CONFLICT só renova o MESMO aparelho. Quem decide é o próprio insert
         // (parecer do Conselho): RETURNING vazio ⟺ a linha é de outro aparelho ⟹
@@ -173,14 +181,15 @@ export class AparelhoService {
         });
     }
 
-    async listar(appId: number, limite = 200): Promise<AparelhosDoApp> {
+    /** `usuarioId`: só o registro dessa pessoa (ficha de acesso do painel), sem o corte dos outros. */
+    async listar(appId: number, limite = 200, usuarioId?: number): Promise<AparelhosDoApp> {
         const presos = await db.select({
             usuarioId: usuariosAparelho.usuarioId, nome: usuarios.nome, conta: usuarios.email,
             aparelhoNome: usuariosAparelho.aparelhoNome, ip: usuariosAparelho.ip,
             desde: usuariosAparelho.desde, ultimoAcesso: usuariosAparelho.ultimoAcesso,
         }).from(usuariosAparelho)
           .innerJoin(usuarios, eq(usuarios.id, usuariosAparelho.usuarioId))
-          .where(eq(usuariosAparelho.appId, appId))
+          .where(usuarioId ? and(eq(usuariosAparelho.appId, appId), eq(usuariosAparelho.usuarioId, usuarioId)) : eq(usuariosAparelho.appId, appId))
           .orderBy(usuarios.nome);
 
         const registro = await db.select({
@@ -189,7 +198,7 @@ export class AparelhoService {
             detalhe: loginAparelhos.detalhe, criadoEm: loginAparelhos.criadoEm,
         }).from(loginAparelhos)
           .leftJoin(usuarios, eq(usuarios.id, loginAparelhos.usuarioId))
-          .where(eq(loginAparelhos.appId, appId))
+          .where(usuarioId ? and(eq(loginAparelhos.appId, appId), eq(loginAparelhos.usuarioId, usuarioId)) : eq(loginAparelhos.appId, appId))
           .orderBy(desc(loginAparelhos.criadoEm))
           .limit(limite);
 
