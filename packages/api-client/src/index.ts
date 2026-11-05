@@ -557,4 +557,8 @@ export const bloqueioApi = {
     });
     return data;
   },
+  /** Apaga da lista uma linha já liberada (05/11/2026). */
+  excluir: async (id: number, por: string, appId: string): Promise<void> => {
+    await api.delete(`/admin/bloqueios/${id}`, { params: { app_id: Number(appId), por } });
+  },
 };

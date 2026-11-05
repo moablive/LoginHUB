@@ -825,6 +825,26 @@ export class BloqueioController {
             return res.status(500).json({ error: 'Erro Interno' });
         }
     }
+
+    /** DELETE /admin/bloqueios/:id?app_id=2&por=quem — apaga da lista uma linha já liberada. */
+    static async excluir(req: Request<{ id: string }>, res: Response) {
+        try {
+            const id = Number(req.params.id);
+            const appId = Number(req.query.app_id);
+            if (!Number.isInteger(id)) return res.status(400).json({ error: 'ID inválido.' });
+            if (!Number.isInteger(appId) || appId <= 0) return res.status(400).json({ error: 'app_id obrigatório.' });
+            const por = String(req.query.por ?? '').trim().slice(0, 200);
+            if (!por) return res.status(400).json({ error: 'por obrigatório.' });
+            await bloqueioService.excluir(id, appId, por);
+            return res.status(200).json({ ok: true });
+        } catch (err) {
+            if ((err as Error).message === 'BLOQUEIO_NAO_ENCONTRADO') {
+                return res.status(404).json({ error: 'Não Encontrado', message: 'Só sai da lista o que já foi liberado.' });
+            }
+            console.error(`[BloqueioController] excluir (${req.params.id}):`, err);
+            return res.status(500).json({ error: 'Erro Interno' });
+        }
+    }
 }
 
 // ==========================================

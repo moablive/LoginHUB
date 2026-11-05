@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { db } from '@loginhub/database';
 import { loginBloqueios, usuarios, LoginBloqueio, LoginBloqueioTipo } from '@loginhub/schema';
-import { and, eq, isNull, desc, sql } from 'drizzle-orm';
+import { and, eq, isNull, isNotNull, desc, sql } from 'drizzle-orm';
 
 /**
  * Lista negra do login (28/10/2026).
@@ -196,7 +196,8 @@ export class BloqueioService {
             .orderBy(desc(loginBloqueios.ultimaTentativa))
             .limit(500);
         const peso = (l: typeof loginBloqueios.$inferSelect) => (l.liberadoEm ? 2 : l.bloqueadoEm ? 0 : 1);
-        return linhas.sort((a, b) => peso(a) - peso(b)).map(serializar);
+        type Linha = typeof loginBloqueios.$inferSelect;
+        return linhas.sort((a: Linha, b: Linha) => peso(a) - peso(b)).map(serializar);
     }
 
     /** Libera (fecha a linha). O app diz quem liberou; o hub só anota. */
@@ -207,6 +208,21 @@ export class BloqueioService {
             .returning();
         if (!linha) throw new Error('BLOQUEIO_NAO_ENCONTRADO');
         return serializar(linha);
+    }
+
+    /**
+     * Apaga da lista uma linha JÁ liberada (05/11/2026, pedido do dono: o IP
+     * liberado ficava riscado na lista por 30 dias). Bloqueio ativo não se
+     * apaga — primeiro Liberar, para a saída ficar anotada.
+     */
+    public async excluir(id: number, appId: number, por: string): Promise<void> {
+        const apagadas = await db.delete(loginBloqueios)
+            .where(and(eq(loginBloqueios.id, id), eq(loginBloqueios.appId, appId), isNotNull(loginBloqueios.liberadoEm)))
+            .returning({ id: loginBloqueios.id, tipo: loginBloqueios.tipo, alvo: loginBloqueios.alvo, liberadoPor: loginBloqueios.liberadoPor });
+        if (!apagadas.length) throw new Error('BLOQUEIO_NAO_ENCONTRADO');
+        // Quem excluiu fica no log da API (parecer do Conselho): a linha some da tabela.
+        const a = apagadas[0];
+        console.info(`[bloqueio] excluído #${a.id} (app ${appId}, ${a.tipo} ${a.alvo}, liberado por ${a.liberadoPor ?? '?'}) por ${por} em ${new Date().toISOString()}`);
     }
 }
 

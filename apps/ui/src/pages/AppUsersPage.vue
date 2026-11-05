@@ -38,7 +38,6 @@ import StatusButton from '@/components/StatusButton.vue';
 import IntegrationLink from '@/components/integration/IntegrationLink.vue';
 import AppLinkPanel from '@/components/integration/AppLinkPanel.vue';
 import BloqueiosPanel from '@/components/seguranca/BloqueiosPanel.vue';
-import AparelhosPanel from '@/components/seguranca/AparelhosPanel.vue';
 import AcessoUsuarioSheet from '@/components/seguranca/AcessoUsuarioSheet.vue';
 import CreateUserSheet from '@/components/users/CreateUserSheet.vue';
 import EditUserSheet from '@/components/users/EditUserSheet.vue';
@@ -100,7 +99,6 @@ function mostrarLinkManual(title: string, magicLinkToken: string) {
 // --- aparelhos (04/11/2026): conta de CPF presa a um aparelho ---
 // Carregados à parte: hub sem a rota (ou fora do ar) não trava a lista.
 const aparelhos = ref<AparelhosDoApp>({ presos: [], registro: [] });
-const carregandoAparelhos = ref(false);
 const erroAparelhos = ref('');
 const aparelhoDe = computed(() => new Map(aparelhos.value.presos.map((p) => [String(p.usuarioId), p])));
 // Último "entrou" de cada um (o registro vem do mais novo ao mais velho): é o
@@ -133,14 +131,11 @@ function quandoCurto(iso: string): string {
 
 async function carregarAparelhos() {
   if (!props.id) return;
-  carregandoAparelhos.value = true;
   try {
     aparelhos.value = await aparelhoApi.getByAppId(props.id);
     erroAparelhos.value = '';
   } catch {
     erroAparelhos.value = 'Não foi possível carregar os aparelhos.';
-  } finally {
-    carregandoAparelhos.value = false;
   }
 }
 
@@ -440,15 +435,13 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
          tentativas demais, com o Liberar — o app dono tem a mesma lista. -->
     <BloqueiosPanel v-if="app && app.usaLoginHub !== false" :app-id="id" />
 
-    <!-- Um aparelho por CPF (04/11/2026): quem está em qual aparelho, com Liberar. -->
-    <AparelhosPanel
-      v-if="app && app.usaLoginHub !== false"
-      :app-id="id"
-      :dados="aparelhos"
-      :carregando="carregandoAparelhos"
-      :erro="erroAparelhos"
-      @recarregar="carregarAparelhos"
-    />
+    <!-- O painel "Aparelhos conectados" saiu em 05/11/2026 (pedido do dono): o
+         aparelho de cada um aparece na linha do usuário e, com Liberar e o
+         histórico, na ficha de acesso (tocar no nome). -->
+
+    <p v-if="erroAparelhos" role="alert" class="rounded-celula bg-danger/10 p-3 text-subhead text-danger">
+      {{ erroAparelhos }} A linha do aparelho de cada usuário pode estar faltando.
+    </p>
 
     <UiSection titulo="Usuários" lista>
       <template #acao>

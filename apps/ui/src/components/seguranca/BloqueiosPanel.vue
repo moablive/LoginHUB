@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { ArrowPathIcon, GlobeAltIcon, LockOpenIcon, ShieldExclamationIcon, UserIcon } from '@heroicons/vue/24/outline';
+import { ArrowPathIcon, GlobeAltIcon, LockOpenIcon, ShieldExclamationIcon, TrashIcon, UserIcon } from '@heroicons/vue/24/outline';
 import { bloqueioApi } from '@loginhub/api-client';
 import type { LoginBloqueio } from '@loginhub/schema';
 import UiSection from '@/components/ui/UiSection.vue';
@@ -25,6 +25,9 @@ const erro = ref('');
 const liberando = ref<number | null>(null);
 // Confirmação no alerta do painel, no lugar do window.confirm de antes.
 const aLiberar = ref<LoginBloqueio | null>(null);
+// Excluir da lista uma linha já liberada (05/11/2026, pedido do dono).
+const aExcluir = ref<LoginBloqueio | null>(null);
+const excluindo = ref(false);
 
 function quando(iso: string | null): string {
   if (!iso) return '';
@@ -74,6 +77,21 @@ async function liberar() {
   } finally {
     liberando.value = null;
     aLiberar.value = null;
+  }
+}
+
+async function excluir() {
+  const b = aExcluir.value;
+  if (!b || !props.appId) return;
+  excluindo.value = true;
+  try {
+    await bloqueioApi.excluir(b.id, 'painel do hub', props.appId);
+    await carregar();
+  } catch {
+    erro.value = 'Não foi possível excluir da lista.';
+  } finally {
+    excluindo.value = false;
+    aExcluir.value = null;
   }
 }
 </script>
@@ -147,6 +165,10 @@ async function liberar() {
         <UserIcon v-else class="h-5 w-5 shrink-0" />
         <p class="min-w-0 flex-1 truncate font-mono text-subhead line-through">{{ b.alvo }}</p>
         <p class="shrink-0 text-footnote">liberado {{ quando(b.liberadoEm) }}{{ b.liberadoPor ? ` por ${b.liberadoPor}` : '' }}</p>
+        <UiButton variante="plain" tamanho="small" :aria-label="`Excluir ${b.alvo} da lista`" @click="aExcluir = b">
+          <TrashIcon class="h-4 w-4 text-danger" />
+          <span class="text-danger">Excluir</span>
+        </UiButton>
       </div>
     </template>
   </UiSection>
@@ -162,5 +184,18 @@ async function liberar() {
     texto-carregando="Liberando…"
     @fechar="aLiberar = null"
     @confirmar="liberar"
+  />
+
+  <UiAlert
+    :aberto="!!aExcluir"
+    tom="danger"
+    :icone="TrashIcon"
+    :titulo="aExcluir ? `Excluir ${quem(aExcluir)} da lista?` : ''"
+    mensagem="Some da lista de liberados. Não muda nada no acesso: ele já está liberado."
+    confirmar="Excluir"
+    :carregando="excluindo"
+    texto-carregando="Excluindo…"
+    @fechar="aExcluir = null"
+    @confirmar="excluir"
   />
 </template>
