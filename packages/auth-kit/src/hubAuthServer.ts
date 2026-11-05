@@ -39,6 +39,8 @@ export interface HubSession {
     role?: string;
     iat?: number;
     exp?: number;
+    /** Aparelho da sessão (conta de CPF). Desde 05/11/2026 a revogação é por aparelho. */
+    apa?: string;
 }
 
 /** Erro com status HTTP e código estável — a mensagem pode mudar, o código não. */
@@ -220,12 +222,18 @@ export function criarVerificadorDeRevogacao(config: RevogacaoConfig) {
     /** Consultas em voo por usuário — evita N chamadas para a mesma resposta. */
     const emVoo = new Map<string, Promise<number | null>>();
 
-    async function buscarPiso(token: string, sub: string): Promise<number | null> {
+    /**
+     * `chave` = usuário + aparelho (05/11/2026): conta de CPF tem duas vagas
+     * (celular e computador) e o hub responde o piso POR APARELHO — soltar uma
+     * vaga revoga só o token daquele aparelho. Guardar por usuário só faria o
+     * "revogado" de um aparelho derrubar o outro.
+     */
+    async function buscarPiso(token: string, chave: string): Promise<number | null> {
         const agora = Date.now();
-        const guardado = cache.get(sub);
+        const guardado = cache.get(chave);
         if (guardado && guardado.expiraEm > agora) return guardado.piso;
 
-        const jaEmVoo = emVoo.get(sub);
+        const jaEmVoo = emVoo.get(chave);
         if (jaEmVoo) return jaEmVoo;
 
         const promessa = (async () => {
@@ -236,17 +244,20 @@ export function criarVerificadorDeRevogacao(config: RevogacaoConfig) {
                 if (!res.ok) return null;
                 const corpo = (await res.json()) as { piso?: string | null };
                 const piso = corpo.piso ? Math.floor(new Date(corpo.piso).getTime() / 1000) : null;
-                cache.set(sub, { piso, expiraEm: Date.now() + ttl });
+                // Uma entrada por usuário+aparelho: expurga as vencidas de vez em
+                // quando, para o cache não crescer sem fim (parecer do Conselho).
+                if (cache.size > 500) for (const [k, v] of cache) if (v.expiraEm <= Date.now()) cache.delete(k);
+                cache.set(chave, { piso, expiraEm: Date.now() + ttl });
                 return piso;
             } catch {
                 // Falha aberta — ver o comentário acima.
                 return null;
             } finally {
-                emVoo.delete(sub);
+                emVoo.delete(chave);
             }
         })();
 
-        emVoo.set(sub, promessa);
+        emVoo.set(chave, promessa);
         return promessa;
     }
 
@@ -260,14 +271,14 @@ export function criarVerificadorDeRevogacao(config: RevogacaoConfig) {
          */
         async revogada(token: string, sessao: HubSession): Promise<boolean> {
             if (!sessao.sub || !sessao.iat) return false;
-            const piso = await buscarPiso(token, String(sessao.sub));
+            const piso = await buscarPiso(token, `${sessao.sub}|${sessao.apa ?? ''}`);
             return piso !== null && sessao.iat < piso;
         },
 
         /** Esquece o piso guardado — use depois de ativar 2FA no próprio app. */
         invalidarCache(sub?: string | number) {
             if (sub === undefined) cache.clear();
-            else cache.delete(String(sub));
+            else for (const chave of [...cache.keys()]) if (chave.startsWith(`${sub}|`)) cache.delete(chave);
         },
     };
 }

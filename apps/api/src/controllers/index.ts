@@ -50,7 +50,14 @@ export class AuthController {
             const appIdNum = Number(app_id) || 0;
             if (await bloqueioService.estaBloqueado(appIdNum, ip, email)) return responderBloqueado(res);
 
-            const result = await authService.login({ email, password, app_id, aparelho_id, aparelho_nome }, ip);
+            // Vaga celular/computador (05/11/2026): o hub decide pelo navegador.
+            const ua = req.get('user-agent');
+            const mobile = req.get('sec-ch-ua-mobile');
+            const navegador: { userAgent?: string; mobile?: string } = {
+                ...(ua ? { userAgent: ua } : {}),
+                ...(mobile ? { mobile } : {}),
+            };
+            const result = await authService.login({ email, password, app_id, aparelho_id, aparelho_nome }, ip, navegador);
             await bloqueioService.registrarSucesso(appIdNum, ip, email);
             return res.status(200).json(result);
 
@@ -268,7 +275,7 @@ const verificarComListaNegra = async (
  * bateu — o que impede é o outro aparelho, e o app mostra o nome dele para a
  * pessoa saber onde sair (ou pedir ao escritório o "Liberar").
  */
-const responderAparelho = (res: Response, erro: Error & { aparelhoNome?: string | null }) => {
+const responderAparelho = (res: Response, erro: Error & { aparelhoNome?: string | null; tipo?: string }) => {
     if (erro.message === 'APARELHO_DESCONHECIDO') {
         return res.status(409).json({
             error: 'APARELHO_DESCONHECIDO',
@@ -276,10 +283,13 @@ const responderAparelho = (res: Response, erro: Error & { aparelhoNome?: string 
         });
     }
     const onde = erro.aparelhoNome ? ` (${erro.aparelhoNome})` : '';
+    // Duas vagas (05/11/2026): a mensagem diz qual está ocupada.
+    const vaga = erro.tipo === 'computador' ? 'computador' : erro.tipo === 'celular' ? 'celular' : 'aparelho';
     return res.status(409).json({
         error: 'APARELHO_EM_USO',
         aparelhoNome: erro.aparelhoNome ?? null,
-        message: `Este CPF já está conectado em outro aparelho${onde}. Saia nele ou peça ao escritório para liberar.`,
+        tipo: erro.tipo ?? null,
+        message: `Este CPF já está conectado em outro ${vaga}${onde}. Saia nele ou peça ao escritório para liberar.`,
     });
 };
 
@@ -865,7 +875,7 @@ export class AparelhoController {
         }
     }
 
-    /** POST /admin/aparelhos/:usuarioId/liberar — corpo `{ por, app_id }`. Solta a conta e derruba as sessões dela. */
+    /** POST /admin/aparelhos/:usuarioId/liberar — corpo `{ por, app_id, tipo? }`. Solta a vaga (`celular`/`computador`) ou, sem `tipo`, as duas. */
     static async liberar(req: Request<{ usuarioId: string }>, res: Response) {
         try {
             const usuarioId = Number(req.params.usuarioId);
@@ -874,7 +884,11 @@ export class AparelhoController {
             // app_id obrigatório (parecer do Conselho): amarra a liberação ao app dono.
             const appId = Number(req.body?.app_id);
             if (!Number.isInteger(appId) || appId <= 0) return res.status(400).json({ error: 'app_id obrigatório.' });
-            await aparelhoService.liberar(usuarioId, appId, por);
+            const tipoBruto = req.body?.tipo;
+            if (tipoBruto !== undefined && tipoBruto !== null && tipoBruto !== 'celular' && tipoBruto !== 'computador') {
+                return res.status(400).json({ error: 'tipo deve ser celular ou computador.' });
+            }
+            await aparelhoService.liberar(usuarioId, appId, por, tipoBruto ?? undefined);
             return res.status(200).json({ ok: true });
         } catch (err) {
             if ((err as Error).message === 'APARELHO_NAO_ENCONTRADO') {

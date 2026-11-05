@@ -684,6 +684,23 @@ Quem está barrado recebe `423 { error: "ACESSO_BLOQUEADO" }` no `/auth/login` e
 
 No painel do hub a lista aparece na página de usuários de cada app (`BloqueiosPanel`): bloqueados com o botão Liberar, quem está errando sem ter travado e os liberados dos últimos 30 dias.
 
+#### Celular + computador por CPF (05/11/2026)
+
+Pedido do dono da Sul: a regra de 04/11 (abaixo) passa a ter **duas vagas por conta de CPF**, um **celular** e um **computador** (`db/008_aparelho_por_tipo.sql`, chave `(usuario_id, tipo)`).
+
+- **Quem decide a vaga é o hub**, pelo navegador que fez o `POST /auth/login`: `Sec-CH-UA-Mobile` primeiro, depois o User-Agent (Android, iPhone, iPad, `SulRastreadorApp/` → celular; Windows, Mac, Linux, ChromeOS → computador; sem informação → celular). O nome que o app manda é só para leitura. A vaga viaja assinada no desafio do 2FA (`apt`).
+- Outro aparelho **do mesmo tipo** → `409 APARELHO_EM_USO` com `tipo` e a mensagem "Este CPF já está conectado em outro celular/computador (…)".
+- **PC compartilhado:** quando um login completa num aparelho, a vaga de qualquer OUTRA conta presa a esse mesmo aparelho é solta (registro `saiu`, "outro CPF entrou neste aparelho") — o app guarda uma sessão por navegador, a do anterior já foi substituída ali.
+- **Computador parado há mais de 12 h** (`COMPUTADOR_EXPIRA_HORAS`): a vaga vale como livre e o próximo login de outro computador assume (registro `saiu` do anterior). Celular não expira.
+- **Revogação por aparelho:** Sair, Liberar e PC compartilhado soltam só a vaga daquele aparelho. O `GET /auth/session-floor` responde "piso = agora" para o token cujo `apa` perdeu a vaga, e o `criarVerificadorDeRevogacao` do kit guarda o piso por **usuário + aparelho** — o outro aparelho não cai. O piso da conta inteira só é carimbado quando o Liberar deixa a conta sem vaga nenhuma.
+- O `authMiddleware` do hub também recusa (`401 SESSAO_REVOGADA`) o token de CPF cujo `apa` perdeu a vaga.
+- PC compartilhado só solta vaga do **mesmo app e mesma vaga** (o id do aparelho vem do cliente). Ao prender, a linha do mesmo aparelho na OUTRA vaga da própria conta sai. Sair na **última** vaga carimba o piso da conta (tokens sem `apa` da transição não voltam a renovar).
+- Id do aparelho: 16 a 64 caracteres `[A-Za-z0-9_-]` (o app manda UUID). iPad: o Safari do iPadOS se anuncia como Mac; o nome mandado pelo app (`iPad · …`) só pode puxar para celular, nunca dar um computador.
+- `POST /admin/aparelhos/:usuarioId/liberar` aceita `tipo` (`celular`/`computador`); sem ele, solta as duas.
+- `GET /admin/apps/:id/aparelhos`: cada preso traz `tipo` e `expirado`; cada evento do registro traz `tipo`.
+- Painel: a ficha do funcionário mostra as duas vagas, cada uma com o próprio Liberar; a lista mostra 📱/💻.
+- No Sistema Sul, o computador sai sozinho depois de 30 min parado (só conta de CPF; celular e Rastreador ficam de fora).
+
 #### Um aparelho por conta de CPF (04/11/2026)
 
 Pedido do dono da Sul Alimentos: conta de **CPF** (11 dígitos no lugar do e-mail) só fica logada em **um aparelho**, e todo login fica registrado com o **nome do aparelho e o IP** (`db/007_login_aparelhos.sql`, `packages/services/src/AparelhoService.ts`).

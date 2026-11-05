@@ -537,10 +537,12 @@ export const aparelhoApi = {
     });
     return data;
   },
-  liberar: async (usuarioId: number | string, por: string, appId?: string): Promise<void> => {
+  /** `tipo`: solta só a vaga do celular ou do computador; sem ele, as duas. */
+  liberar: async (usuarioId: number | string, por: string, appId?: string, tipo?: 'celular' | 'computador'): Promise<void> => {
     await api.post(`/admin/aparelhos/${usuarioId}/liberar`, {
       por,
       ...(appId ? { app_id: Number(appId) } : {}),
+      ...(tipo ? { tipo } : {}),
     });
   },
 };

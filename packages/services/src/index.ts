@@ -7,7 +7,7 @@ import { aplicativos, usuarios, niveisAcesso, usuarios2fa, categorias } from '@l
 import { eq, and, ne, sql, asc, isNull } from 'drizzle-orm';
 import { emailService } from './EmailService';
 import { twoFactorService } from './TwoFactorService';
-import { aparelhoService } from './AparelhoService';
+import { aparelhoService, ehContaDeCpf } from './AparelhoService';
 
 export { TwoFactorService, twoFactorService } from './TwoFactorService';
 export { BloqueioService, bloqueioService, LIMITE_POR_IP, LIMITE_POR_CONTA } from './BloqueioService';
@@ -117,7 +117,7 @@ const emitirSessaoMaster = (masterKey: string): LoginResponseDTO => {
 // 1. AUTH SERVICE
 // ==========================================
 export class AuthService {
-    public async login(data: LoginInputDTO, ip: string | null = null): Promise<LoginResponseDTO | TwoFactorChallengeResponse | TwoFactorSetupRequiredResponse> {
+    public async login(data: LoginInputDTO, ip: string | null = null, navegador?: { userAgent?: string; mobile?: string }): Promise<LoginResponseDTO | TwoFactorChallengeResponse | TwoFactorSetupRequiredResponse> {
         // Mesmo e-mail pode existir em apps diferentes (unique composto).
         // Se o cliente passa app_id, filtra direto. Senão e houver ambiguidade, devolve a lista
         // de apps disponíveis para o cliente escolher.
@@ -193,7 +193,9 @@ export class AuthService {
 
         // Um aparelho por conta de CPF (04/11/2026): outro aparelho é recusado já
         // aqui, antes do 2FA — mas só o login completo prende (ver AparelhoService).
-        const aparelho = aparelhoService.normalizar(data.aparelho_id, data.aparelho_nome, ip);
+        // Duas vagas desde 05/11/2026 (celular + computador): a vaga sai do
+        // navegador que fez o pedido, não do nome que o app manda.
+        const aparelho = aparelhoService.normalizar(data.aparelho_id, data.aparelho_nome, ip, aparelhoService.tipoDe(navegador?.userAgent, navegador?.mobile, data.aparelho_nome));
         await aparelhoService.conferir(user, aparelho);
 
         // Senha conferiu — mas isso pode não bastar.
@@ -308,7 +310,7 @@ export class AuthService {
         const challengeToken = jwt.sign(
             // O aparelho viaja assinado no desafio: quem conclui o 2FA é o mesmo
             // que passou da senha, e é ele que fica preso à conta.
-            { sub: usuarioId, app_id: appId, action: '2fa-challenge', apa: aparelho?.id ?? undefined, apn: aparelho?.nome ?? undefined },
+            { sub: usuarioId, app_id: appId, action: '2fa-challenge', apa: aparelho?.id ?? undefined, apn: aparelho?.nome ?? undefined, apt: aparelho?.tipo },
             jwtSecret,
             { expiresIn: CHALLENGE_TTL_SEGUNDOS },
         );
@@ -429,7 +431,7 @@ export class AuthService {
             throw new Error('ERRO_INTERNO');
         }
 
-        let decoded: { sub?: string; action?: string; apa?: string; apn?: string };
+        let decoded: { sub?: string; action?: string; apa?: string; apn?: string; apt?: string };
         try {
             decoded = jwt.verify(challengeToken, jwtSecret) as typeof decoded;
         } catch {
@@ -468,7 +470,9 @@ export class AuthService {
 
         // Login completo: aqui o aparelho fica preso à conta de CPF (ou é recusado,
         // se outro concluiu o login entre a senha e o código).
-        const aparelho = aparelhoService.normalizar(decoded.apa, decoded.apn, ip);
+        // A vaga veio assinada no desafio (`apt`); desafio sem ela (de antes de
+        // 05/11/2026, vive 5 min) conta como celular.
+        const aparelho = aparelhoService.normalizar(decoded.apa, decoded.apn, ip, decoded.apt === 'computador' ? 'computador' : 'celular');
         await aparelhoService.conferir(user, aparelho);
         return this.emitirSessao(user, 86400, await aparelhoService.prender(user, aparelho));
     }
@@ -526,6 +530,13 @@ export class AuthService {
             .limit(1);
 
         const piso = rows[0]?.sessoesValidasDesde ?? null;
+        // Revogação por aparelho (05/11/2026): conta de CPF com duas vagas —
+        // soltar uma (Sair, Liberar, outro CPF no mesmo PC) não pode derrubar a
+        // outra, então o piso da conta não serve. Token cujo aparelho perdeu a
+        // vaga recebe "piso = agora" (o kit guarda o piso por usuário+aparelho).
+        if (decoded.apa && ehContaDeCpf(decoded.email) && !(await aparelhoService.vinculoExiste(Number(decoded.sub), decoded.apa))) {
+            return { sub: String(decoded.sub), piso: new Date().toISOString() };
+        }
         return { sub: String(decoded.sub), piso: piso ? piso.toISOString() : null };
     }
 

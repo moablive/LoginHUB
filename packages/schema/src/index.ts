@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { pgTable, serial, varchar, integer, timestamp, boolean, text, unique } from 'drizzle-orm/pg-core';
+import { pgTable, serial, varchar, integer, timestamp, boolean, text, unique, primaryKey } from 'drizzle-orm/pg-core';
 
 // ==========================================
 // USER MODELS
@@ -73,9 +73,14 @@ export interface LoginInputDTO {
 }
 
 /** Aparelho de um login, já limpo (ver `AparelhoService.normalizar`). */
+/** Vaga do aparelho (05/11/2026): cada conta de CPF tem um celular e um computador. */
+export type TipoAparelho = 'celular' | 'computador';
+
 export interface AparelhoDoLogin {
     id: string | null;
     nome: string | null;
+    /** Decidido pelo hub a partir do navegador (User-Agent / Sec-CH-UA-Mobile). */
+    tipo: TipoAparelho;
     ip: string | null;
 }
 
@@ -596,14 +601,16 @@ export interface LoginBloqueio {
  * logout feito nele ou no "Liberar" do app.
  */
 export const usuariosAparelho = pgTable('usuarios_aparelho', {
-    usuarioId: integer('usuario_id').primaryKey().references(() => usuarios.id, { onDelete: 'cascade' }),
+    usuarioId: integer('usuario_id').notNull().references(() => usuarios.id, { onDelete: 'cascade' }),
+    /** 'celular' | 'computador' — uma vaga de cada por conta (db/008). */
+    tipo: varchar('tipo', { length: 12 }).notNull().default('celular'),
     appId: integer('app_id').notNull().default(0),
     aparelhoId: varchar('aparelho_id', { length: 64 }).notNull(),
     aparelhoNome: varchar('aparelho_nome', { length: 255 }),
     ip: varchar('ip', { length: 64 }),
     desde: timestamp('desde').defaultNow().notNull(),
     ultimoAcesso: timestamp('ultimo_acesso').defaultNow().notNull(),
-});
+}, (t) => [primaryKey({ columns: [t.usuarioId, t.tipo] })]);
 
 /** Registro dos logins por aparelho: entrou, recusado, saiu, liberado. */
 export const loginAparelhos = pgTable('login_aparelhos', {
@@ -615,6 +622,8 @@ export const loginAparelhos = pgTable('login_aparelhos', {
     evento: varchar('evento', { length: 20 }).notNull(),
     aparelhoId: varchar('aparelho_id', { length: 64 }),
     aparelhoNome: varchar('aparelho_nome', { length: 255 }),
+    /** 'celular' | 'computador' (db/008); nulo nos eventos de antes de 05/11/2026. */
+    tipo: varchar('tipo', { length: 12 }),
     ip: varchar('ip', { length: 64 }),
     detalhe: varchar('detalhe', { length: 255 }),
     criadoEm: timestamp('criado_em').defaultNow().notNull(),
@@ -628,10 +637,13 @@ export interface AparelhosDoApp {
         usuarioId: number;
         nome: string;
         conta: string;
+        tipo: TipoAparelho;
         aparelhoNome: string | null;
         ip: string | null;
         desde: string;
         ultimoAcesso: string;
+        /** Computador parado há mais de 12 h: a vaga vale como livre no próximo login. */
+        expirado: boolean;
     }>;
     registro: Array<{
         id: number;
@@ -639,6 +651,7 @@ export interface AparelhosDoApp {
         nome: string | null;
         conta: string | null;
         evento: LoginAparelhoEvento;
+        tipo: TipoAparelho | null;
         aparelhoNome: string | null;
         ip: string | null;
         detalhe: string | null;

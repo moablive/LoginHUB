@@ -99,3 +99,6 @@ pids/
 .env
 .env.*
 !.env.example
+
+# Cache incremental do tsc (05/11/2026)
+*.tsbuildinfo

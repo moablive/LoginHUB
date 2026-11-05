@@ -4,13 +4,14 @@ import { db } from '@loginhub/database';
 import {
     aplicativos,
     usuarios2fa,
+    usuariosAparelho,
     JWTPayload,
     MASTER_LOGIN_EMAIL,
     MASTER_SUB,
     masterKeyFingerprint,
     masterKeyDoAmbiente
 } from '@loginhub/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import cors, { CorsOptions } from 'cors';
 import client from 'prom-client';
 
@@ -193,7 +194,9 @@ export const criarAuthMiddleware = (acoesPermitidas: readonly string[] = []): Re
         }
 
         // As duas checagens são independentes — uma ida só ao banco.
-        const [appRows, doisFatoresRows] = await Promise.all([
+        // Conta de CPF com aparelho no token: a vaga também é conferida (05/11/2026).
+        const confereVaga = !!decoded.apa && /^\d{11}$/.test(String(decoded.email ?? ''));
+        const [appRows, doisFatoresRows, vagaRows] = await Promise.all([
             db.select({ status: aplicativos.status })
               .from(aplicativos)
               .where(eq(aplicativos.id, Number(decoded.app_id))),
@@ -201,6 +204,11 @@ export const criarAuthMiddleware = (acoesPermitidas: readonly string[] = []): Re
               .from(usuarios2fa)
               .where(eq(usuarios2fa.usuarioId, Number(decoded.sub)))
               .limit(1),
+            confereVaga
+              ? db.select({ u: usuariosAparelho.usuarioId }).from(usuariosAparelho)
+                  .where(and(eq(usuariosAparelho.usuarioId, Number(decoded.sub)), eq(usuariosAparelho.aparelhoId, String(decoded.apa))))
+                  .limit(1)
+              : Promise.resolve([{ u: 0 }]),
         ]);
 
         const app = appRows[0];
@@ -228,6 +236,17 @@ export const criarAuthMiddleware = (acoesPermitidas: readonly string[] = []): Re
             return res.status(401).json({
                 error: 'SESSAO_REVOGADA',
                 message: 'Sessão encerrada por alteração de segurança. Faça login novamente.',
+            });
+        }
+
+        // Revogação por aparelho (05/11/2026): conta de CPF tem duas vagas
+        // (celular e computador). Sair, Liberar ou outro CPF no mesmo PC soltam
+        // só a vaga daquele aparelho, sem carimbar o piso da conta — então o
+        // token cujo aparelho perdeu a vaga é recusado aqui (parecer do Conselho).
+        if (!vagaRows[0]) {
+            return res.status(401).json({
+                error: 'SESSAO_REVOGADA',
+                message: 'Este aparelho foi desconectado da conta. Faça login novamente.',
             });
         }
 

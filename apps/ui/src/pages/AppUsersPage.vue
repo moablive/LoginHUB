@@ -100,7 +100,12 @@ function mostrarLinkManual(title: string, magicLinkToken: string) {
 // Carregados à parte: hub sem a rota (ou fora do ar) não trava a lista.
 const aparelhos = ref<AparelhosDoApp>({ presos: [], registro: [] });
 const erroAparelhos = ref('');
-const aparelhoDe = computed(() => new Map(aparelhos.value.presos.map((p) => [String(p.usuarioId), p])));
+// Vagas presas de cada usuário (05/11/2026: até duas — celular e computador).
+const aparelhoDe = computed(() => {
+  const m = new Map<string, AparelhosDoApp['presos']>();
+  for (const p of aparelhos.value.presos) m.set(String(p.usuarioId), [...(m.get(String(p.usuarioId)) ?? []), p]);
+  return m;
+});
 // Último "entrou" de cada um (o registro vem do mais novo ao mais velho): é o
 // que aparece para quem não tem aparelho preso — conta de e-mail, ou CPF que saiu.
 const ultimoLoginDe = computed(() => {
@@ -114,8 +119,11 @@ const ultimoLoginDe = computed(() => {
 const userAcesso = ref<User | null>(null);
 
 function ondeEsta(u: User): { texto: string; ip: string | null; conectado: boolean } | null {
-  const p = aparelhoDe.value.get(String(u.id));
-  if (p) return { texto: p.aparelhoNome || 'aparelho sem nome', ip: p.ip, conectado: true };
+  const vagas = aparelhoDe.value.get(String(u.id));
+  if (vagas?.length) {
+    const texto = vagas.map((p) => `${p.tipo === 'computador' ? '💻' : '📱'} ${p.aparelhoNome || 'aparelho sem nome'}`).join('  ·  ');
+    return { texto, ip: vagas.length === 1 ? (vagas[0]?.ip ?? null) : null, conectado: true };
+  }
   const r = ultimoLoginDe.value.get(String(u.id));
   if (r) return { texto: `último login ${quandoCurto(r.criadoEm)} · ${r.aparelhoNome || 'aparelho sem nome'}`, ip: r.ip, conectado: false };
   return null;
