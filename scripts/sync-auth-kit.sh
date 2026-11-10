@@ -27,10 +27,14 @@ BASE="/mnt/nvme2tb/docker-services"
 SERVER="$FONTE/hubAuthServer.ts"
 CLIENT="$FONTE/hubAuthClient.ts"
 BOT="$FONTE/hubAuthBot.ts"
+PASSKEY="$FONTE/hubPasskeyClient.ts"
 
 MODO="${1:-sync}"
 
-# destino_relativo_ao_BASE  |  arquivo_de_origem (server | client | bot)
+# destino_relativo_ao_BASE  |  arquivo_de_origem (server | client | bot | passkey)
+#
+# `passkey` (login por biometria, db/010_passkeys.sql) só vai para o app que tem
+# `aplicativos.webauthn_rp_id` no hub. Hoje: MoneyAPP.
 #
 # Os bots de Telegram recebem DOIS arquivos, no MESMO diretório: o `hubAuthBot`
 # é uma camada fina sobre o `hubAuthClient` e o importa por caminho relativo.
@@ -41,6 +45,7 @@ MODO="${1:-sync}"
 DESTINOS=$(cat <<'LISTA'
 projects/LifeBusinessSuit/LBS_MoneyAPP/apps/backend/src/lib/hubAuthServer.ts|server
 projects/LifeBusinessSuit/LBS_MoneyAPP/apps/frontend/src/lib/hubAuthClient.ts|client
+projects/LifeBusinessSuit/LBS_MoneyAPP/apps/frontend/src/lib/hubPasskeyClient.ts|passkey
 projects/LifeBusinessSuit/LBS_TodoAPP/apps/backend/src/lib/hubAuthServer.ts|server
 projects/LifeBusinessSuit/LBS_TodoAPP/apps/frontend/src/lib/hubAuthClient.ts|client
 projects/LifeBusinessSuit/LBS_NaoTeEsquece/apps/backend/src/lib/hubAuthServer.ts|server
@@ -75,6 +80,7 @@ for linha in $DESTINOS; do
     origem="$SERVER"
     [ "$tipo" = "client" ] && origem="$CLIENT"
     [ "$tipo" = "bot" ] && origem="$BOT"
+    [ "$tipo" = "passkey" ] && origem="$PASSKEY"
     destino="$BASE/$rel"
 
     if [ "$MODO" = "--check" ]; then

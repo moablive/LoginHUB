@@ -444,6 +444,17 @@ export const rateLimitVendaLeitura = criarRateLimit({
     chave: (req) => ipDoCliente(req as any),
 });
 
+/**
+ * Login por biometria (db/010). A assinatura da passkey não se adivinha por
+ * tentativa, então aqui o limite só segura abuso de volume, por IP real.
+ */
+export const rateLimitPasskey = criarRateLimit({
+    nome: 'passkey',
+    janelaMs: 5 * 60 * 1000,
+    max: 30,
+    chave: (req) => ipDoCliente(req as any),
+});
+
 // ==========================================
 // 4. CORS MIDDLEWARE
 // ==========================================

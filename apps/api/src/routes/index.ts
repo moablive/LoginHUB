@@ -9,6 +9,7 @@ import {
   AparelhoController
 } from '../controllers';
 import { VendaPublicaController, VendaAdminController } from '../controllers/assinaturas';
+import { PasskeyController } from '../controllers/passkeys';
 import {
   adminMiddleware,
   delegationMiddleware,
@@ -19,7 +20,8 @@ import {
   rateLimitGestao2FA,
   rateLimitStatus2FA,
   rateLimitCheckout,
-  rateLimitVendaLeitura
+  rateLimitVendaLeitura,
+  rateLimitPasskey
 } from '@loginhub/middlewares';
 
 export const mainRouter = Router();
@@ -80,6 +82,24 @@ twoFactorRouter.get('/backup-codes', ...gestao, TwoFactorController.backupCodes 
 twoFactorRouter.post('/backup-codes', ...gestao, TwoFactorController.backupCodes as any);
 
 authRouter.use('/2fa', twoFactorRouter);
+
+// -- Biometria (passkeys / WebAuthn; db/010_passkeys.sql)
+//
+//   login/*     → públicas. A credencial é a assinatura do aparelho sobre um
+//        desafio de uso único; com verificação do usuário exigida, ela vale por
+//        senha + segundo fator.
+//   registro/*  → exigem sessão de verdade: só cadastra biometria quem já
+//        entrou com senha + 2FA. Passe de etapa única não serve.
+const passkeyRouter = Router();
+passkeyRouter.get('/disponivel', rateLimitPasskey as any, PasskeyController.disponivel as any);
+passkeyRouter.post('/login/opcoes', rateLimitPasskey as any, PasskeyController.opcoesDeLogin as any);
+passkeyRouter.post('/login/verificar', rateLimitPasskey as any, PasskeyController.verificarLogin as any);
+passkeyRouter.post('/registro/opcoes', ...gestao, PasskeyController.opcoesDeRegistro as any);
+passkeyRouter.post('/registro/verificar', ...gestao, PasskeyController.verificarRegistro as any);
+passkeyRouter.get('/', authMiddleware as any, PasskeyController.listar as any);
+passkeyRouter.delete('/:id', ...gestao, PasskeyController.revogar as any);
+
+authRouter.use('/passkey', passkeyRouter);
 
 mainRouter.use('/auth', authRouter);
 

@@ -1,0 +1,6 @@
+# Riscos aceitos pelo dono (Regra 4 do Documento Ômega), um por linha, sempre com o motivo.
+
+# 10/11/2026 (ok do dono): o integrity sha512 do npm casa com o padrão "Twilio API Key" (SK…) — falso positivo, o
+# mesmo já aceito no Escritórios 3D e no OmegaShell. Apareceu com as dependências do @simplewebauthn/server
+# (@peculiar/asn1-schema e @peculiar/x509). Só sai da busca de segredos; os CVEs do manifesto continuam auditados.
+package-lock.json

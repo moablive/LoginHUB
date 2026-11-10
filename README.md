@@ -725,6 +725,32 @@ Pedido do dono da Sul Alimentos: conta de **CPF** (11 dígitos no lugar do e-mai
 - **Ficha de acesso no painel** (v1.1.8; desde a v1.1.9 é o único lugar, o painel "Aparelhos conectados" saiu): tocar no nome do usuário (em Usuários do app) abre onde ele está autenticado — o aparelho preso com IP, desde e último acesso, e o **Liberar** — ou, sem aparelho preso, o último login; embaixo, o histórico de logins dele (entrou/recusado/saiu/liberado). A lista mostra a mesma linha em todo usuário (verde = conectado, cinza = último login).
 - Contas de e-mail não são presas, mas desde a v1.1.8 o login completo delas também entra no registro (`entrou`, detalhe "conta de e-mail (não fica presa)"), para o painel mostrar onde todo membro está autenticado. O id é do **navegador**, não do hardware: limpar os dados do site, outro navegador, ou o iPhone com o Safari e o app da tela de início (armazenamentos separados) contam como outro aparelho.
 
+### 🫆 Login por biometria (`/auth/passkey/*`) — desde 10/11/2026
+
+Passkeys / WebAuthn (`db/010_passkeys.sql`, `packages/services/src/PasskeyService.ts`, biblioteca
+`@simplewebauthn/server`). A passkey com verificação do usuário (digital, rosto ou PIN do aparelho) **substitui senha +
+código do autenticador** e devolve a mesma sessão do login completo. Ligada por app em `aplicativos.webauthn_rp_id`
+(hoje só o MoneyAPP, `money.astralwavelabel.com`); a origem aceita é a da `platform_url`.
+
+| Rota | Quem | O que faz |
+|---|---|---|
+| `GET /auth/passkey/disponivel?app_id=` | público | O app tem biometria ligada? |
+| `POST /auth/passkey/login/opcoes` | público, 30 por 5 min por IP | Desafio de uso único (passe assinado de 5 min) |
+| `POST /auth/passkey/login/verificar` | público | Confere a assinatura e devolve a sessão |
+| `POST /auth/passkey/registro/opcoes` e `/registro/verificar` | **sessão completa** | Cadastra a biometria do aparelho |
+| `GET /auth/passkey`, `DELETE /auth/passkey/:id` | sessão completa | Lista e remove os aparelhos da própria conta |
+
+- Só cadastra quem já entrou com senha + 2FA. O desafio vale uma vez (o `jti` do passe é queimado).
+- Conta de CPF (Sul Alimentos) fica de fora por enquanto: é a fase F3 do plano.
+- `POST /admin/users/:id/reset-2fa` revoga também todas as passkeys da conta (perdeu o celular).
+- Cliente dos apps: `packages/auth-kit/src/hubPasskeyClient.ts`, sem dependência; o `sync-auth-kit.sh` leva só para
+  o app que tem `webauthn_rp_id`.
+- A API roda com `NODE_ENV=production`: **nunca** rode `npm install` dentro do container dela (tira as dependências
+  de desenvolvimento e o `ts-node-dev` some). Dependência nova entra pela imagem: `docker compose build
+  login-hub-api` e `up -d -V --force-recreate --no-deps login-hub-api`.
+
+Documento: "Projeto - LoginHUB ／ Plano Biometria (passkeys)", pasta 📦 Documentação do servidor do Drive.
+
 ### 💳 Venda por assinatura (`/venda/*` e `/admin/.../vendas`) — desde 10/11/2026
 
 O hub vende app por **assinatura mensal** (hoje o MoneyAPP, app 3): cartão automático no Mercado Pago, na conta

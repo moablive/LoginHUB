@@ -8,11 +8,13 @@ import { eq, and, ne, sql, asc, isNull } from 'drizzle-orm';
 import { emailService } from './EmailService';
 import { twoFactorService } from './TwoFactorService';
 import { aparelhoService, ehContaDeCpf } from './AparelhoService';
+import { passkeyService } from './PasskeyService';
 
 export { TwoFactorService, twoFactorService } from './TwoFactorService';
 export { BloqueioService, bloqueioService, LIMITE_POR_IP, LIMITE_POR_CONTA } from './BloqueioService';
 export { AparelhoService, aparelhoService, ehContaDeCpf } from './AparelhoService';
 export { AssinaturaService, assinaturaService, iniciarConferenciaDeAssinaturas } from './AssinaturaService';
+export { PasskeyService, passkeyService } from './PasskeyService';
 import {
     LoginInputDTO,
     AparelhoDoLogin,
@@ -1412,6 +1414,8 @@ export class UserService {
         }
 
         await twoFactorService.resetarPorAdmin(id);
+        // Quem perdeu o celular perdeu junto a biometria dele (db/010_passkeys.sql).
+        await passkeyService.revogarTodas(id);
     }
 
     public async updateUser(id: string, data: UpdateUserDTO) {

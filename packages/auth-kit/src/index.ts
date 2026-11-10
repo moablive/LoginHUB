@@ -8,6 +8,8 @@
  */
 export * from './hubAuthServer';
 export * from './hubAuthClient';
+// Login por biometria (passkeys): só vai para o app com `webauthn_rp_id` no hub.
+export * from './hubPasskeyClient';
 
 // Nomeados, e não `export *`: o `hubAuthBot` reexporta `HubApiError` e os tipos
 // do cliente para que um bot importe de um lugar só, e duas estrelas exportando

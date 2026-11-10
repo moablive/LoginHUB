@@ -476,6 +476,9 @@ export const aplicativos = pgTable('aplicativos', {
     // cofre, e dali em diante quem autentica e a senha mestra, que e a chave de
     // criptografia e o hub nunca ve. Ver db/004_apps_sem_login_hub.sql.
     usaLoginHub: boolean('usa_login_hub').notNull().default(true),
+    // Domínio (rpId) das passkeys do app; NULL = sem login por biometria.
+    // Ver db/010_passkeys.sql e packages/services/src/PasskeyService.ts.
+    webauthnRpId: varchar('webauthn_rp_id', { length: 255 }),
     // Grupo do painel. NULL = "Sem categoria". Apagar a categoria devolve os
     // apps para NULL (ON DELETE SET NULL), nunca apaga app.
     categoriaId: integer('categoria_id').references(() => categorias.id, { onDelete: 'set null' }),
@@ -661,3 +664,6 @@ export interface AparelhosDoApp {
 
 // Venda de app por assinatura: planos, afiliados, assinantes (db/009_assinaturas_afiliados.sql).
 export * from './assinaturas';
+
+// Login por biometria: passkeys / WebAuthn (db/010_passkeys.sql).
+export * from './passkeys';
