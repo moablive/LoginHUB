@@ -1150,7 +1150,7 @@ Se o aplicativo cliente utilizar a biblioteca `@loginhub/api-client`, o intercep
 | `email` | `varchar(255)` | E-mail de contato do aplicativo. |
 | `telefone` | `varchar(20)` | Telefone de contato. |
 | `logo` | `text` | Imagem da logo em base64 (dataURL, auto-resized). |
-| `bot_url` | `varchar(500)` | Link do bot de suporte (Telegram, WhatsApp, etc.). |
+| `bot_url` | `varchar(500)` | Link do bot de suporte (Telegram, WhatsApp, etc.). Com ele preenchido, a lista de usuários do app mostra o ícone do Telegram em cada linha: aceso para quem o bot aceita, apagado para quem não. A regra de cada bot fica em `apps/ui/src/config/bots.ts` (app 8, `@astralwavelabel_bot`: só admin; sem regra, todo usuário ativo). |
 | `platform_url` | `varchar(500)` | Link da plataforma web/painel do cliente. |
 | `status` | `varchar(20)` | Estado do tenant: `'ativo'` ou `'inativo'`. |
 | `data_cadastro` | `timestamp` | Data de criação no sistema. |

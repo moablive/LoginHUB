@@ -24,6 +24,7 @@ import { ResetPasswordEmail } from '@/templates/emails';
 import { getAppIntegration } from '@/config/integrations';
 import { getAppLinks } from '@/config/appLinks';
 import { getProvisionedApp } from '@/config/provisioning';
+import { getBotRule, nomeDoBot } from '@/config/bots';
 import UiNavBar from '@/components/ui/UiNavBar.vue';
 import UiButton from '@/components/ui/UiButton.vue';
 import UiSection from '@/components/ui/UiSection.vue';
@@ -41,6 +42,7 @@ import BloqueiosPanel from '@/components/seguranca/BloqueiosPanel.vue';
 import AcessoUsuarioSheet from '@/components/seguranca/AcessoUsuarioSheet.vue';
 import CreateUserSheet from '@/components/users/CreateUserSheet.vue';
 import EditUserSheet from '@/components/users/EditUserSheet.vue';
+import TelegramIcon from '@/components/icons/TelegramIcon.vue';
 
 const props = defineProps<{ id: string }>();
 
@@ -64,7 +66,9 @@ const userToEdit = ref<User | null>(null);
 const userToReset = ref<User | null>(null);
 const userToReset2fa = ref<User | null>(null);
 const userParaStatus = ref<User | null>(null);
-// Folha de ações do celular: as cinco ações de uma linha não cabem na largura.
+// Folha de ações: tocar no usuário abre TODAS as opções dele juntas (desde
+// 10/11/2026 também no computador — antes só o ⋯ do celular a abria, e na
+// tabela as ações ficavam atrás da rolagem horizontal).
 const userAcoes = ref<User | null>(null);
 const isDeleting = ref(false);
 const isResetting = ref<string | null>(null);
@@ -261,6 +265,21 @@ const filtrados = computed(() => {
 const temIntegracao = computed(() => !!getAppIntegration(props.id));
 const temVinculo = computed(() => getAppLinks(props.id).length > 0);
 const ehDoRoster = (u: User) => !!rosterCfg.value && roster.value.has((u.email || '').toLowerCase());
+
+// --- bot de Telegram do app (10/11/2026) ---
+// O ícone só aparece se o app tem bot, e só ACENDE para quem o bot aceita: na
+// Astral Wave Label, admin; onde não há regra, todo usuário ativo.
+const botDoApp = computed(() => (app.value?.bot_url ? nomeDoBot(app.value.bot_url) : ''));
+const regraDoBot = computed(() => getBotRule(props.id));
+function temBot(u: User): boolean {
+  if (!botDoApp.value || u.status !== 'ativo') return false;
+  return !regraDoBot.value || regraDoBot.value.roles.includes(String(u.role));
+}
+function dicaDoBot(u: User): string {
+  if (temBot(u)) return `Tem acesso ao bot ${botDoApp.value}`;
+  if (u.status !== 'ativo') return `Sem acesso ao bot ${botDoApp.value}: conta bloqueada`;
+  return `Sem acesso ao bot ${botDoApp.value}: ${regraDoBot.value?.resumo ?? 'não liberado'}`;
+}
 
 // --- delete ---
 async function handleConfirmDelete() {
@@ -502,13 +521,13 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
           <button
             type="button"
             class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-fill text-headline font-semibold text-label-2"
-            :aria-label="`Onde ${user.nome} está autenticado`"
-            @click="userAcesso = user"
+            :aria-label="`Opções de ${user.nome}`"
+            @click="userAcoes = user"
           >
             {{ iniciais(user.nome) }}
           </button>
           <div class="min-w-0 flex-1">
-            <button type="button" class="block w-full min-w-0 text-left" :aria-label="`Onde ${user.nome} está autenticado`" @click="userAcesso = user">
+            <button type="button" class="block w-full min-w-0 text-left" :aria-label="`Opções de ${user.nome}`" @click="userAcoes = user">
               <span class="block truncate text-body font-medium">{{ user.nome }}</span>
               <span class="block truncate text-subhead text-label-2">{{ user.email }}</span>
               <span v-if="ondeEsta(user)" class="block truncate text-footnote" :class="ondeEsta(user)!.conectado ? 'text-success' : 'text-label-2'">
@@ -529,6 +548,10 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
               <UiBadge v-if="app?.usaLoginHub === false">2FA não se aplica</UiBadge>
               <UiBadge v-else-if="user.dois_fatores?.ativo" tom="success"><DevicePhoneMobileIcon class="h-3 w-3" /> 2FA</UiBadge>
               <UiBadge v-else tom="warning">2FA pendente</UiBadge>
+              <span v-if="botDoApp" class="inline-flex items-center" :title="dicaDoBot(user)">
+                <TelegramIcon class="h-5 w-5" :class="temBot(user) ? 'text-[#229ED9]' : 'text-label-3 opacity-50'" />
+                <span class="sr-only">{{ dicaDoBot(user) }}</span>
+              </span>
             </div>
           </div>
           <UiButton variante="plain" icone :aria-label="`Ações de ${user.nome}`" @click="userAcoes = user">
@@ -570,7 +593,7 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
                     <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-fill text-subhead font-semibold text-label-2">
                       {{ iniciais(user.nome) }}
                     </span>
-                    <button type="button" class="min-w-0 text-left" :title="`Ver onde ${user.nome} está autenticado`" @click="userAcesso = user">
+                    <button type="button" class="min-w-0 text-left" :title="`Abrir todas as opções de ${user.nome}`" @click="userAcoes = user">
                       <span class="block text-subhead font-medium hover:text-accent hover:underline">{{ user.nome }}</span>
                       <span class="block text-footnote text-label-2">{{ user.email }}</span>
                       <span v-if="ondeEsta(user)" class="block text-footnote" :class="ondeEsta(user)!.conectado ? 'text-success' : 'text-label-2'">
@@ -611,7 +634,12 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
                   </UiBadge>
                 </td>
                 <td class="whitespace-nowrap px-4 py-3">
-                  <div class="flex justify-end gap-1">
+                  <div class="flex items-center justify-end gap-1">
+                    <!-- Indicador, não botão: aceso só para quem o bot aceita. -->
+                    <span v-if="botDoApp" class="flex h-9 w-9 items-center justify-center" :title="dicaDoBot(user)">
+                      <TelegramIcon class="h-5 w-5" :class="temBot(user) ? 'text-[#229ED9]' : 'text-label-3 opacity-50'" />
+                      <span class="sr-only">{{ dicaDoBot(user) }}</span>
+                    </span>
                     <button
                       v-if="user.dois_fatores?.ativo"
                       type="button"
@@ -659,7 +687,7 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
       </template>
     </UiSection>
 
-    <!-- FOLHA DE AÇÕES (celular) -->
+    <!-- FOLHA DE AÇÕES: todas as opções do usuário juntas (celular e computador) -->
     <UiSheet :aberto="!!userAcoes" :titulo="userAcoes?.nome || ''" :subtitulo="userAcoes?.email" largura="sm" @fechar="userAcoes = null">
       <div v-if="userAcoes" class="space-y-6">
         <UiSection lista>
@@ -691,6 +719,19 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
               <LockOpenIcon v-else class="text-success" />
             </template>
           </UiRow>
+        </UiSection>
+        <UiSection v-if="botDoApp" lista>
+          <UiRow
+            :titulo="`Bot do Telegram ${botDoApp}`"
+            :subtitulo="temBot(userAcoes) ? 'Tem acesso' : dicaDoBot(userAcoes).replace(/^.*?: /, 'Sem acesso: ')"
+          >
+            <template #icone>
+              <TelegramIcon :class="temBot(userAcoes) ? 'text-[#229ED9]' : 'text-label-3 opacity-50'" />
+            </template>
+          </UiRow>
+          <p v-if="!temBot(userAcoes) && userAcoes.status === 'ativo' && regraDoBot" class="px-4 pb-3 text-footnote text-label-2">
+            {{ regraDoBot.comoLiberar }}
+          </p>
         </UiSection>
         <UiSection lista>
           <UiRow clicavel @click="acao((u) => (userToDelete = u))">
