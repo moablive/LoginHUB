@@ -559,15 +559,17 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
           </UiButton>
         </div>
 
-        <!-- desktop: tabela -->
+        <!-- desktop: tabela. Cabe na largura do painel (10/11/2026): a coluna do
+             nome fica com o que sobra e corta o texto comprido (o IPv6 do último
+             login empurrava as ações para fora, atrás da rolagem horizontal). -->
         <div class="hidden overflow-x-auto md:block">
-          <table class="min-w-full">
+          <table class="w-full">
             <thead>
               <tr class="text-left text-footnote font-medium text-label-2">
                 <th
                   v-for="c in COLUNAS"
                   :key="c.valor"
-                  class="px-2 py-1 font-medium"
+                  class="whitespace-nowrap px-1 py-1 font-medium first:px-2"
                   :aria-sort="ordem.coluna === c.valor ? (ordem.crescente ? 'ascending' : 'descending') : 'none'"
                 >
                   <button
@@ -588,25 +590,27 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
             </thead>
             <tbody class="divide-y border-t">
               <tr v-for="user in filtrados" :key="user.id" class="transition-colors hover:bg-fill-2">
-                <td class="whitespace-nowrap px-4 py-3">
+                <!-- `w-full max-w-0`: a célula pega a sobra da linha e não cresce
+                     com o conteúdo — é o que deixa o `truncate` de dentro valer. -->
+                <td class="w-full min-w-[240px] max-w-0 px-4 py-3">
                   <div class="flex items-center gap-3">
                     <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-fill text-subhead font-semibold text-label-2">
                       {{ iniciais(user.nome) }}
                     </span>
-                    <button type="button" class="min-w-0 text-left" :title="`Abrir todas as opções de ${user.nome}`" @click="userAcoes = user">
-                      <span class="block text-subhead font-medium hover:text-accent hover:underline">{{ user.nome }}</span>
-                      <span class="block text-footnote text-label-2">{{ user.email }}</span>
-                      <span v-if="ondeEsta(user)" class="block text-footnote" :class="ondeEsta(user)!.conectado ? 'text-success' : 'text-label-2'">
+                    <button type="button" class="min-w-0 flex-1 text-left" :title="`Abrir todas as opções de ${user.nome}`" @click="userAcoes = user">
+                      <span class="block truncate text-subhead font-medium hover:text-accent hover:underline">{{ user.nome }}</span>
+                      <span class="block truncate text-footnote text-label-2">{{ user.email }}</span>
+                      <span v-if="ondeEsta(user)" class="block truncate text-footnote" :class="ondeEsta(user)!.conectado ? 'text-success' : 'text-label-2'">
                         <DevicePhoneMobileIcon class="inline h-3.5 w-3.5" />
                         {{ ondeEsta(user)!.texto }}
                         <span v-if="ondeEsta(user)!.ip" class="font-mono"> · {{ ondeEsta(user)!.ip }}</span>
                       </span>
-                      <span v-else class="block text-footnote text-label-3">sem login no registro</span>
+                      <span v-else class="block truncate text-footnote text-label-3">sem login no registro</span>
                     </button>
                   </div>
                 </td>
-                <td class="whitespace-nowrap px-4 py-3">
-                  <div class="flex flex-wrap items-center gap-1.5">
+                <td class="whitespace-nowrap px-3 py-3">
+                  <div class="flex items-center gap-1.5">
                     <UiBadge v-if="user.role === 'admin'" tom="indigo"><ShieldCheckIcon class="h-3 w-3" /> Admin</UiBadge>
                     <UiBadge v-else-if="user.role === 'operador'" tom="warning">Operador</UiBadge>
                     <UiBadge v-else-if="user.role === 'motorista'" tom="accent">Motorista</UiBadge>
@@ -614,15 +618,15 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
                     <UiBadge v-if="ehDoRoster(user)" tom="accent">{{ rosterCfg?.label }}</UiBadge>
                   </div>
                 </td>
-                <td class="whitespace-nowrap px-4 py-3 text-subhead text-label-2">{{ user.telefone || '—' }}</td>
-                <td class="whitespace-nowrap px-4 py-3">
+                <td class="whitespace-nowrap px-3 py-3 text-subhead text-label-2">{{ user.telefone || '—' }}</td>
+                <td class="whitespace-nowrap px-3 py-3">
                   <StatusButton
                     :status="user.status === 'ativo' ? 'ativo' : 'inativo'"
                     :nome="user.nome"
                     @alternar="handleToggleStatus(user)"
                   />
                 </td>
-                <td class="whitespace-nowrap px-4 py-3">
+                <td class="whitespace-nowrap px-3 py-3">
                   <!-- "Pendente" seria falso aqui: não há login no hub para cair
                        no enrolamento. Dizer "não se aplica" é o estado verdadeiro. -->
                   <UiBadge v-if="app?.usaLoginHub === false" title="Este app não autentica pelo LoginHUB — o hub só emitiu o convite.">
@@ -633,8 +637,8 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
                     Pendente
                   </UiBadge>
                 </td>
-                <td class="whitespace-nowrap px-4 py-3">
-                  <div class="flex items-center justify-end gap-1">
+                <td class="whitespace-nowrap py-3 pl-1 pr-3">
+                  <div class="flex items-center justify-end gap-0.5">
                     <!-- Indicador, não botão: aceso só para quem o bot aceita. -->
                     <span v-if="botDoApp" class="flex h-9 w-9 items-center justify-center" :title="dicaDoBot(user)">
                       <TelegramIcon class="h-5 w-5" :class="temBot(user) ? 'text-[#229ED9]' : 'text-label-3 opacity-50'" />
@@ -650,6 +654,9 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
                     >
                       <DevicePhoneMobileIcon class="h-5 w-5" />
                     </button>
+                    <!-- Sem 2FA ativo não há o que reiniciar; o vão mantém os ícones
+                         das outras linhas (e o do Telegram) na mesma coluna. -->
+                    <span v-else class="h-9 w-9" aria-hidden="true"></span>
                     <button
                       type="button"
                       class="flex h-9 w-9 items-center justify-center rounded-full text-label-2 hover:bg-warning/10 hover:text-warning disabled:opacity-40"
