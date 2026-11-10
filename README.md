@@ -761,6 +761,7 @@ da Astral Wave (`MP_ACCESS_TOKEN` no `.env`, a mesma da loja de tracks). Tabelas
 |---|---|---|
 | `GET /venda/apps/:appId/plano?ref=` | público | Preço do plano (e o nome do afiliado do `ref`) |
 | `POST /venda/apps/:appId/assinar` | público, 8 por 15 min por IP | Grava a assinatura `iniciada`, cria a assinatura pendente no Mercado Pago e devolve a página do cartão |
+| `POST /venda/apps/:appId/afiliados` | público, mesmo limite do checkout | Botão "link de afiliado" da página de venda: nome completo, WhatsApp, CPF e e-mail; cria o afiliado (`origem = 'pagina'`, `db/011`), manda o link por e-mail e devolve o link. Mesmo e-mail de novo devolve o link que já existia |
 | `GET /venda/assinaturas/:ref` | público | Estado do pedido; confere no Mercado Pago se ainda está `iniciada` |
 | `ALL /venda/webhook-mp` | Mercado Pago | Aviso; só dispara a conferência (o estado vem de consultar a API de lá) |
 | `GET /admin/apps/:id/vendas` | master | Plano, resumo, afiliados e assinantes |

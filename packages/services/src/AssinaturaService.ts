@@ -19,11 +19,14 @@ import type {
     ResumoVendas,
     IniciarAssinaturaDTO,
     IniciarAssinaturaResposta,
+    CadastroAfiliadoDTO,
+    CadastroAfiliadoResposta,
     ConfirmarAssinaturaResposta,
     StatusAssinatura,
 } from '@loginhub/schema';
 import { and, eq, ne, sql, inArray, isNull, isNotNull } from 'drizzle-orm';
 import { buildAssinaturaEmail } from './templates/assinaturaEmail';
+import { buildAfiliadoEmail } from './templates/afiliadoEmail';
 import { emailService } from './EmailService';
 
 /**
@@ -80,6 +83,32 @@ const normalizarCodigo = (v: string): string =>
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '')
         .slice(0, 40);
+
+// Dígitos verificadores do CPF e do CNPJ (só dígitos na entrada).
+const digitosRepetidos = (d: string) => /^(\d)\1+$/.test(d);
+
+const cpfValido = (d: string): boolean => {
+    if (d.length !== 11 || digitosRepetidos(d)) return false;
+    const digito = (ate: number) => {
+        let soma = 0;
+        for (let i = 0; i < ate; i++) soma += Number(d[i]) * (ate + 1 - i);
+        const resto = (soma * 10) % 11;
+        return resto === 10 ? 0 : resto;
+    };
+    return digito(9) === Number(d[9]) && digito(10) === Number(d[10]);
+};
+
+const cnpjValido = (d: string): boolean => {
+    if (d.length !== 14 || digitosRepetidos(d)) return false;
+    const digito = (ate: number) => {
+        const pesos = ate === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+        let soma = 0;
+        for (let i = 0; i < ate; i++) soma += Number(d[i]) * pesos[i]!;
+        const resto = soma % 11;
+        return resto < 2 ? 0 : 11 - resto;
+    };
+    return digito(12) === Number(d[12]) && digito(13) === Number(d[13]);
+};
 
 interface MpPreapproval {
     id: string;
@@ -161,7 +190,7 @@ export class AssinaturaService {
         if (!plano || !plano.ativo) throw erro('Este aplicativo não está à venda.', 'NOT_FOUND');
         const app = await this.app(Number(appId));
         const afiliado = ref ? await this.afiliadoPorCodigo(Number(appId), ref) : null;
-        return { app_id: app.id, app_nome: app.nome, valor: plano.valor, descricao: plano.descricao, afiliado: afiliado?.nome ?? null };
+        return { app_id: app.id, app_nome: app.nome, valor: plano.valor, descricao: plano.descricao, afiliado: afiliado?.nome ?? null, comissao_afiliado_pct: plano.comissao_padrao_pct };
     }
 
     // ------------------------------------------------------------ afiliados
@@ -211,6 +240,9 @@ export class AssinaturaService {
                 nome: a.nome,
                 email: a.email,
                 chave_pix: a.chavePix,
+                telefone: a.telefone,
+                documento: a.documento,
+                origem: a.origem,
                 codigo: a.codigo,
                 comissao_pct: a.comissaoPct === null ? null : num(a.comissaoPct),
                 comissao_efetiva_pct: a.comissaoPct === null ? padrao : num(a.comissaoPct),
@@ -223,6 +255,63 @@ export class AssinaturaService {
                 comissao_paga: num(s?.paga),
             };
         });
+    }
+
+    /**
+     * Cadastro de afiliado pela página de venda (público): a pessoa informa
+     * nome completo, WhatsApp, CPF e e-mail e já sai com o link dela, com a
+     * comissão padrão do plano. Quem repete o formulário com o mesmo e-mail
+     * recebe o link que já tinha — não nasce um segundo afiliado.
+     */
+    public async cadastrarAfiliado(appId: string, data: CadastroAfiliadoDTO): Promise<CadastroAfiliadoResposta> {
+        const plano = await this.plano(appId);
+        if (!plano || !plano.ativo) throw erro('Este aplicativo não está à venda.', 'NOT_FOUND');
+        const app = await this.app(Number(appId));
+        const base = (app.platformUrl || '').replace(/\/+$/, '');
+
+        const nome = String(data?.nome ?? '').trim().replace(/\s+/g, ' ').slice(0, 255);
+        const email = String(data?.email ?? '').trim().toLowerCase();
+        const telefone = String(data?.telefone ?? '').replace(/\D/g, '').slice(0, 20);
+        const documento = String(data?.documento ?? '').replace(/\D/g, '');
+        if (nome.split(' ').length < 2 || nome.length < 5) throw erro('Informe o seu nome completo.', 'VALIDATION');
+        if (!EMAIL_RE.test(email) || email.length > 255) throw erro('Informe um e-mail válido.', 'VALIDATION');
+        if (telefone.length < 10) throw erro('Informe o seu WhatsApp com DDD.', 'VALIDATION');
+        if (!(documento.length === 14 ? cnpjValido(documento) : cpfValido(documento))) throw erro('CPF inválido. Confira os números.', 'VALIDATION');
+
+        const link = (codigo: string) => `${base}/assine?ref=${encodeURIComponent(codigo)}`;
+        const existente = await db
+            .select()
+            .from(afiliados)
+            .where(and(eq(afiliados.appId, app.id), sql`lower(${afiliados.email}) = ${email}`))
+            .limit(1);
+        if (existente[0]) {
+            if (!existente[0].ativo) throw erro('Este cadastro de afiliado está desativado. Fale com o suporte.', 'VALIDATION');
+            const pct = existente[0].comissaoPct === null ? plano.comissao_padrao_pct : num(existente[0].comissaoPct);
+            return { codigo: existente[0].codigo, link: link(existente[0].codigo), comissao_pct: pct, ja_existia: true };
+        }
+
+        // Código do link: primeiro e último nome; se já houver, ganha um número.
+        const partes = nome.split(' ');
+        const raiz = normalizarCodigo(`${partes[0]} ${partes[partes.length - 1]}`).slice(0, 34) || 'afiliado';
+        let codigo = raiz;
+        for (let tentativa = 2; ; tentativa++) {
+            try {
+                await db.insert(afiliados).values({ appId: app.id, nome, email, telefone, documento, codigo, origem: 'pagina' });
+                break;
+            } catch (e: any) {
+                if (e.code !== '23505' || tentativa > 50) throw e;
+                codigo = `${raiz}-${tentativa}`;
+            }
+        }
+
+        const enviado = await emailService.sendEmail(
+            email,
+            `Seu link de afiliado do ${app.nome}`,
+            buildAfiliadoEmail({ appName: app.nome, appLogo: app.logo, nome, link: link(codigo), comissaoPct: plano.comissao_padrao_pct, valor: plano.valor }),
+            { appId: String(app.id), appNome: app.nome },
+        );
+        if (!enviado) console.error(`[AssinaturaService] E-mail do link de afiliado NÃO saiu para ${email}.`);
+        return { codigo, link: link(codigo), comissao_pct: plano.comissao_padrao_pct, ja_existia: false };
     }
 
     private lerAfiliado(data: SalvarAfiliadoDTO) {

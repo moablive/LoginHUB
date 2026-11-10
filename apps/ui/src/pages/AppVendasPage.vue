@@ -28,6 +28,7 @@ import UiAlert from '@/components/ui/UiAlert.vue';
 import UiBadge from '@/components/ui/UiBadge.vue';
 import UiEmpty from '@/components/ui/UiEmpty.vue';
 import UiSpinner from '@/components/ui/UiSpinner.vue';
+import { masks } from '@/utils/masks';
 
 /**
  * Venda do app por assinatura mensal (db/009_assinaturas_afiliados.sql): o
@@ -282,12 +283,19 @@ const acaoIcone = 'flex h-toque w-toque items-center justify-center rounded-full
               <p class="flex flex-wrap items-center gap-2 text-headline font-semibold">
                 <span class="truncate">{{ a.nome }}</span>
                 <UiBadge :tom="a.ativo ? 'success' : 'neutro'">{{ a.ativo ? 'Ativo' : 'Desativado' }}</UiBadge>
+                <UiBadge v-if="a.origem === 'pagina'" tom="indigo" title="A própria pessoa se cadastrou pela página de venda">Cadastro pela página</UiBadge>
                 <UiBadge tom="accent" :title="a.comissao_pct === null ? 'Comissão padrão do plano' : 'Comissão própria deste afiliado'">
                   {{ pct(a.comissao_efetiva_pct) }}{{ a.comissao_pct === null ? ' (padrão)' : '' }}
                 </UiBadge>
               </p>
               <p class="truncate text-footnote text-label-2">
                 {{ a.email || 'sem e-mail' }}<template v-if="a.chave_pix"> · Pix: {{ a.chave_pix }}</template>
+              </p>
+              <!-- Quem se cadastrou pela página de venda traz WhatsApp e CPF (db/011). -->
+              <p v-if="a.telefone || a.documento" class="truncate text-footnote text-label-2">
+                <template v-if="a.telefone">WhatsApp: {{ masks.phone(a.telefone) }}</template>
+                <template v-if="a.telefone && a.documento"> · </template>
+                <template v-if="a.documento">{{ a.documento.length === 14 ? 'CNPJ' : 'CPF' }}: {{ a.documento.length === 14 ? masks.cnpj(a.documento) : masks.cpf(a.documento) }}</template>
               </p>
             </div>
             <div class="flex items-center gap-1">

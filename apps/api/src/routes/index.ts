@@ -171,6 +171,8 @@ mainRouter.use('/admin', adminRouter);
 const vendaRouter = Router();
 vendaRouter.get('/apps/:appId/plano', rateLimitVendaLeitura as any, VendaPublicaController.plano as any);
 vendaRouter.post('/apps/:appId/assinar', rateLimitCheckout as any, VendaPublicaController.assinar as any);
+// Cadastro de afiliado pela página de venda (db/011): mesmo limite curto do checkout.
+vendaRouter.post('/apps/:appId/afiliados', rateLimitCheckout as any, VendaPublicaController.cadastrarAfiliado as any);
 vendaRouter.get('/assinaturas/:ref', rateLimitVendaLeitura as any, VendaPublicaController.confirmar as any);
 vendaRouter.all('/webhook-mp', VendaPublicaController.webhookMp as any);
 

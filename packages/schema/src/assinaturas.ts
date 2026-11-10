@@ -36,6 +36,8 @@ export interface PlanoPublico {
     descricao: string;
     /** Nome do afiliado quando o `?ref=` do link existe e está ativo. */
     afiliado?: string | null;
+    /** Comissão padrão de quem se cadastra como afiliado pela página (% de cada mensalidade). */
+    comissao_afiliado_pct: number;
 }
 
 export interface Afiliado {
@@ -44,6 +46,11 @@ export interface Afiliado {
     nome: string;
     email: string | null;
     chave_pix: string | null;
+    /** WhatsApp e CPF/CNPJ (só dígitos) de quem se cadastrou pela página. */
+    telefone: string | null;
+    documento: string | null;
+    /** 'painel' = criado pelo master; 'pagina' = a pessoa se cadastrou. */
+    origem: string;
     codigo: string;
     /** NULL = usa a comissão padrão do plano. */
     comissao_pct: number | null;
@@ -67,6 +74,22 @@ export interface SalvarAfiliadoDTO {
     codigo?: string;
     comissao_pct?: number | string | null;
     ativo?: boolean;
+}
+
+/** Formulário "link de afiliado" da página de venda (público). */
+export interface CadastroAfiliadoDTO {
+    nome: string;
+    email: string;
+    telefone: string;
+    documento: string;
+}
+
+export interface CadastroAfiliadoResposta {
+    codigo: string;
+    link: string;
+    comissao_pct: number;
+    /** O e-mail já era afiliado: devolvemos o link que ele já tinha. */
+    ja_existia: boolean;
 }
 
 export interface Assinatura {
@@ -138,6 +161,10 @@ export const afiliados = pgTable('afiliados', {
     comissaoPct: numeric('comissao_pct', { precision: 5, scale: 2 }),
     ativo: boolean('ativo').notNull().default(true),
     criadoEm: timestamp('criado_em').defaultNow(),
+    // Cadastro pela página de venda (db/011_afiliados_cadastro.sql).
+    telefone: varchar('telefone', { length: 20 }),
+    documento: varchar('documento', { length: 14 }),
+    origem: varchar('origem', { length: 10 }).notNull().default('painel'),
 });
 
 export const assinaturas = pgTable('assinaturas', {

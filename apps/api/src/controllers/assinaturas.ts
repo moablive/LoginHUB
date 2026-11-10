@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { assinaturaService } from '@loginhub/services';
-import { DbError, IniciarAssinaturaDTO, SalvarAfiliadoDTO, SalvarPlanoDTO } from '@loginhub/schema';
+import { CadastroAfiliadoDTO, DbError, IniciarAssinaturaDTO, SalvarAfiliadoDTO, SalvarPlanoDTO } from '@loginhub/schema';
 
 // ==========================================
 // VENDA DE APP POR ASSINATURA (db/009_assinaturas_afiliados.sql)
@@ -32,6 +32,16 @@ export class VendaPublicaController {
             return res.status(201).json(await assinaturaService.iniciar(req.params.appId, req.body ?? ({} as IniciarAssinaturaDTO)));
         } catch (err) {
             return responder(res, err, 'assinar');
+        }
+    }
+
+    /** Botão "link de afiliado" da página de venda: cadastra e devolve o link. */
+    static async cadastrarAfiliado(req: Request<{ appId: string }, {}, CadastroAfiliadoDTO>, res: Response) {
+        try {
+            const r = await assinaturaService.cadastrarAfiliado(req.params.appId, req.body ?? ({} as CadastroAfiliadoDTO));
+            return res.status(r.ja_existia ? 200 : 201).json(r);
+        } catch (err) {
+            return responder(res, err, 'cadastrarAfiliado');
         }
     }
 
