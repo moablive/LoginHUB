@@ -8,6 +8,7 @@ import {
   BloqueioController,
   AparelhoController
 } from '../controllers';
+import { VendaPublicaController, VendaAdminController } from '../controllers/assinaturas';
 import {
   adminMiddleware,
   delegationMiddleware,
@@ -16,7 +17,9 @@ import {
   rateLimitLogin,
   rateLimitVerificacao2FA,
   rateLimitGestao2FA,
-  rateLimitStatus2FA
+  rateLimitStatus2FA,
+  rateLimitCheckout,
+  rateLimitVendaLeitura
 } from '@loginhub/middlewares';
 
 export const mainRouter = Router();
@@ -125,4 +128,30 @@ adminRouter.post('/users/:id/reset-password', UserController.resetPassword as an
 adminRouter.post('/users/:id/reset-2fa', UserController.resetTwoFactor as any);
 adminRouter.delete('/users/:id', UserController.removeUser as any);
 
+// -- Venda por assinatura (10/11/2026; db/009_assinaturas_afiliados.sql):
+// preço do app, afiliados, assinantes e comissões.
+adminRouter.get('/apps/:id/vendas', VendaAdminController.painel as any);
+adminRouter.put('/apps/:id/plano', VendaAdminController.salvarPlano as any);
+adminRouter.post('/apps/:id/afiliados', VendaAdminController.criarAfiliado as any);
+adminRouter.put('/afiliados/:id', VendaAdminController.atualizarAfiliado as any);
+adminRouter.delete('/afiliados/:id', VendaAdminController.apagarAfiliado as any);
+adminRouter.post('/afiliados/:id/pagar-comissoes', VendaAdminController.pagarComissoes as any);
+adminRouter.post('/assinaturas/conferir', VendaAdminController.conferir as any);
+adminRouter.post('/assinaturas/:id/cancelar', VendaAdminController.cancelar as any);
+adminRouter.post('/assinaturas/:id/reenviar-acesso', VendaAdminController.reenviarAcesso as any);
+
 mainRouter.use('/admin', adminRouter);
+
+// ==========================================
+// 3. Venda pública (página de venda do app e aviso do Mercado Pago)
+// ==========================================
+// Sem sessão de propósito: quem compra ainda não tem conta. O que protege é o
+// limite por IP e o fato de nada aqui confiar no que o visitante manda — o
+// preço vem do banco e o estado da assinatura vem do Mercado Pago.
+const vendaRouter = Router();
+vendaRouter.get('/apps/:appId/plano', rateLimitVendaLeitura as any, VendaPublicaController.plano as any);
+vendaRouter.post('/apps/:appId/assinar', rateLimitCheckout as any, VendaPublicaController.assinar as any);
+vendaRouter.get('/assinaturas/:ref', rateLimitVendaLeitura as any, VendaPublicaController.confirmar as any);
+vendaRouter.all('/webhook-mp', VendaPublicaController.webhookMp as any);
+
+mainRouter.use('/venda', vendaRouter);

@@ -12,6 +12,7 @@ import { aparelhoService, ehContaDeCpf } from './AparelhoService';
 export { TwoFactorService, twoFactorService } from './TwoFactorService';
 export { BloqueioService, bloqueioService, LIMITE_POR_IP, LIMITE_POR_CONTA } from './BloqueioService';
 export { AparelhoService, aparelhoService, ehContaDeCpf } from './AparelhoService';
+export { AssinaturaService, assinaturaService, iniciarConferenciaDeAssinaturas } from './AssinaturaService';
 import {
     LoginInputDTO,
     AparelhoDoLogin,

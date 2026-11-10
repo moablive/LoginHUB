@@ -8,7 +8,16 @@ export interface MoneyAppInviteEmailProps {
   appLogo?: string | null;
 }
 
-/** Convite com a cara do MoneyAPP (tema escuro, verde). */
+/**
+ * Convite do MoneyAPP feito à mão pelo painel.
+ *
+ * Revisto em 10/11/2026 para ficar igual ao e-mail de quem assina
+ * (`packages/services/src/templates/assinaturaEmail.ts`): fundo claro (cliente
+ * de e-mail inverte tema escuro), tabela, logo com `height` em atributo, o
+ * aviso do Google Authenticator (o 2FA é obrigatório e o texto antigo não
+ * falava dele), o prazo de 24 horas do link, onde instalar o aplicativo e o
+ * bot do Telegram.
+ */
 export function MoneyAppInviteEmail({ email, magicLinkToken, loginUrl, botUrl, appLogo }: MoneyAppInviteEmailProps): string {
   // `platform_url` com barra final produzia `//setup-password`, e o Vue Router
   // dos apps NAO casa esse caminho: o nginx devolve o SPA (200, parece certo),
@@ -16,34 +25,61 @@ export function MoneyAppInviteEmail({ email, magicLinkToken, loginUrl, botUrl, a
   // em vez do formulario de senha. Metade dos apps tem a barra cadastrada.
   const base = (loginUrl || 'http://localhost:3006').replace(/\/+$/, '');
   const finalLoginUrl = magicLinkToken ? `${base}/setup-password?token=${magicLinkToken}` : loginUrl;
+  const semProtocolo = (url: string) => url.replace(/^https?:\/\//, '');
+
+  const passo = (numero: number, titulo: string, corpo: string) =>
+    '<tr>' +
+    '<td width="36" valign="top" style="padding:0 0 16px">' +
+    `<div style="width:26px;height:26px;line-height:26px;border-radius:13px;background:#111113;color:#c6f135;font-weight:bold;font-size:13px;text-align:center">${numero}</div>` +
+    '</td>' +
+    `<td valign="top" style="padding:2px 0 16px;color:#334155;font-size:14px;line-height:1.55"><strong style="color:#0f172a">${titulo}</strong><br/>${corpo}</td>` +
+    '</tr>';
 
   return (
-    '<div style="font-family:&quot;Inter&quot;, sans-serif;padding:20px;color:#e2e8f0;background-color:#0f172a">' +
-    '<div style="max-width:600px;margin:0 auto;border:1px solid #334155;border-radius:12px;padding:30px;background-color:#1e293b">' +
-    (appLogo
-      ? '<div style="text-align:center;margin-bottom:20px">' +
-        `<img src="${esc(appLogo)}" alt="Logo MoneyAPP" style="max-width:120px;max-height:120px;border-radius:8px"/>` +
-        '</div>'
-      : '') +
-    '<h2 style="color:#10b981;border-bottom:1px solid #334155;padding-bottom:15px;margin-top:0">Seu acesso ao MoneyAPP foi liberado!</h2>' +
-    '<p style="font-size:16px;line-height:1.6;color:#cbd5e1">Bem-vindo(a) ao MoneyAPP. Para acessar sua conta, clique no botão abaixo e defina sua senha:</p>' +
-    '<div style="background-color:#0f172a;border:1px solid #334155;padding:20px;border-radius:8px;margin:25px 0">' +
-    `<p style="margin:0 0 12px 0;font-size:15px"><span style="color:#94a3b8">Login:</span> <strong>${esc(email)}</strong></p>` +
-    '</div>' +
-    '<p style="font-size:14px;color:#94a3b8;line-height:1.5">Este link é seguro e só pode ser usado uma vez. Se você não solicitou este acesso, ignore este e-mail.' +
-    (botUrl ? ' Após criar sua nova senha, você poderá se conectar ao nosso assistente.' : '') +
-    '</p>' +
+    '<!doctype html><html lang="pt-BR"><body style="margin:0;padding:0;background:#f3f4ee;font-family:Arial,Helvetica,sans-serif">' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px"><tr><td align="center">' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden">' +
+    '<tr><td style="background:#c6f135;height:6px;line-height:6px;font-size:0">&nbsp;</td></tr>' +
+    '<tr><td style="padding:28px 24px 8px;text-align:center">' +
+    (appLogo ? `<img src="${esc(appLogo)}" alt="MoneyAPP" height="80" style="height:80px;width:auto;display:block;margin:0 auto 12px;border:0"/>` : '') +
+    '<h1 style="margin:0;color:#0f172a;font-size:22px">Seu acesso ao MoneyAPP foi liberado</h1>' +
+    '</td></tr>' +
+    '<tr><td style="padding:20px 28px 28px;color:#334155;font-size:15px;line-height:1.6">' +
+    '<p style="margin:0 0 24px">Sua conta no <strong>MoneyAPP</strong> está criada. Falta só definir a sua senha para começar.</p>' +
     (finalLoginUrl
-      ? '<div style="text-align:center;margin-top:35px">' +
-        `<a href="${esc(finalLoginUrl)}" style="background-color:#10b981;color:#ffffff;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:600;display:inline-block;font-size:16px">Definir minha senha</a>` +
-        '</div>'
+      ? '<p style="margin:0 0 24px;text-align:center">' +
+        `<a href="${esc(finalLoginUrl)}" style="display:inline-block;background:#111113;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold">Definir minha senha</a>` +
+        '</p>'
+      : '') +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 8px">' +
+    passo(
+      1,
+      'Defina a senha',
+      `Seu login é <strong>${esc(email)}</strong>. Depois da senha, a página mostra um QR Code para o Google Authenticator (verificação em duas etapas).`,
+    ) +
+    (loginUrl
+      ? passo(
+          2,
+          'Instale o aplicativo',
+          `Abra <a href="${esc(base)}/" style="color:#2563eb;font-weight:bold">${esc(semProtocolo(base))}</a> no celular ou no computador e toque em <strong>Instalar</strong>. No iPhone: Compartilhar → Adicionar à Tela de Início.`,
+        )
       : '') +
     (botUrl
-      ? '<div style="text-align:center;margin-top:15px">' +
-        `<a href="${esc(botUrl)}" style="background-color:#0ea5e9;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:600;display:inline-block;font-size:15px">Acessar Bot</a>` +
-        '</div>'
+      ? passo(
+          loginUrl ? 3 : 2,
+          'Conecte o bot do Telegram',
+          `Lance gastos por mensagem, áudio ou foto do comprovante: <a href="${esc(botUrl)}" style="color:#2563eb;font-weight:bold">${esc(semProtocolo(botUrl))}</a>. Para ligar o bot à sua conta, entre no aplicativo e abra Configurações → Telegram.`,
+        )
       : '') +
-    '</div>' +
-    '</div>'
+    '</table>' +
+    '<p style="margin:0 0 16px;padding:12px 16px;background:#eff6ff;border-left:3px solid #2563eb;color:#1e3a5f;font-size:13px;line-height:1.5">' +
+    '<strong>Instale o Google Authenticator antes de começar.</strong><br/>' +
+    '<a href="https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2" style="color:#2563eb;font-weight:bold">Baixar para Android</a>' +
+    ' &nbsp;·&nbsp; ' +
+    '<a href="https://apps.apple.com/app/google-authenticator/id388497605" style="color:#2563eb;font-weight:bold">Baixar para iPhone</a>' +
+    '</p>' +
+    '<p style="margin:0;color:#64748b;font-size:13px">O link da senha é de uso único e expira em 24 horas. Se você não esperava este e-mail, pode ignorá-lo com segurança.</p>' +
+    '</td></tr></table>' +
+    '</td></tr></table></body></html>'
   );
 }

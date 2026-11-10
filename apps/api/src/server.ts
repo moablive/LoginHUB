@@ -4,6 +4,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 
 import app from './app';
 import { testConnection, pool } from '@loginhub/database';
+import { iniciarConferenciaDeAssinaturas } from '@loginhub/services';
 
 const PORT = process.env.PORT || 3000;
 
@@ -29,6 +30,9 @@ const startServer = async () => {
             console.log(`📡 URL LOCAL:     http://localhost:${PORT}/api`);
             console.log('================================================\n');
         });
+
+        // Venda por assinatura: confere no Mercado Pago a cada 30 min (db/009).
+        iniciarConferenciaDeAssinaturas();
 
         // 4. Configura Graceful Shutdown
         const shutdown = () => {

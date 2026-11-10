@@ -425,6 +425,25 @@ export const rateLimitLogin = criarRateLimit({
     chave: chaveDoLogin,
 });
 
+/**
+ * Checkout público da venda de app (db/009). Cada chamada abre uma assinatura
+ * pendente no Mercado Pago, então o limite é por IP real do visitante e curto.
+ */
+export const rateLimitCheckout = criarRateLimit({
+    nome: 'checkout',
+    janelaMs: 15 * 60 * 1000,
+    max: 8,
+    chave: (req) => ipDoCliente(req as any),
+});
+
+/** Leituras públicas da venda (preço, estado do pedido): folgado, por IP. */
+export const rateLimitVendaLeitura = criarRateLimit({
+    nome: 'venda-leitura',
+    janelaMs: 60 * 1000,
+    max: 40,
+    chave: (req) => ipDoCliente(req as any),
+});
+
 // ==========================================
 // 4. CORS MIDDLEWARE
 // ==========================================

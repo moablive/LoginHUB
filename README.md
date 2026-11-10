@@ -725,6 +725,36 @@ Pedido do dono da Sul Alimentos: conta de **CPF** (11 dígitos no lugar do e-mai
 - **Ficha de acesso no painel** (v1.1.8; desde a v1.1.9 é o único lugar, o painel "Aparelhos conectados" saiu): tocar no nome do usuário (em Usuários do app) abre onde ele está autenticado — o aparelho preso com IP, desde e último acesso, e o **Liberar** — ou, sem aparelho preso, o último login; embaixo, o histórico de logins dele (entrou/recusado/saiu/liberado). A lista mostra a mesma linha em todo usuário (verde = conectado, cinza = último login).
 - Contas de e-mail não são presas, mas desde a v1.1.8 o login completo delas também entra no registro (`entrou`, detalhe "conta de e-mail (não fica presa)"), para o painel mostrar onde todo membro está autenticado. O id é do **navegador**, não do hardware: limpar os dados do site, outro navegador, ou o iPhone com o Safari e o app da tela de início (armazenamentos separados) contam como outro aparelho.
 
+### 💳 Venda por assinatura (`/venda/*` e `/admin/.../vendas`) — desde 10/11/2026
+
+O hub vende app por **assinatura mensal** (hoje o MoneyAPP, app 3): cartão automático no Mercado Pago, na conta
+da Astral Wave (`MP_ACCESS_TOKEN` no `.env`, a mesma da loja de tracks). Tabelas em `db/009_assinaturas_afiliados.sql`
+(`planos_app`, `afiliados`, `assinaturas`, `assinatura_pagamentos`); código em `packages/services/src/AssinaturaService.ts`.
+
+| Rota | Quem | O que faz |
+|---|---|---|
+| `GET /venda/apps/:appId/plano?ref=` | público | Preço do plano (e o nome do afiliado do `ref`) |
+| `POST /venda/apps/:appId/assinar` | público, 8 por 15 min por IP | Grava a assinatura `iniciada`, cria a assinatura pendente no Mercado Pago e devolve a página do cartão |
+| `GET /venda/assinaturas/:ref` | público | Estado do pedido; confere no Mercado Pago se ainda está `iniciada` |
+| `ALL /venda/webhook-mp` | Mercado Pago | Aviso; só dispara a conferência (o estado vem de consultar a API de lá) |
+| `GET /admin/apps/:id/vendas` | master | Plano, resumo, afiliados e assinantes |
+| `PUT /admin/apps/:id/plano` | master | Preço, comissão padrão, à venda ou não |
+| `POST /admin/apps/:id/afiliados`, `PUT`/`DELETE /admin/afiliados/:id` | master | Afiliados (o código vira `/assine?ref=<código>`) |
+| `POST /admin/afiliados/:id/pagar-comissoes` | master | Marca como paga a comissão em aberto |
+| `POST /admin/assinaturas/:id/cancelar`, `/reenviar-acesso`, `POST /admin/assinaturas/conferir` | master | Cancela no Mercado Pago, reenvia o e-mail de acesso, confere tudo agora |
+
+- Cartão autorizado → a conta nasce (`addUser`, nível `user`) e sai o e-mail `templates/assinaturaEmail.ts` (link
+  da senha, onde instalar o PWA, bot do Telegram). Pausada ou cancelada → `usuarios.status = 'inativo'`.
+- Cada mensalidade aprovada vira uma linha em `assinatura_pagamentos`, com a comissão do afiliado gravada na
+  porcentagem do dia. O preço novo vale para assinatura nova.
+- A cada 30 minutos a API confere as assinaturas no Mercado Pago (`iniciarConferenciaDeAssinaturas`), então um
+  aviso perdido se resolve sozinho.
+- Tela: `apps/ui/src/pages/AppVendasPage.vue` (`/apps/:id/vendas`).
+
+Documento: "Projeto - LoginHUB ／ Venda por assinatura e afiliados", pasta 📦 Documentação do servidor do Drive.
+
+---
+
 ## 🔄 Fluxos de Autenticação e Regras de Negócio
 
 ### 1️⃣ Fluxo de Login e Desambiguação Multi-Tenant

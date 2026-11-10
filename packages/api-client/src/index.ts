@@ -20,7 +20,13 @@ import type {
   UpdateCategoriaDTO,
   DirecaoMovimento,
   LoginBloqueio,
-  AparelhosDoApp
+  AparelhosDoApp,
+  PlanoApp,
+  SalvarPlanoDTO,
+  Afiliado,
+  SalvarAfiliadoDTO,
+  Assinatura,
+  ResumoVendas
 } from '@loginhub/schema';
 
 // ==========================================
@@ -471,6 +477,56 @@ export const categoriaApi = {
     const { data } = await api.patch<{ moveu: boolean }>(`${CATEGORIAS_BASE_URL}/${id}/mover`, { direcao });
     return data;
   }
+};
+
+// ==========================================
+// VENDA API — assinatura mensal do app, afiliados e comissões (db/009)
+// ==========================================
+export interface PainelDeVendas {
+  /** null = o app ainda não tem preço: não está à venda. */
+  plano: PlanoApp | null;
+  resumo: ResumoVendas;
+  afiliados: Afiliado[];
+  assinaturas: Assinatura[];
+}
+
+export const vendaApi = {
+  painel: async (appId: string): Promise<PainelDeVendas> => {
+    const { data } = await api.get<PainelDeVendas>(`/admin/apps/${appId}/vendas`);
+    return data;
+  },
+  /** O preço novo vale para assinatura nova; quem já assina mantém o valor. */
+  salvarPlano: async (appId: string, payload: SalvarPlanoDTO): Promise<PlanoApp> => {
+    const { data } = await api.put<PlanoApp>(`/admin/apps/${appId}/plano`, payload);
+    return data;
+  },
+  criarAfiliado: async (appId: string, payload: SalvarAfiliadoDTO): Promise<void> => {
+    await api.post(`/admin/apps/${appId}/afiliados`, payload);
+  },
+  atualizarAfiliado: async (id: number, payload: SalvarAfiliadoDTO): Promise<void> => {
+    await api.put(`/admin/afiliados/${id}`, payload);
+  },
+  /** Só apaga afiliado sem indicação; com histórico a API recusa (desative). */
+  apagarAfiliado: async (id: number): Promise<void> => {
+    await api.delete(`/admin/afiliados/${id}`);
+  },
+  /** Marca como paga toda a comissão em aberto do afiliado. */
+  pagarComissoes: async (id: number): Promise<{ total: number; mensalidades: number }> => {
+    const { data } = await api.post<{ total: number; mensalidades: number }>(`/admin/afiliados/${id}/pagar-comissoes`);
+    return data;
+  },
+  /** Para de cobrar no Mercado Pago e desliga o acesso. */
+  cancelarAssinatura: async (id: number): Promise<void> => {
+    await api.post(`/admin/assinaturas/${id}/cancelar`);
+  },
+  reenviarAcesso: async (id: number): Promise<{ emailSent: boolean }> => {
+    const { data } = await api.post<{ emailSent: boolean }>(`/admin/assinaturas/${id}/reenviar-acesso`);
+    return data;
+  },
+  /** Confere agora, no Mercado Pago, o estado de todas as assinaturas. */
+  conferir: async (): Promise<void> => {
+    await api.post('/admin/assinaturas/conferir');
+  },
 };
 
 // ==========================================

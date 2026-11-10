@@ -658,3 +658,6 @@ export interface AparelhosDoApp {
         criadoEm: string;
     }>;
 }
+
+// Venda de app por assinatura: planos, afiliados, assinantes (db/009_assinaturas_afiliados.sql).
+export * from './assinaturas';

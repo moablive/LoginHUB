@@ -32,6 +32,8 @@ export const router = createRouter({
         { path: 'apps', redirect: '/dashboard' },
         { path: 'apps/new', name: 'app-novo', component: () => import('@/pages/CreateAppPage.vue') },
         { path: 'apps/:id/users', name: 'app-usuarios', component: () => import('@/pages/AppUsersPage.vue'), props: true },
+        // Venda por assinatura: preço, afiliados, assinantes e comissões (db/009).
+        { path: 'apps/:id/vendas', name: 'app-vendas', component: () => import('@/pages/AppVendasPage.vue'), props: true },
       ],
     },
 

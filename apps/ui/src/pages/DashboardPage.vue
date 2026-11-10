@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import {
   ArrowRightOnRectangleIcon,
+  BanknotesIcon,
   BuildingOfficeIcon,
   ChevronDownIcon,
   ChevronUpIcon,
@@ -192,7 +193,7 @@ const dataCadastro = (d?: string | Date | null) =>
   d ? new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
 
 // Colunas da lista no desktop; no celular cada linha empilha.
-const GRADE = 'md:grid md:grid-cols-[minmax(0,1fr)_10.5rem_4.5rem_7rem_6rem_13.5rem] md:items-center md:gap-4';
+const GRADE = 'md:grid md:grid-cols-[minmax(0,1fr)_10.5rem_4.5rem_7rem_6rem_16.5rem] md:items-center md:gap-4';
 const seta =
   'flex h-toque w-9 items-center justify-center rounded-lg text-label-2 hover:bg-accent/10 hover:text-accent disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-label-2';
 </script>
@@ -349,6 +350,9 @@ const seta =
               </button>
 
               <UiButton variante="tinted" tamanho="small" class="ml-auto md:ml-1" :to="`/apps/${app.id}/users`">Usuários</UiButton>
+              <UiButton variante="plain" icone :aria-label="`Vendas de ${app.nome}`" title="Vendas: preço, afiliados e assinantes" :to="`/apps/${app.id}/vendas`">
+                <BanknotesIcon class="h-5 w-5" />
+              </UiButton>
 
               <UiButton variante="plain" icone :aria-label="`Editar ${app.nome}`" title="Editar dados do aplicativo" @click="appParaEditar = app">
                 <PencilSquareIcon class="h-5 w-5" />
