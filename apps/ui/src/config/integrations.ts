@@ -51,7 +51,7 @@ export const APP_INTEGRATIONS: Record<string, AppIntegration> = {
   // Astral Wave Label — mão única: quem chama o hub é sempre o label.
   "8": {
     apiName: "Astral Wave Label API",
-    apiHost: "api.astralwavelabel.com",
+    apiHost: "artist.astralwavelabel.com",
     direction: "two-way",
     summary:
       "A API do label administra por aqui os usuários deste app e amarra cada um ao artista correspondente na base dela.",

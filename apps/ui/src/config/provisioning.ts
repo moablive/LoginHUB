@@ -125,9 +125,13 @@ const SUL_ALIMENTOS_API =
   import.meta.env.VITE_SUL_ALIMENTOS_API_URL ||
   "https://api.sulalimentos.com/api";
 
+// `api.astralwavelabel.com` saiu da Cloudflare (a API da label não tem mais
+// domínio próprio desde 02/11/2026) e virou NXDOMAIN: o modal de convite de DJ
+// não carregava a lista nem enviava. A API é alcançada pelo `/api` do painel
+// do artista, que libera o CORS para o hub.
 const ASTRALWAVE_API =
   import.meta.env.VITE_ASTRALWAVE_API_URL ||
-  "https://api.astralwavelabel.com/api";
+  "https://artist.astralwavelabel.com/api";
 
 /** Chave = id do aplicativo no LoginHUB. */
 export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
