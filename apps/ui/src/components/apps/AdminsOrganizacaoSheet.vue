@@ -44,6 +44,10 @@ const paraResetar = ref<AdminOrganizacao | null>(null);
 const resetando = ref(false);
 
 const opcoes = computed(() => props.organizacoes.map((o) => ({ valor: String(o.id), rotulo: o.nome })));
+// Aberta a partir de uma organização (botão Admins do grupo ou do app): fica
+// presa a ela, sem seletor — o admin é daquela organização e de nenhuma outra.
+// O seletor só existe no "Convidar admin" do topo, e só com o que a pessoa gere.
+const fixa = computed(() => props.inicial !== null && props.inicial !== undefined);
 const orgAtual = computed(() => props.organizacoes.find((o) => String(o.id) === organizacaoId.value) ?? null);
 
 const mensagemDe = (e: unknown, padrao: string) =>
@@ -158,13 +162,13 @@ const desde = (d: string | Date) => new Date(d).toLocaleDateString('pt-BR', { da
 <template>
   <UiSheet
     :aberto="aberto"
-    titulo="Admins da organização"
-    subtitulo="Quem cuida dos apps, dos usuários e dos convites de cada organização."
+    :titulo="fixa && orgAtual ? `Admins de ${orgAtual.nome}` : 'Admins da organização'"
+    :subtitulo="fixa && orgAtual ? `Quem cuida dos apps, dos usuários e dos convites de ${orgAtual.nome}.` : 'Escolha a organização: cada admin cuida só da organização em que foi convidado.'"
     :bloqueado="enviando"
     @fechar="emit('fechar')"
   >
     <div class="space-y-6">
-      <UiSelect v-if="opcoes.length > 1" v-model="organizacaoId" rotulo="Organização" :opcoes="opcoes" />
+      <UiSelect v-if="!fixa && opcoes.length > 1" v-model="organizacaoId" rotulo="Organização" :opcoes="opcoes" />
       <p v-else-if="orgAtual" class="text-subhead text-label-2">
         Organização: <strong class="text-label">{{ orgAtual.nome }}</strong>
       </p>
@@ -184,7 +188,7 @@ const desde = (d: string | Date) => new Date(d).toLocaleDateString('pt-BR', { da
         </UiTextField>
         <p class="text-footnote text-label-2">
           A pessoa recebe o convite por e-mail, cria a senha e ativa o Google Authenticator. Depois entra aqui pela aba
-          <strong>Administrador</strong> e vê só os apps de {{ orgAtual.nome }}.
+          <strong>Administrador</strong> e vê só os apps de {{ orgAtual.nome }} — nenhuma outra organização.
         </p>
         <UiButton type="submit" bloco :carregando="enviando" :disabled="!nome.trim() || !email.trim()">
           {{ enviando ? 'Enviando…' : 'Enviar convite' }}
