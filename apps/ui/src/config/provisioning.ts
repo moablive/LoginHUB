@@ -211,48 +211,32 @@ export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
     },
   },
 
-  // Astral Wave Label — convida DJ (novo ou existente) e amarra ao artista.
+  // Astral Wave Label — convida DJ e cria o artista dele.
   // O endpoint do label cria o login no hub (M2M) e grava loginhub_user_id.
+  // Desde 19/11/2026 (pedido do dono) o convite SÓ cria artista novo: todos os
+  // artistas que já existiam têm login pelo LoginHUB, então a lista "artista
+  // existente ainda sem login" deixou de fazer sentido.
   "8": {
     roleLabel: "DJ / Artista",
     roleDescription:
-      "Cria o login do DJ no LoginHUB e o amarra a um artista da Astral Wave Label. Todo DJ entra com o painel completo e, no primeiro acesso, lê e aceita o contrato base antes de qualquer outra coisa (o convite já leva o PDF). Escolha um artista existente ainda sem login, ou crie um novo.",
+      "Cria o artista na Astral Wave Label e o login do DJ no LoginHUB, amarrados. Todo DJ entra com o painel completo e, no primeiro acesso, lê e aceita o contrato base antes de qualquer outra coisa (o convite já leva o PDF).",
     endpoint: `${ASTRALWAVE_API}/admin/artists/invite`,
     fields: [
-      {
-        name: "artist_id",
-        label: "Artista",
-        type: "remote-select",
-        source: `${ASTRALWAVE_API}/admin/artists`,
-        optionValue: "id",
-        optionLabel: "name",
-        excludeWhenField: "loginhub_user_id",
-        allowNew: true,
-        newValue: "__new__",
-        newLabel: "+ Criar novo artista",
-        required: true,
-        help: "Só aparecem artistas ainda sem login. Ou crie um novo.",
-      },
       {
         name: "new_artist_name",
         label: "Nome do novo artista",
         type: "text",
         placeholder: "Ex: ALFA",
         required: true,
-        showWhen: { field: "artist_id", equals: "__new__" },
+        help: "O nome artístico, como vai aparecer na Astral Wave Label.",
       },
     ],
-    buildPayload: (base, extra) => {
-      const isNew = extra.artist_id === "__new__";
-      return {
-        email: base.email,
-        nome: base.nome,
-        role: "user",
-        ...(isNew
-          ? { new_artist_name: (extra.new_artist_name || "").trim() }
-          : { artist_id: extra.artist_id }),
-      };
-    },
+    buildPayload: (base, extra) => ({
+      email: base.email,
+      nome: base.nome,
+      role: "user",
+      new_artist_name: (extra.new_artist_name || "").trim(),
+    }),
   },
 };
 
