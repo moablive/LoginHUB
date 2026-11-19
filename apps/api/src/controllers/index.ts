@@ -766,9 +766,11 @@ export class UserController {
     static async resetPassword(req: Request<{ id: string }, {}, { emailHtml?: string }>, res: Response) {
         const { id } = req.params;
         const escopo = escopoDe(req);
-        const emailHtml = escopo && !escopo.master ? undefined : (req.body || {}).emailHtml;
+        const daOrganizacao = !!escopo && !escopo.master;
+        const emailHtml = daOrganizacao ? undefined : (req.body || {}).emailHtml;
         try {
-            const result = await userService.resetUserPassword(id, emailHtml);
+            // Admin de organização não manda HTML: o e-mail sai pelo modelo do hub.
+            const result = await userService.resetUserPassword(id, emailHtml, daOrganizacao);
             return res.status(200).json({
                 message: result.emailSent
                     ? 'Link de acesso enviado por e-mail com sucesso.'
@@ -960,6 +962,25 @@ export class OrganizacaoController {
             if (e.code === 'NOT_FOUND') return res.status(404).json({ message: e.message });
             if (e.code === 'DUPLICATE_ENTRY') return res.status(409).json({ error: 'Conflito de Dados', message: e.message });
             console.error('[OrganizacaoController] convidar:', err);
+            return res.status(500).json({ error: 'Erro Interno' });
+        }
+    }
+
+    /** POST /admin/organizacoes/:categoriaId/admins/:usuarioId/reset-senha — e-mail com link para senha nova. */
+    static async resetarSenha(req: Request<{ categoriaId: string; usuarioId: string }>, res: Response) {
+        try {
+            const usuarioId = Number(req.params.usuarioId);
+            if (!Number.isInteger(usuarioId) || usuarioId <= 0) return res.status(400).json({ error: 'ID inválido.' });
+            const r = await organizacaoService.resetarSenhaDoAdmin(Number(req.params.categoriaId), usuarioId);
+            return res.status(200).json({
+                message: r.emailSent ? 'Link para a senha nova enviado por e-mail.' : 'Link gerado, mas o e-mail não saiu.',
+                emailSent: r.emailSent,
+                magicLinkToken: r.magicLinkToken,
+            });
+        } catch (err) {
+            const e = err as DbError;
+            if (e.code === 'NOT_FOUND') return res.status(404).json({ message: e.message });
+            console.error('[OrganizacaoController] resetarSenha:', err);
             return res.status(500).json({ error: 'Erro Interno' });
         }
     }

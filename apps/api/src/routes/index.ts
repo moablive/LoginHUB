@@ -159,6 +159,7 @@ orgRouter.post('/aparelhos/:usuarioId/liberar', exigirAppNoEscopo(doCorpo) as an
 // -- Admins da organização: o botão "Convidar admin"
 orgRouter.get('/organizacoes/:categoriaId/admins', exigirOrganizacaoNoEscopo('categoriaId') as any, OrganizacaoController.listarAdmins as any);
 orgRouter.post('/organizacoes/:categoriaId/admins', exigirOrganizacaoNoEscopo('categoriaId') as any, OrganizacaoController.convidar as any);
+orgRouter.post('/organizacoes/:categoriaId/admins/:usuarioId/reset-senha', exigirOrganizacaoNoEscopo('categoriaId') as any, OrganizacaoController.resetarSenha as any);
 orgRouter.delete('/organizacoes/:categoriaId/admins/:usuarioId', exigirOrganizacaoNoEscopo('categoriaId') as any, OrganizacaoController.remover as any);
 
 mainRouter.use('/admin', orgRouter);

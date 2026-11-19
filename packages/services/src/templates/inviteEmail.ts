@@ -31,10 +31,15 @@ export interface InviteEmailInput {
     appLogo?: string | null;
     /** Nome de quem está sendo convidado, para a saudação. */
     nome?: string | null;
-
+    /**
+     * `reset` (19/11/2026): o mesmo e-mail para a senha redefinida pelo painel
+     * (admin de organização), que não manda HTML próprio. Padrão: convite.
+     */
+    motivo?: 'convite' | 'reset';
 }
 
-export const buildInviteEmail = ({ appName, platformUrl, appLogo, nome }: InviteEmailInput): string => {
+export const buildInviteEmail = ({ appName, platformUrl, appLogo, nome, motivo = 'convite' }: InviteEmailInput): string => {
+    const reset = motivo === 'reset';
     const app = escapeHtml(appName);
     // Sem isto, uma platform_url com barra no fim vira ".../setup-password" duplicado.
     const base = platformUrl.replace(/\/+$/, '');
@@ -71,13 +76,16 @@ export const buildInviteEmail = ({ appName, platformUrl, appLogo, nome }: Invite
               <td style="padding:20px 28px 32px;color:#334155;font-size:15px;line-height:1.6;">
                 <p style="margin:0 0 16px;">${saudacao}</p>
                 <p style="margin:0 0 24px;">
-                  Seu acesso ao <strong>${app}</strong> foi criado. Clique no botão
-                  abaixo para definir sua senha e começar a usar o sistema.
+                  ${reset
+                    ? `Sua senha do <strong>${app}</strong> foi redefinida. Clique no botão
+                  abaixo para criar uma senha nova.`
+                    : `Seu acesso ao <strong>${app}</strong> foi criado. Clique no botão
+                  abaixo para definir sua senha e começar a usar o sistema.`}
                 </p>
                 <p style="margin:0 0 24px;text-align:center;">
                   <a href="${base}/setup-password?token=${MAGIC_LINK_PLACEHOLDER}"
                      style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:8px;font-weight:bold;">
-                    Definir minha senha
+                    ${reset ? 'Criar senha nova' : 'Definir minha senha'}
                   </a>
                 </p>
                 <p style="margin:0 0 16px;padding:12px 16px;background:#eff6ff;border-left:3px solid #2563eb;color:#1e3a5f;font-size:13px;line-height:1.5;">

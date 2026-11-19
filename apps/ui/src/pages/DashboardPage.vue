@@ -68,6 +68,7 @@ const adminsDe = ref<number | null | undefined>(undefined);
 const mostrarAdmins = computed(() => adminsDe.value !== undefined);
 // Selo do botão "Admins": quantos admins de organização cuidam do grupo.
 const adminsDoGrupo = (id: number | null) => categorias.value.find((c) => c.id === id)?.total_admins ?? 0;
+const nomesDosAdmins = (id: number | null | undefined) => categorias.value.find((c) => c.id === id)?.admins_nomes ?? [];
 function fecharAdmins() {
   adminsDe.value = undefined;
   // Convidou ou tirou alguém: atualiza o selo.
@@ -349,6 +350,18 @@ const seta =
                   <AppLinkBadge :app-id="app.id" />
                 </p>
                 <p class="truncate text-subhead text-label-2">{{ app.email }}</p>
+                <!-- Quem cuida do app no hub (admins da organização, db/012). Toque abre a gaveta. -->
+                <button
+                  v-if="app.categoria_id !== null && app.categoria_id !== undefined"
+                  type="button"
+                  class="mt-0.5 flex max-w-full items-center gap-1 truncate text-caption-1 hover:underline"
+                  :class="nomesDosAdmins(app.categoria_id).length ? 'text-success' : 'text-label-2'"
+                  :title="nomesDosAdmins(app.categoria_id).length ? `Admins: ${nomesDosAdmins(app.categoria_id).join(', ')}` : 'Nenhum admin nesta organização: convide um'"
+                  @click="adminsDe = app.categoria_id"
+                >
+                  <ShieldCheckIcon class="h-3.5 w-3.5 shrink-0" />
+                  <span class="truncate">{{ nomesDosAdmins(app.categoria_id).length ? `Admins: ${nomesDosAdmins(app.categoria_id).join(', ')}` : 'Sem admin · convidar' }}</span>
+                </button>
               </div>
             </div>
 

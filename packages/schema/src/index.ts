@@ -367,6 +367,8 @@ export interface Categoria {
     total_apps?: number;
     /** Quantos admins de organização cuidam do grupo (db/012) — o selo do botão "Admins". */
     total_admins?: number;
+    /** Nomes dos admins de organização do grupo, na ordem em que entraram. */
+    admins_nomes?: string[];
 }
 
 export interface CreateCategoriaDTO {

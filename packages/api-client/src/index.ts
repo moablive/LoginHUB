@@ -698,6 +698,13 @@ export const organizacaoApi = {
     const { data } = await api.post<ConvidarAdminResposta>(`/admin/organizacoes/${categoriaId}/admins`, payload);
     return data;
   },
+  /** Manda à pessoa o e-mail com o link para criar uma senha nova (o 2FA continua o mesmo). */
+  resetarSenha: async (categoriaId: number, usuarioId: number): Promise<{ message: string; emailSent: boolean; magicLinkToken?: string }> => {
+    const { data } = await api.post<{ message: string; emailSent: boolean; magicLinkToken?: string }>(
+      `/admin/organizacoes/${categoriaId}/admins/${usuarioId}/reset-senha`,
+    );
+    return data;
+  },
   /** Tira da organização; a conta fica (sem organização, o painel não abre nada). */
   remover: async (categoriaId: number, usuarioId: number): Promise<void> => {
     await api.delete(`/admin/organizacoes/${categoriaId}/admins/${usuarioId}`);

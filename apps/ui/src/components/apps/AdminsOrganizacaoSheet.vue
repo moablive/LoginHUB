@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import axios from 'axios';
-import { CheckBadgeIcon, ClockIcon, EnvelopeIcon, TrashIcon, UserIcon, UserPlusIcon } from '@heroicons/vue/24/outline';
+import { CheckBadgeIcon, ClockIcon, EnvelopeIcon, KeyIcon, TrashIcon, UserIcon, UserPlusIcon } from '@heroicons/vue/24/outline';
 import { organizacaoApi } from '@loginhub/api-client';
 import type { AdminOrganizacao } from '@loginhub/schema';
 import UiSheet from '@/components/ui/UiSheet.vue';
@@ -40,6 +40,8 @@ const aviso = ref<string | null>(null);
 const linkManual = ref<string | null>(null);
 const paraRemover = ref<AdminOrganizacao | null>(null);
 const removendo = ref(false);
+const paraResetar = ref<AdminOrganizacao | null>(null);
+const resetando = ref(false);
 
 const opcoes = computed(() => props.organizacoes.map((o) => ({ valor: String(o.id), rotulo: o.nome })));
 const orgAtual = computed(() => props.organizacoes.find((o) => String(o.id) === organizacaoId.value) ?? null);
@@ -127,6 +129,29 @@ async function remover() {
   }
 }
 
+async function resetarSenha() {
+  const alvo = paraResetar.value;
+  if (!alvo || !orgAtual.value) return;
+  resetando.value = true;
+  erro.value = null;
+  aviso.value = null;
+  linkManual.value = null;
+  try {
+    const r = await organizacaoApi.resetarSenha(orgAtual.value.id, alvo.usuario_id);
+    if (r.emailSent) aviso.value = `Link para a senha nova enviado para ${alvo.email}.`;
+    else {
+      aviso.value = 'A senha foi zerada, mas o e-mail não saiu. Entregue este link à pessoa:';
+      if (r.magicLinkToken) linkManual.value = `${window.location.origin}/setup-password?token=${r.magicLinkToken}`;
+    }
+  } catch (e) {
+    console.error(e);
+    erro.value = mensagemDe(e, 'Não foi possível resetar a senha.');
+  } finally {
+    resetando.value = false;
+    paraResetar.value = null;
+  }
+}
+
 const desde = (d: string | Date) => new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 </script>
 
@@ -196,6 +221,15 @@ const desde = (d: string | Date) => new Date(d).toLocaleDateString('pt-BR', { da
               <p class="text-caption-1 text-label-2">desde {{ desde(a.criado_em) }} · convidado por {{ a.convidado_por }}</p>
             </div>
             <UiButton
+              variante="plain"
+              icone
+              :aria-label="`Resetar a senha de ${a.nome}`"
+              title="Resetar senha: manda por e-mail o link para criar uma senha nova"
+              @click="paraResetar = a"
+            >
+              <KeyIcon class="h-5 w-5" />
+            </UiButton>
+            <UiButton
               v-if="a.email !== meuEmail"
               variante="plain"
               icone
@@ -210,6 +244,21 @@ const desde = (d: string | Date) => new Date(d).toLocaleDateString('pt-BR', { da
         </ul>
       </div>
     </div>
+
+    <UiAlert
+      :aberto="!!paraResetar"
+      :icone="KeyIcon"
+      titulo="Resetar a senha?"
+      :destaque="paraResetar?.nome"
+      confirmar="Resetar e enviar"
+      :carregando="resetando"
+      texto-carregando="Enviando…"
+      @fechar="paraResetar = null"
+      @confirmar="resetarSenha"
+    >
+      A senha atual deixa de valer na hora. A pessoa recebe em <strong>{{ paraResetar?.email }}</strong> um link para criar
+      uma senha nova; o Google Authenticator continua o mesmo.
+    </UiAlert>
 
     <UiAlert
       :aberto="!!paraRemover"

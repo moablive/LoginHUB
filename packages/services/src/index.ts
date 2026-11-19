@@ -1099,12 +1099,18 @@ export class CategoriaService {
         for (const c of contagem) if (c.categoriaId !== null) porCategoria.set(c.categoriaId, Number(c.total));
         // Admins de organização por categoria (db/012): o selo do botão "Admins" no painel.
         const admins = await db
-            .select({ categoriaId: adminsOrganizacao.categoriaId, total: sql<number>`count(*)` })
+            .select({ categoriaId: adminsOrganizacao.categoriaId, nome: usuarios.nome })
             .from(adminsOrganizacao)
-            .groupBy(adminsOrganizacao.categoriaId);
-        const adminsPorCategoria = new Map<number, number>();
-        for (const a of admins) adminsPorCategoria.set(a.categoriaId, Number(a.total));
-        return rows.map((r: typeof rows[0]) => ({ ...r, total_apps: porCategoria.get(r.id) ?? 0, total_admins: adminsPorCategoria.get(r.id) ?? 0 }));
+            .innerJoin(usuarios, eq(usuarios.id, adminsOrganizacao.usuarioId))
+            .orderBy(asc(adminsOrganizacao.criadoEm));
+        const adminsPorCategoria = new Map<number, string[]>();
+        for (const a of admins) adminsPorCategoria.set(a.categoriaId, [...(adminsPorCategoria.get(a.categoriaId) ?? []), a.nome]);
+        return rows.map((r: typeof rows[0]) => ({
+            ...r,
+            total_apps: porCategoria.get(r.id) ?? 0,
+            total_admins: adminsPorCategoria.get(r.id)?.length ?? 0,
+            admins_nomes: adminsPorCategoria.get(r.id) ?? [],
+        }));
     }
 
     public async criar(data: CreateCategoriaDTO) {
@@ -1526,7 +1532,13 @@ export class UserService {
         }
     }
 
-    public async resetUserPassword(id: string, emailHtml?: string): Promise<{ magicLinkToken?: string; emailSent: boolean }> {
+    /**
+     * `modeloPadrao` (19/11/2026): sem `emailHtml`, manda o e-mail pelo modelo do
+     * hub em vez de só devolver o link. Ligado só para o admin de organização,
+     * que não pode mandar HTML próprio; quem já chamava sem HTML (servidores)
+     * continua recebendo o link de volta, como antes.
+     */
+    public async resetUserPassword(id: string, emailHtml?: string, modeloPadrao = false): Promise<{ magicLinkToken?: string; emailSent: boolean }> {
         const userRes = await db
             .select({
                 id: usuarios.id,
@@ -1586,6 +1598,24 @@ export class UserService {
         );
 
         let emailSent = false;
+        if (!emailHtml && modeloPadrao && userRes[0].app_id) {
+            const appRow = await db
+                .select({ nome: aplicativos.nome, logo: aplicativos.logo, platformUrl: aplicativos.platformUrl })
+                .from(aplicativos)
+                .where(eq(aplicativos.id, Number(userRes[0].app_id)))
+                .limit(1);
+            const destino = appRow[0]?.platformUrl || process.env.UI_PUBLIC_URL || '';
+            if (destino) {
+                const nomeRow = await db.select({ nome: usuarios.nome }).from(usuarios).where(eq(usuarios.id, Number(id))).limit(1);
+                emailHtml = buildInviteEmail({
+                    appName: appRow[0]?.nome || 'nosso sistema',
+                    platformUrl: destino,
+                    appLogo: appRow[0]?.logo ?? null,
+                    nome: nomeRow[0]?.nome ?? null,
+                    motivo: 'reset',
+                });
+            }
+        }
         if (emailHtml) {
             let appName = 'nosso sistema';
             if (userRes[0].app_id) {
@@ -1712,6 +1742,20 @@ export class OrganizacaoService {
         const admin = (await this.listarAdmins(categoriaId)).find((a) => a.usuario_id === usuarioId);
         if (!admin) throw erroComCodigo('Falha ao registrar o admin.', 'ERRO_INTERNO');
         return { admin, contaNova, emailSent, ...(magicLinkToken ? { magicLinkToken } : {}) };
+    }
+
+    /**
+     * Reset de senha de um admin da organização (19/11/2026): o e-mail sai pelo
+     * modelo do hub com o link para criar a senha nova; o 2FA continua o mesmo.
+     */
+    public async resetarSenhaDoAdmin(categoriaId: number, usuarioId: number): Promise<{ emailSent: boolean; magicLinkToken?: string }> {
+        const ja = await db
+            .select({ u: adminsOrganizacao.usuarioId })
+            .from(adminsOrganizacao)
+            .where(and(eq(adminsOrganizacao.usuarioId, usuarioId), eq(adminsOrganizacao.categoriaId, categoriaId)))
+            .limit(1);
+        if (!ja[0]) throw erroComCodigo('Admin não encontrado nesta organização.', 'NOT_FOUND');
+        return new UserService().resetUserPassword(String(usuarioId), undefined, true);
     }
 
     /** Tira a pessoa da organização. A conta fica; sem organização, o painel não abre nada para ela. */
