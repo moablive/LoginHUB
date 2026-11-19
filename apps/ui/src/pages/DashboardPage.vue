@@ -235,10 +235,8 @@ const seta =
           <LockClosedIcon class="h-4 w-4" />
           Cofre
         </UiButton>
-        <UiButton v-if="eu && eu.organizacoes.length > 0" variante="gray" tamanho="small" title="Convidar quem vai cuidar de uma organização" @click="adminsDe = null">
-          <UserPlusIcon class="h-4 w-4" />
-          Convidar admin
-        </UiButton>
+        <!-- O "Convidar admin" do topo saiu (19/11/2026, pedido do dono): cada app e cada
+             organização tem o próprio botão Admins, já presos à organização certa. -->
         <UiButton variante="plain" icone aria-label="Sair" title="Sair" class="!text-danger hover:!bg-danger/10" @click="mostrarSair = true">
           <ArrowRightOnRectangleIcon class="h-6 w-6" />
         </UiButton>
