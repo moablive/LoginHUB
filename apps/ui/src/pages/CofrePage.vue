@@ -2,13 +2,14 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import axios from 'axios';
 import { cofreApi } from '@loginhub/api-client';
-import type { CofreAparelho } from '@loginhub/schema';
+import type { CofreAparelho, CofreDigital } from '@loginhub/schema';
 import {
   ArrowPathIcon,
   ClipboardDocumentIcon,
   CommandLineIcon,
   EyeIcon,
   EyeSlashIcon,
+  FingerPrintIcon,
   KeyIcon,
   LockClosedIcon,
   LockOpenIcon,
@@ -28,11 +29,16 @@ import UiSpinner from '@/components/ui/UiSpinner.vue';
 import UiEmpty from '@/components/ui/UiEmpty.vue';
 import { useCofre, type ItemAberto, type ItemCofre } from '@/features/cofre/useCofre';
 import { codigoTotp, gerarSenha, lerTotp, segundosRestantes } from '@/features/cofre/cripto';
+import { digitalSuportada, ErroDigital } from '@/features/cofre/digital';
 
 /**
  * Cofre de senhas (19/11/2026, db/013). Duas portas: a Master Key abre o painel
  * (como sempre) e a PALAVRA-PASSE abre o cofre. A palavra-passe nunca sai deste
  * navegador; o servidor só guarda texto cifrado.
+ *
+ * Digital (19/11/2026, db/015, pedido do dono): depois de cadastrada pelo botão
+ * de digital da barra, o cofre trancado abre com Touch ID/Face ID (passkey com
+ * PRF). A palavra-passe e o kit continuam valendo.
  */
 const props = withDefaults(
   defineProps<{
@@ -44,7 +50,7 @@ const props = withDefaults(
 const emit = defineEmits<{ sair: [] }>();
 
 const cofre = useCofre();
-const { existe, aberto, cofres, itens, ilegiveis } = cofre;
+const { existe, aberto, cofres, itens, ilegiveis, temDigital, digitais } = cofre;
 
 const carregando = ref(true);
 const erro = ref<string | null>(null);
@@ -59,7 +65,15 @@ const kitMostrado = ref<string | null>(null);
 const kitGuardado = ref(false);
 const pedirNovaSenha = ref(false);
 
+const MENSAGEM_DIGITAL: Record<ErroDigital['codigo'], string> = {
+  SEM_SUPORTE: 'Este navegador não tem passkey. Use a palavra-passe.',
+  SEM_PRF: 'Este aparelho (ou o gerenciador de senhas dele) não devolve o segredo da digital (PRF). Use Senhas do iCloud ou do Google, ou a palavra-passe.',
+  CANCELADO: '',
+  NAO_RECONHECIDA: 'Digital não reconhecida.',
+};
 const mensagemDe = (e: unknown, padrao: string): string => {
+  if (e instanceof ErroDigital) return MENSAGEM_DIGITAL[e.codigo];
+  if (e instanceof Error && e.message === 'SEM_DIGITAL') return 'Nenhuma digital abre este cofre ainda.';
   if (e instanceof Error && e.message === 'CHAVE_ERRADA') return usarKit.value ? 'Kit de recuperação errado.' : 'Palavra-passe errada.';
   if (e instanceof Error && (e.message === 'KIT_INVALIDO' || e.message === 'BASE32_INVALIDO')) return 'Kit de recuperação incompleto ou com caractere errado.';
   if (axios.isAxiosError(e) && e.response?.data?.message) return String(e.response.data.message);
@@ -110,6 +124,69 @@ async function abrir() {
     erro.value = mensagemDe(e, 'Não foi possível abrir o cofre.');
   } finally {
     ocupado.value = false;
+  }
+}
+
+const podeDigital = computed(() => temDigital.value && digitalSuportada());
+async function abrirDigital() {
+  ocupado.value = true;
+  erro.value = null;
+  try {
+    await cofre.abrirComDigital();
+  } catch (e) {
+    const m = e instanceof Error && e.message === 'CHAVE_ERRADA' ? 'Esta digital não abre o cofre (foi tirada ou é de outro cofre).' : mensagemDe(e, 'Não foi possível abrir pela digital.');
+    erro.value = m || null;
+  } finally {
+    ocupado.value = false;
+  }
+}
+
+// --- digitais que abrem o cofre (passkey com PRF, db/015)
+const mostrarDigitais = ref(false);
+const nomeDigital = ref('');
+const digitalParaTirar = ref<CofreDigital | null>(null);
+const avisoDigital = ref<string | null>(null);
+function nomeDoAparelho(): string {
+  const ua = navigator.userAgent;
+  const toque = navigator.maxTouchPoints > 1;
+  const sistema = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) || (/Macintosh/.test(ua) && toque) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : 'Aparelho';
+  const nav = /Edg\//.test(ua) ? 'Edge' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /FxiOS|Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'navegador';
+  return `${sistema} · ${nav}`;
+}
+async function abrirDigitais() {
+  mostrarDigitais.value = true;
+  avisoDigital.value = null;
+  nomeDigital.value = nomeDoAparelho();
+  try {
+    await cofre.listarDigitais();
+  } catch (e) {
+    erro.value = mensagemDe(e, 'Não foi possível listar as digitais.');
+  }
+}
+async function ativarDigital() {
+  ocupado.value = true;
+  erro.value = null;
+  avisoDigital.value = null;
+  try {
+    await cofre.ativarDigital(nomeDigital.value);
+    avisoDigital.value = 'Pronto: da próxima vez, o cofre trancado abre com a digital neste aparelho.';
+  } catch (e) {
+    erro.value = mensagemDe(e, 'Não foi possível cadastrar a digital.') || null;
+  } finally {
+    ocupado.value = false;
+  }
+}
+async function tirarDigital() {
+  const alvo = digitalParaTirar.value;
+  if (!alvo) return;
+  ocupado.value = true;
+  try {
+    await cofre.revogarDigital(alvo.id);
+  } catch (e) {
+    erro.value = mensagemDe(e, 'Não foi possível tirar a digital.');
+  } finally {
+    ocupado.value = false;
+    digitalParaTirar.value = null;
   }
 }
 
@@ -342,6 +419,9 @@ async function confirmarTrocaSenha() {
       <template #subtitulo>Cifrado no seu navegador · o servidor só guarda o que ninguém lê</template>
       <template #acoes>
         <template v-if="aberto">
+          <UiButton variante="plain" icone aria-label="Digitais" title="Abrir o cofre com a digital (Touch ID, Face ID)" @click="abrirDigitais">
+            <FingerPrintIcon class="h-6 w-6" />
+          </UiButton>
           <UiButton variante="plain" icone aria-label="Aparelhos do CLI" title="Máquinas aprovadas do CLI hub-pass" @click="abrirAparelhos">
             <CommandLineIcon class="h-6 w-6" />
           </UiButton>
@@ -417,6 +497,12 @@ async function confirmarTrocaSenha() {
         <LockClosedIcon class="h-7 w-7 text-accent" />
         <h2 class="text-title-3 font-semibold">Cofre trancado</h2>
       </div>
+      <template v-if="podeDigital && !usarKit">
+        <UiButton tamanho="large" bloco :carregando="ocupado" @click="abrirDigital">
+          <FingerPrintIcon class="h-5 w-5" />{{ ocupado ? 'Abrindo…' : 'Abrir com a digital' }}
+        </UiButton>
+        <p class="text-center text-footnote text-label-2">ou com a palavra-passe</p>
+      </template>
       <form class="space-y-3" @submit.prevent="abrir">
         <UiTextField v-if="!usarKit" v-model="palavra" rotulo="Palavra-passe" type="password" revelar autocomplete="current-password" required />
         <UiTextField v-else v-model="kitDigitado" rotulo="Kit de recuperação" placeholder="XXXX-XXXX-…" autocomplete="off" required />
@@ -588,6 +674,49 @@ async function confirmarTrocaSenha() {
         <UiButton type="submit" form="form-senha" :carregando="ocupado">Salvar</UiButton>
       </template>
     </UiSheet>
+
+    <!-- FOLHA: digitais que abrem o cofre (passkey com PRF, db/015) -->
+    <UiSheet :aberto="mostrarDigitais" titulo="Digital" subtitulo="Abrir o cofre com Touch ID, Face ID ou digital" largura="md" :bloqueado="ocupado" @fechar="mostrarDigitais = false">
+      <div class="space-y-4">
+        <div class="rounded-celula bg-fill-2 p-3 text-footnote text-label-2">
+          Cada aparelho cadastra a própria digital. O segredo dela fica no aparelho (Senhas do iCloud ou do Google) e nunca
+          vai ao servidor; a palavra-passe e o kit de recuperação continuam abrindo o cofre.
+        </div>
+        <p v-if="!digitalSuportada()" class="rounded-celula bg-warning/10 p-3 text-subhead text-warning">Este navegador não tem passkey.</p>
+        <form v-else class="space-y-3" @submit.prevent="ativarDigital">
+          <UiTextField v-model="nomeDigital" rotulo="Nome deste aparelho" maxlength="120" required />
+          <UiButton type="submit" tamanho="large" bloco :carregando="ocupado">
+            <FingerPrintIcon class="h-5 w-5" />Ativar a digital neste aparelho
+          </UiButton>
+        </form>
+        <p v-if="avisoDigital" class="rounded-celula bg-success/10 p-3 text-subhead text-success">{{ avisoDigital }}</p>
+        <p v-if="erro && mostrarDigitais" role="alert" class="rounded-celula bg-danger/10 p-3 text-subhead text-danger">{{ erro }}</p>
+        <p v-if="digitais.length === 0" class="py-3 text-subhead italic text-label-2">Nenhuma digital abre o cofre ainda.</p>
+        <ul v-else class="divide-y rounded-celula bg-surface [&>*]:border-separator">
+          <li v-for="d in digitais" :key="d.id" class="flex items-center gap-3 px-3 py-3">
+            <FingerPrintIcon class="h-6 w-6 shrink-0 text-accent" />
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-subhead font-semibold">{{ d.nome }}</p>
+              <p class="text-caption-1 text-label-2">cadastrada {{ dataHora(d.criado_em) }} · último uso {{ dataHora(d.ultimo_uso) }}</p>
+            </div>
+            <UiButton variante="destructive-tinted" tamanho="small" @click="digitalParaTirar = d">Tirar</UiButton>
+          </li>
+        </ul>
+      </div>
+    </UiSheet>
+
+    <UiAlert
+      :aberto="!!digitalParaTirar"
+      tom="danger"
+      titulo="Tirar esta digital?"
+      :destaque="digitalParaTirar?.nome"
+      confirmar="Tirar"
+      :carregando="ocupado"
+      @fechar="digitalParaTirar = null"
+      @confirmar="tirarDigital"
+    >
+      Este aparelho deixa de abrir o cofre com a digital. A palavra-passe continua valendo.
+    </UiAlert>
 
     <!-- FOLHA: aparelhos do CLI -->
     <UiSheet :aberto="mostrarAparelhos" titulo="Aparelhos do CLI" subtitulo="Máquinas aprovadas para o hub-pass" largura="md" @fechar="mostrarAparelhos = false">

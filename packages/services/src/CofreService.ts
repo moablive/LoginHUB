@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { db } from '@loginhub/database';
-import { cofreContas, cofreCofres, cofreItens, cofreAparelhos } from '@loginhub/schema';
-import type { CofreAparelho, CofreConta, CofreEstado, CofreKdf } from '@loginhub/schema';
+import { cofreContas, cofreCofres, cofreItens, cofreAparelhos, cofreDigitais } from '@loginhub/schema';
+import type { CofreAparelho, CofreConta, CofreDigital, CofreDigitalEmbrulho, CofreEstado, CofreKdf } from '@loginhub/schema';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 /**
@@ -18,6 +18,10 @@ const MAX_DADOS = 64 * 1024;
 const MAX_COFRES = 100;
 const MAX_ITENS = 5000;
 const MAX_APARELHOS = 20;
+const MAX_DIGITAIS = 20;
+/** id da credencial WebAuthn em base64url e sal do PRF (32 bytes em base64). */
+const CREDENCIAL = /^[A-Za-z0-9_-]{16,1400}$/;
+const SAL_PRF = /^[A-Za-z0-9+/]{43}=$/;
 
 const erro = (mensagem: string, code: string) => Object.assign(new Error(mensagem), { code });
 
@@ -72,10 +76,20 @@ export class CofreService {
                 .limit(1);
             if (a[0]?.chave) aparelho = { id: aparelhoId, chave_por_aparelho: a[0].chave };
         }
+        // Digitais (db/015): só embrulhos; sem a passkey do aparelho nenhum deles abre nada.
+        const digitais: CofreDigitalEmbrulho[] = (
+            await db
+                .select({ id: cofreDigitais.id, credencial_id: cofreDigitais.credencialId, prf_sal: cofreDigitais.prfSal, chave: cofreDigitais.chavePorDigital })
+                .from(cofreDigitais)
+                .where(and(eq(cofreDigitais.dono, dono), isNull(cofreDigitais.revogadoEm)))
+        )
+            .filter((d: { chave: string | null }) => !!d.chave)
+            .map((d: { id: string; credencial_id: string; prf_sal: string; chave: string | null }) => ({ id: d.id, credencial_id: d.credencial_id, prf_sal: d.prf_sal, chave_por_digital: d.chave as string }));
         return {
             dono,
             conta: { kdf: c.kdf as CofreKdf, chave_por_senha: c.chavePorSenha, chave_por_kit: c.chavePorKit },
             ...(aparelho ? { aparelho } : {}),
+            digitais,
             cofres,
             itens,
         };
@@ -135,6 +149,64 @@ export class CofreService {
             .where(and(eq(cofreAparelhos.id, id), eq(cofreAparelhos.dono, dono), isNull(cofreAparelhos.revogadoEm)))
             .returning({ id: cofreAparelhos.id });
         if (r.length === 0) throw erro('Aparelho não encontrado.', 'NOT_FOUND');
+    }
+
+    // ------------------------------------------------------------ digitais (passkey com PRF, db/015)
+
+    /**
+     * Guarda a digital de um aparelho. O navegador já abriu o cofre, fez a
+     * passkey com PRF e manda só o id da credencial, o sal e a chave da conta
+     * embrulhada pelo segredo do PRF — que ele nunca envia.
+     */
+    public async registrarDigital(dono: string, dados: Record<string, unknown>): Promise<void> {
+        const id = uuid(dados.id, 'id');
+        const chave = envelope(dados.chave_por_digital, 'chave_por_digital');
+        const credencialId = typeof dados.credencial_id === 'string' && CREDENCIAL.test(dados.credencial_id) ? dados.credencial_id : null;
+        if (!credencialId) throw erro('credencial_id inválido.', 'VALIDATION');
+        const sal = typeof dados.prf_sal === 'string' && SAL_PRF.test(dados.prf_sal) ? dados.prf_sal : null;
+        if (!sal) throw erro('prf_sal inválido (32 bytes em base64).', 'VALIDATION');
+        const nome = String(dados.nome ?? '').trim().slice(0, 120) || 'Aparelho';
+        const conta = await db.select({ d: cofreContas.dono }).from(cofreContas).where(eq(cofreContas.dono, dono)).limit(1);
+        if (!conta[0]) throw erro('Crie o cofre primeiro.', 'NOT_FOUND');
+        const ativas = await db
+            .select({ n: sql<number>`count(*)` })
+            .from(cofreDigitais)
+            .where(and(eq(cofreDigitais.dono, dono), isNull(cofreDigitais.revogadoEm)));
+        if (Number(ativas[0]?.n ?? 0) >= MAX_DIGITAIS) throw erro('Limite de digitais atingido: tire uma antes.', 'VALIDATION');
+        try {
+            await db.insert(cofreDigitais).values({ id, dono, nome, credencialId, prfSal: sal, chavePorDigital: chave });
+        } catch (e) {
+            if ((e as { code?: string }).code === '23505') throw erro('Esta digital já abre o cofre.', 'DUPLICATE_ENTRY');
+            throw e;
+        }
+    }
+
+    public async listarDigitais(dono: string): Promise<CofreDigital[]> {
+        return db
+            .select({ id: cofreDigitais.id, nome: cofreDigitais.nome, criado_em: cofreDigitais.criadoEm, ultimo_uso: cofreDigitais.ultimoUso })
+            .from(cofreDigitais)
+            .where(and(eq(cofreDigitais.dono, dono), isNull(cofreDigitais.revogadoEm)))
+            .orderBy(desc(cofreDigitais.criadoEm));
+    }
+
+    /** Tira a digital: zera o embrulho. A passkey que ficou no aparelho não abre mais nada. */
+    public async revogarDigital(dono: string, idBruto: unknown): Promise<void> {
+        const id = uuid(idBruto, 'id');
+        const r = await db
+            .update(cofreDigitais)
+            .set({ revogadoEm: new Date(), chavePorDigital: null })
+            .where(and(eq(cofreDigitais.id, id), eq(cofreDigitais.dono, dono), isNull(cofreDigitais.revogadoEm)))
+            .returning({ id: cofreDigitais.id });
+        if (r.length === 0) throw erro('Digital não encontrada.', 'NOT_FOUND');
+    }
+
+    /** Anota o último uso (a tela mostra). Só informativo: quem abre é o navegador. */
+    public async usouDigital(dono: string, idBruto: unknown): Promise<void> {
+        const id = uuid(idBruto, 'id');
+        await db
+            .update(cofreDigitais)
+            .set({ ultimoUso: new Date() })
+            .where(and(eq(cofreDigitais.id, id), eq(cofreDigitais.dono, dono), isNull(cofreDigitais.revogadoEm)));
     }
 
     /** Cria a conta do cofre. Uma por dono: a segunda tentativa é 409 (não sobrescreve nada). */

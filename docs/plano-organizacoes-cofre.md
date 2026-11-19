@@ -116,7 +116,7 @@ vez pelo celular com a biometria; revogar uma máquina não exige trocar a palav
 | C0 | Documento de ameaças e de chaves (detalhar o acima) e aprovação do dono |
 | C1 | Pacote `@loginhub/cripto` com testes e vetores fixos (cifra/decifra igual em navegador e Node) |
 | C2 | Serviço e banco do cofre **separados** do login (outro container, outro usuário de banco), só dado cifrado |
-| C3 | B4 (PRF) para destrancar o cofre com a digital |
+| C3 | B4 (PRF) para destrancar o cofre com a digital — **feito em 19/11/2026 (v1.5.0)**: `db/015`, `features/cofre/digital.ts`, botão "Abrir com a digital" |
 | C4 | CLI `hub-pass` + chave por máquina + repasse no bf, Mac e PDV |
 | C5 | Tela do cofre no painel, cofres compartilhados por organização |
 | C6 | Importar do Proton Pass, rodar os dois juntos e só então mudar a Regra 15 do Ômega |

@@ -1518,6 +1518,24 @@ chave do 2FA, com o código de 6 dígitos ao vivo. Tranca sozinho com 5 min para
   `run` (`VAR=hub://Cofre/Item/campo`). Instalação nas máquinas: `~/sh/hub-pass-instalar.sh` (awlsrv, bf, Mac).
 - Teste ponta a ponta: `LOGINHUB_MASTER_KEY=… npx tsx scripts/teste-cofre-cli.ts`.
 
+#### Cofre aberto pela digital (v1.5.0)
+
+Pedido do dono: "a biometria deve ir para o próprio app cofre". Com o cofre aberto, o ícone da digital na barra
+cadastra o **Touch ID/Face ID** deste aparelho; daí em diante o cofre trancado mostra **Abrir com a digital** (em
+`/cofre` e em `/meu-cofre`). A palavra-passe e o kit continuam valendo.
+
+- **Como funciona**: passkey só do cofre (rpId `loginhub.astralwavelabel.com`, não é login) com a extensão
+  **PRF** do WebAuthn. Depois da digital, o aparelho devolve um segredo fixo de 32 bytes para o sal daquela
+  digital; o navegador passa pelo HKDF-SHA256 (`chaveDoPrf`, etiqueta `loginhub-cofre-prf-v1`) e embrulha a
+  chave da conta (dado associado `cofre-conta:<dono>:prf:<credencial>`). O segredo nunca sai do aparelho.
+- **Servidor** (`db/015_cofre_digitais.sql`, `cofre_digitais`): guarda só id da credencial, sal e embrulho;
+  rotas `GET|POST /cofre/digitais`, `DELETE /cofre/digitais/:id`, `POST /cofre/digitais/:id/uso`. Máquina do
+  CLI não cadastra nem tira digital. Tirar zera o embrulho.
+- **Onde funciona**: Senhas do iCloud (Safari 18+ e Chrome no Mac/iPhone) e Gerenciador de Senhas do Google.
+  Gerenciador que não devolve PRF cai no aviso e o cofre segue pela palavra-passe.
+- Testes: `scripts/teste-cofre-cripto.ts` ganhou os casos da digital (HKDF determinístico, embrulho preso ao
+  dono e à credencial).
+
 O plano das próximas frentes (biometria em todos os apps e cofre de senhas cifrado de ponta a
 ponta, com CLI `hub-pass`) está em [`docs/plano-organizacoes-cofre.md`](docs/plano-organizacoes-cofre.md).
 

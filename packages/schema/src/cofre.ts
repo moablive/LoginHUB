@@ -49,6 +49,47 @@ export const cofreAparelhos = pgTable('cofre_aparelhos', {
     revogadoEm: timestamp('revogado_em'),
 });
 
+/**
+ * Digital que abre o cofre (db/015): passkey com PRF. `chavePorDigital` é a chave
+ * da conta embrulhada pela chave derivada do PRF, que só o aparelho produz.
+ */
+export const cofreDigitais = pgTable('cofre_digitais', {
+    id: uuid('id').primaryKey(),
+    dono: varchar('dono', { length: 64 }).notNull().references(() => cofreContas.dono, { onDelete: 'cascade' }),
+    nome: varchar('nome', { length: 120 }).notNull(),
+    credencialId: varchar('credencial_id', { length: 1400 }).notNull(),
+    prfSal: varchar('prf_sal', { length: 64 }).notNull(),
+    chavePorDigital: text('chave_por_digital'),
+    criadoEm: timestamp('criado_em').notNull().defaultNow(),
+    ultimoUso: timestamp('ultimo_uso'),
+    revogadoEm: timestamp('revogado_em'),
+});
+
+/** Digital ativa, como vem no GET /cofre: o navegador precisa disto para abrir. */
+export interface CofreDigitalEmbrulho {
+    id: string;
+    credencial_id: string;
+    prf_sal: string;
+    chave_por_digital: string;
+}
+
+/** Digital na lista da tela (sem embrulho). */
+export interface CofreDigital {
+    id: string;
+    nome: string;
+    criado_em: string | Date;
+    ultimo_uso: string | Date | null;
+}
+
+/** POST /cofre/digitais */
+export interface CofreDigitalNova {
+    id: string;
+    nome: string;
+    credencial_id: string;
+    prf_sal: string;
+    chave_por_digital: string;
+}
+
 export interface CofreAparelho {
     id: string;
     nome: string;
@@ -94,6 +135,8 @@ export interface CofreEstado {
     conta: CofreConta | null;
     /** Só quando quem pede é um aparelho aprovado: a chave da conta embrulhada pela chave dele. */
     aparelho?: { id: string; chave_por_aparelho: string };
+    /** Digitais ativas (db/015): abrem o cofre com Touch ID/Face ID neste ou noutro aparelho. */
+    digitais?: CofreDigitalEmbrulho[];
     cofres: CofreRegistro[];
     itens: CofreItemRegistro[];
 }

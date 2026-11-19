@@ -33,7 +33,9 @@ import type {
   ConvidarAdminResposta,
   CofreEstado,
   CofreConta,
-  CofreAparelho
+  CofreAparelho,
+  CofreDigital,
+  CofreDigitalNova
 } from '@loginhub/schema';
 
 // ==========================================
@@ -749,5 +751,19 @@ export const cofreApi = {
   },
   revogarAparelho: async (id: string): Promise<void> => {
     await api.delete(`/cofre/aparelhos/${id}`);
+  },
+  /** Digitais que abrem o cofre (passkey com PRF, db/015). */
+  digitais: async (): Promise<CofreDigital[]> => {
+    const { data } = await api.get<CofreDigital[]>('/cofre/digitais');
+    return data;
+  },
+  registrarDigital: async (digital: CofreDigitalNova): Promise<void> => {
+    await api.post('/cofre/digitais', digital);
+  },
+  revogarDigital: async (id: string): Promise<void> => {
+    await api.delete(`/cofre/digitais/${id}`);
+  },
+  usouDigital: async (id: string): Promise<void> => {
+    await api.post(`/cofre/digitais/${id}/uso`, {});
   },
 };

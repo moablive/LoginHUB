@@ -222,6 +222,11 @@ cofreRouter.delete('/itens/:id', CofreController.apagarItem as any);
 cofreRouter.get('/aparelhos', CofreController.listarAparelhos as any);
 cofreRouter.post('/aparelhos', CofreController.registrarAparelho as any);
 cofreRouter.delete('/aparelhos/:id', CofreController.revogarAparelho as any);
+// Digital que abre o cofre (db/015): passkey com PRF; o segredo dela nunca vem para cá.
+cofreRouter.get('/digitais', CofreController.listarDigitais as any);
+cofreRouter.post('/digitais', CofreController.registrarDigital as any);
+cofreRouter.delete('/digitais/:id', CofreController.revogarDigital as any);
+cofreRouter.post('/digitais/:id/uso', CofreController.usouDigital as any);
 
 mainRouter.use('/cofre', cofreRouter);
 

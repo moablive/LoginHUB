@@ -131,6 +131,60 @@ export class CofreController {
         }
     }
 
+    // ------------------------------------------------------------ digitais (passkey com PRF, db/015)
+
+    /**
+     * POST /cofre/digitais `{ id, nome, credencial_id, prf_sal, chave_por_digital }`.
+     * Só com login de verdade: a máquina do CLI não cadastra digital.
+     */
+    static async registrarDigital(req: Request, res: Response) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SEM_DONO' });
+        if (donoDoCofre(req)?.aparelhoId) return res.status(403).json({ error: 'APARELHO_NAO_CADASTRA', message: 'Cadastre a digital pelo navegador.' });
+        try {
+            await cofreService.registrarDigital(dono, (req.body ?? {}) as Record<string, unknown>);
+            return res.status(201).json({ ok: true });
+        } catch (err) {
+            return responder(res, err, 'registrarDigital');
+        }
+    }
+
+    /** GET /cofre/digitais */
+    static async listarDigitais(req: Request, res: Response) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SEM_DONO' });
+        try {
+            return res.status(200).json(await cofreService.listarDigitais(dono));
+        } catch (err) {
+            return responder(res, err, 'listarDigitais');
+        }
+    }
+
+    /** DELETE /cofre/digitais/:id */
+    static async revogarDigital(req: Request<{ id: string }>, res: Response) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SEM_DONO' });
+        if (donoDoCofre(req)?.aparelhoId) return res.status(403).json({ error: 'APARELHO_NAO_REVOGA_OUTRO', message: 'Tire a digital pelo navegador.' });
+        try {
+            await cofreService.revogarDigital(dono, req.params.id);
+            return res.status(200).json({ ok: true });
+        } catch (err) {
+            return responder(res, err, 'revogarDigital');
+        }
+    }
+
+    /** POST /cofre/digitais/:id/uso — último uso, para a tela. */
+    static async usouDigital(req: Request<{ id: string }>, res: Response) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SEM_DONO' });
+        try {
+            await cofreService.usouDigital(dono, req.params.id);
+            return res.status(200).json({ ok: true });
+        } catch (err) {
+            return responder(res, err, 'usouDigital');
+        }
+    }
+
     /** DELETE /cofre/aparelhos/:id — revoga (o próprio aparelho pode se revogar: é o `hub-pass logout`). */
     static async revogarAparelho(req: Request<{ id: string }>, res: Response) {
         const dono = donoDe(req);

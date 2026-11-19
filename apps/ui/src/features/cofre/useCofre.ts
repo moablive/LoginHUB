@@ -1,13 +1,17 @@
 import { computed, ref, shallowRef } from 'vue';
 import { cofreApi } from '@loginhub/api-client';
-import type { CofreEstado } from '@loginhub/schema';
+import type { CofreDigital, CofreEstado } from '@loginhub/schema';
+import { randomBytes } from '@noble/ciphers/utils.js';
+import { criarDigital, pedirSegredo } from './digital';
 import {
   adCofre,
   adContaKit,
+  adContaPrf,
   adContaSenha,
   adItem,
   b64,
   chaveDoKit,
+  chaveDoPrf,
   chaveMestraDe,
   cifrar,
   cifrarJson,
@@ -65,6 +69,9 @@ const ilegiveis = ref(0);
 
 const aberto = computed(() => chaveConta.value !== null);
 const existe = computed(() => !!bruto.value?.conta);
+/** Alguma digital (passkey com PRF) abre este cofre? A tela trancada mostra o botão. */
+const temDigital = computed(() => (bruto.value?.digitais?.length ?? 0) > 0);
+const digitais = ref<CofreDigital[]>([]);
 
 async function carregar(): Promise<void> {
   bruto.value = await cofreApi.estado();
@@ -151,6 +158,65 @@ async function abrirComKit(kitTexto: string): Promise<void> {
   abrirTudo();
 }
 
+/**
+ * Abre pela digital (db/015): o aparelho devolve o segredo PRF de uma das
+ * digitais cadastradas e ele desembrulha a chave da conta. Lança `ErroDigital`
+ * (cancelado, sem PRF) ou `CHAVE_ERRADA` (embrulho mexido).
+ */
+async function abrirComDigital(): Promise<void> {
+  await carregar();
+  const lista = bruto.value?.digitais ?? [];
+  if (!bruto.value?.conta || !lista.length) throw new Error('SEM_DIGITAL');
+  const { credencialId, segredo } = await pedirSegredo(lista.map((d) => ({ credencial_id: d.credencial_id, prf_sal: deB64(d.prf_sal) })));
+  const d = lista.find((x) => x.credencial_id === credencialId);
+  if (!d) {
+    segredo.fill(0);
+    throw new Error('CHAVE_ERRADA');
+  }
+  const chave = chaveDoPrf(segredo);
+  segredo.fill(0);
+  try {
+    chaveConta.value = decifrar(chave, d.chave_por_digital, adContaPrf(dono(), d.credencial_id));
+  } finally {
+    chave.fill(0);
+  }
+  abrirTudo();
+  cofreApi.usouDigital(d.id).catch(() => undefined);
+}
+
+/** Cadastra a digital deste aparelho (só com o cofre aberto: precisa da chave da conta). */
+async function ativarDigital(nome: string): Promise<void> {
+  const conta = chaveConta.value;
+  if (!conta) throw new Error('TRANCADO');
+  const sal = randomBytes(32);
+  const { credencialId, segredo } = await criarDigital(dono(), nome, sal);
+  const chave = chaveDoPrf(segredo);
+  segredo.fill(0);
+  try {
+    await cofreApi.registrarDigital({
+      id: novoId(),
+      nome: nome.trim().slice(0, 120) || 'Aparelho',
+      credencial_id: credencialId,
+      prf_sal: b64(sal),
+      chave_por_digital: cifrar(chave, conta, adContaPrf(dono(), credencialId)),
+    });
+  } finally {
+    chave.fill(0);
+  }
+  await carregar();
+  await listarDigitais();
+}
+
+async function listarDigitais(): Promise<void> {
+  digitais.value = await cofreApi.digitais();
+}
+
+async function revogarDigital(id: string): Promise<void> {
+  await cofreApi.revogarDigital(id);
+  await carregar();
+  await listarDigitais();
+}
+
 /** Palavra-passe nova (troca ou depois do kit). Cofres e itens não mudam. */
 async function trocarSenha(nova: string): Promise<void> {
   const conta = chaveConta.value;
@@ -207,6 +273,8 @@ export function useCofre() {
   return {
     existe,
     aberto,
+    temDigital,
+    digitais,
     cofres,
     itens,
     ilegiveis,
@@ -214,6 +282,10 @@ export function useCofre() {
     criar,
     abrirComSenha,
     abrirComKit,
+    abrirComDigital,
+    ativarDigital,
+    listarDigitais,
+    revogarDigital,
     trocarSenha,
     trancar,
     salvarCofre,

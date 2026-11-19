@@ -4,6 +4,7 @@
  *
  *   palavra-passe ──Argon2id──► chave mestra ──abre──► chave da conta
  *   kit de recuperação (256 bits) ─────────────abre──► chave da conta
+ *   digital (passkey com PRF, db/015) ──HKDF───abre──► chave da conta
  *   chave da conta ──abre──► { nome, chave } de cada cofre
  *   chave do cofre ──abre──► cada item (título, usuário, senha, URL, 2FA, notas)
  *
@@ -16,6 +17,7 @@
  * Bibliotecas auditadas (@noble), nada de cripto escrita à mão.
  */
 import { argon2idAsync } from '@noble/hashes/argon2.js';
+import { hkdf } from '@noble/hashes/hkdf.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha1 } from '@noble/hashes/legacy.js';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -139,6 +141,13 @@ export function kitDeTexto(t: string): Uint8Array {
 /** A chave que embrulha a chave da conta pelo kit (o kit cru nunca é usado direto como chave). */
 export const chaveDoKit = (kit: Uint8Array): Uint8Array => sha256(new Uint8Array([...texto.encode('loginhub-cofre-kit-v1'), ...kit]));
 
+/**
+ * A chave que embrulha a chave da conta pela digital (db/015): o segredo de 32
+ * bytes que a passkey devolve pela extensão PRF passa pelo HKDF-SHA256 com uma
+ * etiqueta fixa — o segredo cru nunca é usado direto como chave.
+ */
+export const chaveDoPrf = (prf: Uint8Array): Uint8Array => hkdf(sha256, prf, undefined, texto.encode('loginhub-cofre-prf-v1'), 32);
+
 export const novaChave = (): Uint8Array => randomBytes(32);
 
 export const novoId = (): string => crypto.randomUUID();
@@ -151,6 +160,8 @@ export const adCofre = (dono: string, id: string) => `cofre:${dono}:${id}`;
 export const adItem = (cofreId: string, id: string) => `cofre-item:${cofreId}:${id}`;
 /** Chave da conta embrulhada pela chave de uma máquina aprovada do CLI (db/014). */
 export const adAparelho = (dono: string, aparelhoId: string) => `cofre-aparelho:${dono}:${aparelhoId}`;
+/** Chave da conta embrulhada pela digital de um aparelho (passkey com PRF, db/015). */
+export const adContaPrf = (dono: string, credencialId: string) => `cofre-conta:${dono}:prf:${credencialId}`;
 
 // ------------------------------------------------------------ 2FA (TOTP, RFC 6238)
 

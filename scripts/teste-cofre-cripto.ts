@@ -45,6 +45,20 @@ ok('lerTotp otpauth', c.codigoTotp({ ...c.lerTotp('otpauth://totp/x?secret=GEZDG
   recusou = false; try { c.decifrarJson(conta, envItem, c.adItem('outro-cofre', 'b')); } catch { recusou = true; }
   ok('item não abre noutro cofre', recusou);
   ok('envelope casa com o validador do servidor', /^v1\.[A-Za-z0-9+/=]{20,64}\.[A-Za-z0-9+/=]{16,}$/.test(envItem));
+  // Digital (passkey com PRF, db/015): o segredo do PRF vira chave pelo HKDF e embrulha a conta.
+  const prf = c.novaChave();
+  ok("HKDF do PRF determinístico", c.b64(c.chaveDoPrf(prf)) === c.b64(c.chaveDoPrf(new Uint8Array(prf))));
+  ok("HKDF do PRF não é o segredo cru", c.b64(c.chaveDoPrf(prf)) !== c.b64(prf));
+  const envPrf = c.cifrar(c.chaveDoPrf(prf), conta, c.adContaPrf("u:155", "credA"));
+  ok("digital abre a conta", c.b64(c.decifrar(c.chaveDoPrf(prf), envPrf, c.adContaPrf("u:155", "credA"))) === c.b64(conta));
+  recusou = false; try { c.decifrar(c.chaveDoPrf(c.novaChave()), envPrf, c.adContaPrf("u:155", "credA")); } catch { recusou = true; }
+  ok("recusa outra digital", recusou);
+  recusou = false; try { c.decifrar(c.chaveDoPrf(prf), envPrf, c.adContaPrf("master", "credA")); } catch { recusou = true; }
+  ok("digital não abre o cofre de outro dono", recusou);
+  recusou = false; try { c.decifrar(c.chaveDoPrf(prf), envPrf, c.adContaPrf("u:155", "credB")); } catch { recusou = true; }
+  ok("embrulho preso à credencial", recusou);
+  ok("embrulho da digital casa com o validador do servidor", /^v1\.[A-Za-z0-9+/=]{20,64}\.[A-Za-z0-9+/=]{16,}$/.test(envPrf));
+  ok("sal do PRF casa com o validador do servidor", /^[A-Za-z0-9+/]{43}=$/.test(c.b64(c.novaChave())));
   const s = c.gerarSenha(24);
   ok('gerador 24 caracteres', s.length === 24);
   console.log(`falhas: ${falhas}`);
