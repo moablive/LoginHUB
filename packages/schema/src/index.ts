@@ -365,6 +365,8 @@ export interface Categoria {
     criado_em?: string | Date | null;
     /** Quantos apps estão no grupo — o painel usa para avisar antes de apagar. */
     total_apps?: number;
+    /** Quantos admins de organização cuidam do grupo (db/012) — o selo do botão "Admins". */
+    total_admins?: number;
 }
 
 export interface CreateCategoriaDTO {

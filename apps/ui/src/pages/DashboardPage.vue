@@ -65,6 +65,13 @@ const master = computed(() => eu.value?.master === true);
 // "Convidar admin": aberta com a organização do grupo (ou a primeira).
 const adminsDe = ref<number | null | undefined>(undefined);
 const mostrarAdmins = computed(() => adminsDe.value !== undefined);
+// Selo do botão "Admins": quantos admins de organização cuidam do grupo.
+const adminsDoGrupo = (id: number | null) => categorias.value.find((c) => c.id === id)?.total_admins ?? 0;
+function fecharAdmins() {
+  adminsDe.value = undefined;
+  // Convidou ou tirou alguém: atualiza o selo.
+  void carregar();
+}
 
 // Busca dados iniciais. A API já devolve os apps na ordem do painel
 // (categoria, depois `ordem`); a tela só agrupa, nunca reordena.
@@ -307,6 +314,9 @@ const seta =
             >
               <UserPlusIcon class="h-4 w-4" />
               Admins
+              <UiBadge :tom="adminsDoGrupo(grupo.id) > 0 ? 'accent' : 'neutro'" :title="`${adminsDoGrupo(grupo.id)} admin(s) nesta organização`">
+                {{ adminsDoGrupo(grupo.id) }}
+              </UiBadge>
             </UiButton>
           </template>
 
@@ -442,7 +452,7 @@ const seta =
       :organizacoes="eu?.organizacoes ?? []"
       :inicial="adminsDe ?? null"
       :meu-email="eu?.email"
-      @fechar="adminsDe = undefined"
+      @fechar="fecharAdmins"
     />
 
     <CategoriasSheet :aberto="mostrarCategorias" @fechar="mostrarCategorias = false" @mudou="carregar" />

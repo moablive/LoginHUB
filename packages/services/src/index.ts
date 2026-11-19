@@ -1097,7 +1097,14 @@ export class CategoriaService {
             .groupBy(aplicativos.categoriaId);
         const porCategoria = new Map<number, number>();
         for (const c of contagem) if (c.categoriaId !== null) porCategoria.set(c.categoriaId, Number(c.total));
-        return rows.map((r: typeof rows[0]) => ({ ...r, total_apps: porCategoria.get(r.id) ?? 0 }));
+        // Admins de organização por categoria (db/012): o selo do botão "Admins" no painel.
+        const admins = await db
+            .select({ categoriaId: adminsOrganizacao.categoriaId, total: sql<number>`count(*)` })
+            .from(adminsOrganizacao)
+            .groupBy(adminsOrganizacao.categoriaId);
+        const adminsPorCategoria = new Map<number, number>();
+        for (const a of admins) adminsPorCategoria.set(a.categoriaId, Number(a.total));
+        return rows.map((r: typeof rows[0]) => ({ ...r, total_apps: porCategoria.get(r.id) ?? 0, total_admins: adminsPorCategoria.get(r.id) ?? 0 }));
     }
 
     public async criar(data: CreateCategoriaDTO) {
