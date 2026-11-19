@@ -53,7 +53,7 @@ A base já existe (`PasskeyService`, `hubPasskeyClient.ts` do auth-kit, ligada s
 
 | Fase | O quê |
 |---|---|
-| B1 | **Uma passkey para todos os apps `*.astralwavelabel.com`**: `webauthn_rp_id = astralwavelabel.com` nos apps desse domínio (o WebAuthn aceita o domínio-pai como rpId). Cadastra uma vez, entra com a digital em todos |
+| B1 | **Uma passkey por app, com rpId = host do app** (`money.astralwavelabel.com`, `escritorios.astralwavelabel.com`…; o Escritórios 3D ligou em 19/11/2026). Corrigido no mesmo dia: o domínio-pai como rpId NÃO serve, porque a passkey é de uma conta de app (`usuarios_passkeys` → usuário do app, e o login exige o mesmo app) — com rpId compartilhado o navegador ofereceria no Escritórios as passkeys do MoneyAPP, que o hub recusa. "Uma digital para todos" exigiria ligar as contas dos apps entre si (identidade única), fase futura |
 | B2 | Copiar o `hubPasskeyClient.ts` e o par botão "Entrar com biometria" + oferta pós-login (igual ao MoneyAPP) para Escritórios 3D, NotesAPP, TodoAPP, CloudShell, Moabinho, MovingUP, NãoTeEsquece e o próprio painel do hub |
 | B3 | Sul Alimentos (`sulalimentos.com`, outro domínio, rpId próprio) e as contas de CPF: encaixar a passkey nas vagas de aparelho do `AparelhoService` (a "fase F3" que o código já cita) |
 | B4 | Extensão **PRF** do WebAuthn na passkey: além de entrar, ela devolve um segredo fixo que destranca o cofre (frente C) |
