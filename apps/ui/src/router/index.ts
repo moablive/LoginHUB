@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import { authApi, ehSuperAdmin } from '@loginhub/api-client';
+import { authApi, ehSuperAdmin, ehAdminDeOrganizacao } from '@loginhub/api-client';
 
 /**
  * Rotas do painel. As públicas (login, convite, enrolamento de 2FA) ficam fora
@@ -30,10 +30,10 @@ export const router = createRouter({
         { path: 'dashboard', name: 'dashboard', component: () => import('@/pages/DashboardPage.vue') },
         // Alias antigo: /apps também leva ao dashboard.
         { path: 'apps', redirect: '/dashboard' },
-        { path: 'apps/new', name: 'app-novo', component: () => import('@/pages/CreateAppPage.vue') },
+        { path: 'apps/new', name: 'app-novo', component: () => import('@/pages/CreateAppPage.vue'), meta: { soMaster: true } },
         { path: 'apps/:id/users', name: 'app-usuarios', component: () => import('@/pages/AppUsersPage.vue'), props: true },
         // Venda por assinatura: preço, afiliados, assinantes e comissões (db/009).
-        { path: 'apps/:id/vendas', name: 'app-vendas', component: () => import('@/pages/AppVendasPage.vue'), props: true },
+        { path: 'apps/:id/vendas', name: 'app-vendas', component: () => import('@/pages/AppVendasPage.vue'), props: true, meta: { soMaster: true } },
       ],
     },
 
@@ -47,10 +47,14 @@ export const router = createRouter({
 
 router.beforeEach((to) => {
   if (!to.matched.some((r) => r.meta.superAdmin)) return true;
+  // Telas só do master (criar app, vendas): o admin de organização volta ao painel.
+  if (to.matched.some((r) => r.meta.soMaster) && !ehSuperAdmin()) return authApi.isAuthenticated() && ehAdminDeOrganizacao() ? { path: '/dashboard', replace: true } : { path: '/login', replace: true };
   // `ehSuperAdmin` e não o sessionStorage direto: a marca migrou para o
   // localStorage porque o sessionStorage morre com a aba, e o celular descarta
   // a aba em segundo plano — ao voltar, o painel expulsava para o login com o
   // token ainda válido. Ver a nota em packages/api-client.
-  if (authApi.isAuthenticated() && ehSuperAdmin()) return true;
+  // Admin de organização (db/012) monta as mesmas telas; o que ele enxerga e
+  // pode fazer vem da API (`/admin/eu` e as guardas de escopo).
+  if (authApi.isAuthenticated() && (ehSuperAdmin() || ehAdminDeOrganizacao())) return true;
   return { path: '/login', replace: true };
 });

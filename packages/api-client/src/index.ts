@@ -26,7 +26,11 @@ import type {
   Afiliado,
   SalvarAfiliadoDTO,
   Assinatura,
-  ResumoVendas
+  ResumoVendas,
+  EscopoDoPainel,
+  AdminOrganizacao,
+  ConvidarAdminDTO,
+  ConvidarAdminResposta
 } from '@loginhub/schema';
 
 // ==========================================
@@ -83,14 +87,29 @@ const marcarSuperAdmin = (): void => {
   localStorage.setItem(CHAVE_SUPER_ADMIN, 'true');
 };
 
+/**
+ * Marca que a sessão no `awl_token` é de um ADMIN DE ORGANIZAÇÃO (db/012,
+ * 19/11/2026). Como a do master, não autoriza nada — só diz ao roteador que
+ * pode montar as telas do painel; o que cada um enxerga vem de `/admin/eu`.
+ */
+const CHAVE_ADMIN_ORG = 'awl_is_admin_org';
+
 const limparSuperAdmin = (): void => {
   localStorage.removeItem(CHAVE_SUPER_ADMIN);
+  localStorage.removeItem(CHAVE_ADMIN_ORG);
   sessionStorage.removeItem('is_super_admin');
 };
 
 export const ehSuperAdmin = (): boolean =>
   localStorage.getItem(CHAVE_SUPER_ADMIN) === 'true' ||
   sessionStorage.getItem('is_super_admin') === 'true';
+
+export const ehAdminDeOrganizacao = (): boolean => localStorage.getItem(CHAVE_ADMIN_ORG) === 'true';
+
+/** Chame depois que o 2FA do admin de organização fechou o login. */
+export const marcarAdminDeOrganizacao = (): void => {
+  localStorage.setItem(CHAVE_ADMIN_ORG, 'true');
+};
 
 // ==========================================
 // REFRESH TOKEN HELPER
@@ -274,6 +293,45 @@ export const authApi = {
     return { redirect: '/dashboard' };
   },
 
+  /**
+   * Login do ADMIN DE ORGANIZAÇÃO no painel (db/012). Mesmo `/auth/login` dos
+   * apps, com `painel: true`: o hub troca o tenant pelo app do painel. A conta
+   * tem 2FA obrigatório, então o normal é voltar `requires2FA` — quem fecha é
+   * `twoFactorApi.verify`, e depois `marcarAdminDeOrganizacao()`.
+   */
+  loginPainel: async (email: string, password: string): Promise<AuthResult> => {
+    localStorage.removeItem('awl_token');
+    localStorage.removeItem('awl_user');
+    localStorage.removeItem('awl_app');
+    limparSuperAdmin();
+
+    const { data } = await api.post<LoginResponse | TwoFactorChallengeResponse | TwoFactorSetupRequiredResponse>('/auth/login', {
+      email: email.trim().toLowerCase(),
+      password,
+      painel: true,
+    });
+
+    if ('require2FASetup' in data && data.require2FASetup) {
+      return { redirect: `/enrolar-2fa?token=${encodeURIComponent(data.setupToken)}`, require2FASetup: true };
+    }
+    if ('requires2FA' in data && data.requires2FA) {
+      return {
+        redirect: '/login',
+        requires2FA: true,
+        challengeToken: data.challengeToken,
+        challengeExpiresIn: data.expiresIn,
+        methods: data.methods,
+      };
+    }
+    // Conta do painel sem 2FA não existe (o convite marca obrigatório); se
+    // vier sessão direta, o `adminMiddleware` recusa do mesmo jeito.
+    const sessao = data as LoginResponse;
+    localStorage.setItem('awl_token', sessao.token);
+    localStorage.setItem('awl_user', JSON.stringify(sessao.usuario));
+    marcarAdminDeOrganizacao();
+    return { redirect: '/dashboard' };
+  },
+
   logout: () => {
     localStorage.removeItem('awl_token');
     localStorage.removeItem('awl_user');
@@ -318,6 +376,12 @@ export const authApi = {
   isAuthenticated: (): boolean => {
     const token = localStorage.getItem('awl_token');
     return !!token || ehSuperAdmin();
+  },
+
+  /** Quem está no painel e de quais organizações cuida (master = todas). */
+  eu: async (): Promise<EscopoDoPainel> => {
+    const { data } = await api.get<EscopoDoPainel>('/admin/eu');
+    return data;
   },
 
   getUser: (): User | null => {
@@ -618,5 +682,24 @@ export const bloqueioApi = {
   /** Apaga da lista uma linha já liberada (05/11/2026). */
   excluir: async (id: number, por: string, appId: string): Promise<void> => {
     await api.delete(`/admin/bloqueios/${id}`, { params: { app_id: Number(appId), por } });
+  },
+};
+
+// ==========================================
+// ADMINS DE ORGANIZAÇÃO (db/012, 19/11/2026) — o botão "Convidar admin"
+// ==========================================
+export const organizacaoApi = {
+  admins: async (categoriaId: number): Promise<AdminOrganizacao[]> => {
+    const { data } = await api.get<AdminOrganizacao[]>(`/admin/organizacoes/${categoriaId}/admins`);
+    return data;
+  },
+  /** Pessoa nova recebe o convite por e-mail (senha + Google Authenticator). */
+  convidar: async (categoriaId: number, payload: ConvidarAdminDTO): Promise<ConvidarAdminResposta> => {
+    const { data } = await api.post<ConvidarAdminResposta>(`/admin/organizacoes/${categoriaId}/admins`, payload);
+    return data;
+  },
+  /** Tira da organização; a conta fica (sem organização, o painel não abre nada). */
+  remover: async (categoriaId: number, usuarioId: number): Promise<void> => {
+    await api.delete(`/admin/organizacoes/${categoriaId}/admins/${usuarioId}`);
   },
 };

@@ -3,8 +3,10 @@ import jwt from 'jsonwebtoken';
 import { db } from '@loginhub/database';
 import {
     aplicativos,
+    usuarios,
     usuarios2fa,
     usuariosAparelho,
+    adminsOrganizacao,
     JWTPayload,
     MASTER_LOGIN_EMAIL,
     MASTER_SUB,
@@ -40,7 +42,68 @@ import client from 'prom-client';
  * de usuário comum com `role: "admin"` (que existe: é o admin DO APP dele) não
  * abre nada aqui.
  */
-export const adminMiddleware: RequestHandler = (req, res, next) => {
+/**
+ * O que a credencial de /admin pode fazer. `master` (chave ou sessão master)
+ * pode tudo. Admin de organização (db/012, 19/11/2026) só as categorias da
+ * lista — e só nas rotas que o roteador abriu para ele (ver `soMaster` e as
+ * guardas `exigir*NoEscopo`): o resto do /admin continua só do master.
+ */
+export interface EscopoAdmin {
+    master: boolean;
+    usuarioId?: number;
+    nome?: string;
+    email?: string;
+    categorias: number[];
+}
+
+export const escopoDe = (req: unknown): EscopoAdmin | undefined => (req as { escopo?: EscopoAdmin }).escopo;
+
+const ESCOPO_MASTER: EscopoAdmin = { master: true, categorias: [] };
+
+/**
+ * Sessão de um admin de organização: conta comum do app do painel
+ * (`painel_do_hub`), ativa, com 2FA ATIVO, sem cair no piso de sessão e com ao
+ * menos uma organização. Qualquer coisa fora disso → null (403 lá fora).
+ *
+ * Confere tudo no banco a cada pedido, de propósito: tirar a pessoa de uma
+ * organização, desativá-la ou reiniciar o 2FA dela vale no pedido seguinte,
+ * sem esperar o JWT de 24h vencer.
+ */
+async function escopoDoAdminDeOrganizacao(decoded: JWTPayload & { action?: string }): Promise<EscopoAdmin | null> {
+    if (decoded.action) return null;
+    const usuarioId = Number(decoded.sub);
+    const appId = Number(decoded.app_id);
+    if (!Number.isInteger(usuarioId) || usuarioId <= 0 || !Number.isInteger(appId) || appId <= 0) return null;
+
+    const linhas = await db
+        .select({
+            nome: usuarios.nome,
+            email: usuarios.email,
+            status: usuarios.status,
+            appStatus: aplicativos.status,
+            painel: aplicativos.painelDoHub,
+            doisFatoresAtivo: usuarios2fa.ativo,
+            piso: usuarios2fa.sessoesValidasDesde,
+        })
+        .from(usuarios)
+        .innerJoin(aplicativos, eq(aplicativos.id, usuarios.appId))
+        .leftJoin(usuarios2fa, eq(usuarios2fa.usuarioId, usuarios.id))
+        .where(and(eq(usuarios.id, usuarioId), eq(usuarios.appId, appId)))
+        .limit(1);
+    const u = linhas[0];
+    if (!u || !u.painel || u.appStatus !== 'ativo' || u.status !== 'ativo' || !u.doisFatoresAtivo) return null;
+    if (u.piso && decoded.iat && decoded.iat < Math.floor(u.piso.getTime() / 1000)) return null;
+
+    const orgs = await db
+        .select({ categoriaId: adminsOrganizacao.categoriaId })
+        .from(adminsOrganizacao)
+        .where(eq(adminsOrganizacao.usuarioId, usuarioId));
+    if (orgs.length === 0) return null;
+
+    return { master: false, usuarioId, nome: u.nome, email: u.email, categorias: orgs.map((o: { categoriaId: number }) => o.categoriaId) };
+}
+
+export const adminMiddleware: RequestHandler = async (req, res, next) => {
     const validKey = masterKeyDoAmbiente();
 
     // Fail-safe: Bloqueia se a configuração do servidor estiver incorreta
@@ -49,12 +112,17 @@ export const adminMiddleware: RequestHandler = (req, res, next) => {
         return res.status(500).json({ error: 'Erro de configuração do servidor.' });
     }
 
+    // Segunda passagem (o roteador das organizações já validou e o pedido caiu
+    // no roteador só-master): não confere de novo.
+    if (escopoDe(req)) return next();
+
     const headerValue = req.headers['x-api-key'];
 
     // Normaliza caso o header venha como array de strings
     const apiKey = Array.isArray(headerValue) ? headerValue[0] : headerValue;
 
     if (apiKey && apiKey === validKey) {
+        (req as any).escopo = ESCOPO_MASTER;
         return next();
     }
 
@@ -68,23 +136,9 @@ export const adminMiddleware: RequestHandler = (req, res, next) => {
             return res.status(500).json({ error: 'Erro de configuração do servidor.' });
         }
 
+        let decoded: (JWTPayload & { action?: string }) | null = null;
         try {
-            const decoded = jwt.verify(token, jwtSecret) as unknown as JWTPayload & { action?: string };
-
-            // Passe de etapa única nunca é sessão — vale aqui como vale no
-            // authMiddleware, e com mais razão: aqui a sessão é a do master.
-            const ehSessaoMaster =
-                !decoded.action &&
-                decoded.sub === MASTER_SUB &&
-                decoded.email === MASTER_LOGIN_EMAIL &&
-                decoded.role === 'admin' &&
-                !!decoded.mk &&
-                decoded.mk === masterKeyFingerprint(validKey);
-
-            if (ehSessaoMaster) {
-                (req as any).user = { ...decoded };
-                return next();
-            }
+            decoded = jwt.verify(token, jwtSecret) as unknown as JWTPayload & { action?: string };
         } catch (err) {
             // Expirado responde 401, não 403: é o 401 que faz o interceptor do
             // api-client chamar o /auth/refresh. Com 403 a sessão master morria
@@ -98,6 +152,39 @@ export const adminMiddleware: RequestHandler = (req, res, next) => {
                 });
             }
         }
+
+        if (decoded) {
+            // Passe de etapa única nunca é sessão — vale aqui como vale no
+            // authMiddleware, e com mais razão: aqui a sessão é a do master.
+            const ehSessaoMaster =
+                !decoded.action &&
+                decoded.sub === MASTER_SUB &&
+                decoded.email === MASTER_LOGIN_EMAIL &&
+                decoded.role === 'admin' &&
+                !!decoded.mk &&
+                decoded.mk === masterKeyFingerprint(validKey);
+
+            if (ehSessaoMaster) {
+                (req as any).user = { ...decoded };
+                (req as any).escopo = ESCOPO_MASTER;
+                return next();
+            }
+
+            // Admin de organização (db/012). Um JWT de usuário de outro app com
+            // `role: "admin"` (o admin DO APP dele) não passa: a conta tem de
+            // ser do app do painel e ter organização.
+            try {
+                const escopo = await escopoDoAdminDeOrganizacao(decoded);
+                if (escopo) {
+                    (req as any).user = { ...decoded };
+                    (req as any).escopo = escopo;
+                    return next();
+                }
+            } catch (err) {
+                console.error('[AdminAuth] escopo:', (err as Error).message);
+                return res.status(500).json({ error: 'Erro Interno' });
+            }
+        }
     }
 
     console.warn(`[AdminAuth] Acesso negado. IP: ${req.ip}`);
@@ -105,6 +192,76 @@ export const adminMiddleware: RequestHandler = (req, res, next) => {
         error: 'Acesso Proibido',
         message: 'Credencial mestre inválida ou ausente.'
     });
+};
+
+// ------------------------------------------------------------------
+// Guardas de escopo (admin de organização, 19/11/2026)
+// ------------------------------------------------------------------
+// Rodam DEPOIS do adminMiddleware. Master passa direto em todas. Para o admin
+// de organização, o alvo do pedido tem de cair numa organização dele; alvo que
+// não existe recebe a MESMA resposta de alvo alheio (não dá para sondar ids).
+
+const foraDoEscopo = (res: Parameters<RequestHandler>[1]) =>
+    res.status(403).json({ error: 'FORA_DA_ORGANIZACAO', message: 'Isto não pertence a uma organização sua.' });
+
+/** Rotas que só o master usa (criar/editar app, categorias, vendas…). */
+export const soMaster: RequestHandler = (req, res, next) => {
+    if (escopoDe(req)?.master) return next();
+    return res.status(403).json({ error: 'SO_MASTER', message: 'Só o master do hub faz isto.' });
+};
+
+async function appNoEscopo(escopo: EscopoAdmin, appIdBruto: unknown): Promise<boolean> {
+    const appId = Number(appIdBruto);
+    if (!Number.isInteger(appId) || appId <= 0) return false;
+    const linhas = await db
+        .select({ categoriaId: aplicativos.categoriaId, painel: aplicativos.painelDoHub })
+        .from(aplicativos)
+        .where(eq(aplicativos.id, appId))
+        .limit(1);
+    const app = linhas[0];
+    // O app do painel nunca é de organização: as contas dele (os próprios
+    // admins) só se gerem pela gaveta de admins, que tem regra própria.
+    return !!app && !app.painel && app.categoriaId !== null && escopo.categorias.includes(app.categoriaId);
+}
+
+/**
+ * O app do pedido (lido por `onde`: params, body ou query) é de uma
+ * organização do admin. Sem app no pedido → recusa (o master pode omitir).
+ */
+export const exigirAppNoEscopo = (onde: (req: Parameters<RequestHandler>[0]) => unknown): RequestHandler => async (req, res, next) => {
+    const escopo = escopoDe(req);
+    if (escopo?.master) return next();
+    if (!escopo) return foraDoEscopo(res);
+    try {
+        return (await appNoEscopo(escopo, onde(req))) ? next() : foraDoEscopo(res);
+    } catch (err) {
+        console.error('[escopo] app:', (err as Error).message);
+        return res.status(500).json({ error: 'Erro Interno' });
+    }
+};
+
+/** O usuário `:param` é de um app de uma organização do admin. */
+export const exigirUsuarioNoEscopo = (param = 'id'): RequestHandler => async (req, res, next) => {
+    const escopo = escopoDe(req);
+    if (escopo?.master) return next();
+    if (!escopo) return foraDoEscopo(res);
+    try {
+        const id = Number((req.params as Record<string, string>)[param]);
+        if (!Number.isInteger(id) || id <= 0) return foraDoEscopo(res);
+        const linhas = await db.select({ appId: usuarios.appId }).from(usuarios).where(eq(usuarios.id, id)).limit(1);
+        return linhas[0] && (await appNoEscopo(escopo, linhas[0].appId)) ? next() : foraDoEscopo(res);
+    } catch (err) {
+        console.error('[escopo] usuario:', (err as Error).message);
+        return res.status(500).json({ error: 'Erro Interno' });
+    }
+};
+
+/** A organização (categoria) `:param` é do admin. */
+export const exigirOrganizacaoNoEscopo = (param = 'categoriaId'): RequestHandler => (req, res, next) => {
+    const escopo = escopoDe(req);
+    if (escopo?.master) return next();
+    const id = Number((req.params as Record<string, string>)[param]);
+    return escopo && Number.isInteger(id) && escopo.categorias.includes(id) ? next() : foraDoEscopo(res);
 };
 
 // ==========================================

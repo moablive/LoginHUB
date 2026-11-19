@@ -64,6 +64,11 @@ export interface LoginInputDTO {
      */
     app_id?: string | undefined;
     /**
+     * Login no painel do hub como admin de organização (db/012). Com `true`, o
+     * `app_id` passa a ser o do app "LoginHUB · Painel", seja qual for o enviado.
+     */
+    painel?: boolean | undefined;
+    /**
      * Aparelho de onde vem o login (04/11/2026, Sul Alimentos). Conta de CPF
      * só fica logada em um aparelho: o app gera um id, guarda no navegador e
      * manda junto com um nome legível. Sem id, conta de CPF não entra.
@@ -479,6 +484,9 @@ export const aplicativos = pgTable('aplicativos', {
     // Domínio (rpId) das passkeys do app; NULL = sem login por biometria.
     // Ver db/010_passkeys.sql e packages/services/src/PasskeyService.ts.
     webauthnRpId: varchar('webauthn_rp_id', { length: 255 }),
+    // TRUE só no app "LoginHUB · Painel": as contas dele são os admins de
+    // organização (db/012_admins_organizacao.sql). Um painel só (índice único).
+    painelDoHub: boolean('painel_do_hub').notNull().default(false),
     // Grupo do painel. NULL = "Sem categoria". Apagar a categoria devolve os
     // apps para NULL (ON DELETE SET NULL), nunca apaga app.
     categoriaId: integer('categoria_id').references(() => categorias.id, { onDelete: 'set null' }),
@@ -667,3 +675,7 @@ export * from './assinaturas';
 
 // Login por biometria: passkeys / WebAuthn (db/010_passkeys.sql).
 export * from './passkeys';
+
+// Admins de organização: contas do app do painel com poder sobre as categorias
+// (organizações) em que têm linha (db/012_admins_organizacao.sql).
+export * from './organizacoes';

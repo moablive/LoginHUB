@@ -3,7 +3,8 @@ import crypto from 'crypto';
 import { buildInviteEmail } from './templates/inviteEmail';
 import jwt from 'jsonwebtoken';
 import { db } from '@loginhub/database';
-import { aplicativos, usuarios, niveisAcesso, usuarios2fa, categorias } from '@loginhub/schema';
+import { aplicativos, usuarios, niveisAcesso, usuarios2fa, categorias, adminsOrganizacao } from '@loginhub/schema';
+import type { AdminOrganizacao, ConvidarAdminDTO, ConvidarAdminResposta, EscopoDoPainel } from '@loginhub/schema';
 import { eq, and, ne, sql, asc, isNull } from 'drizzle-orm';
 import { emailService } from './EmailService';
 import { twoFactorService } from './TwoFactorService';
@@ -1598,3 +1599,122 @@ export class UserService {
         return { magicLinkToken: emailSent ? undefined : magicLinkToken, emailSent };
     }
 }
+
+
+// ==========================================
+// ADMINS DE ORGANIZAÇÃO (db/012_admins_organizacao.sql, 19/11/2026)
+// ==========================================
+/**
+ * Organização = categoria do painel. O admin de organização é uma conta do app
+ * "LoginHUB · Painel" com 2FA, e esta tabela diz de quais organizações ele
+ * cuida. Quem confere o poder a cada pedido é o `adminMiddleware`; aqui ficam
+ * as operações da gaveta "Admins" e o "quem sou eu" da tela.
+ */
+const EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+const erroComCodigo = (mensagem: string, code: string) => Object.assign(new Error(mensagem), { code });
+
+export class OrganizacaoService {
+    private painelId: number | null = null;
+
+    /** Id do app do painel. Sem ele (migração 012 não aplicada) nada daqui funciona. */
+    public async idDoPainel(): Promise<number> {
+        if (this.painelId) return this.painelId;
+        const linhas = await db.select({ id: aplicativos.id }).from(aplicativos).where(eq(aplicativos.painelDoHub, true)).limit(1);
+        if (!linhas[0]) throw erroComCodigo('O app do painel não existe. Aplique db/012_admins_organizacao.sql.', 'PAINEL_AUSENTE');
+        this.painelId = linhas[0].id;
+        return linhas[0].id;
+    }
+
+    /** O "quem sou eu" do painel. Master vê todas as organizações. */
+    public async paraTela(escopo: { master: boolean; nome?: string; email?: string; categorias: number[] }): Promise<EscopoDoPainel> {
+        const todas = await db.select({ id: categorias.id, nome: categorias.nome }).from(categorias).orderBy(asc(categorias.ordem), asc(categorias.id));
+        return {
+            master: escopo.master,
+            nome: escopo.master ? 'Master' : (escopo.nome || ''),
+            email: escopo.master ? 'master' : (escopo.email || ''),
+            organizacoes: escopo.master ? todas : todas.filter((c: { id: number }) => escopo.categorias.includes(c.id)),
+        };
+    }
+
+    public async listarAdmins(categoriaId: number): Promise<AdminOrganizacao[]> {
+        const linhas = await db
+            .select({
+                usuario_id: usuarios.id,
+                nome: usuarios.nome,
+                email: usuarios.email,
+                status: usuarios.status,
+                dois_fatores_ativo: usuarios2fa.ativo,
+                convidado_por: adminsOrganizacao.convidadoPor,
+                criado_em: adminsOrganizacao.criadoEm,
+            })
+            .from(adminsOrganizacao)
+            .innerJoin(usuarios, eq(usuarios.id, adminsOrganizacao.usuarioId))
+            .leftJoin(usuarios2fa, eq(usuarios2fa.usuarioId, usuarios.id))
+            .where(eq(adminsOrganizacao.categoriaId, categoriaId))
+            .orderBy(asc(adminsOrganizacao.criadoEm));
+        return linhas.map((l: any) => ({ ...l, dois_fatores_ativo: !!l.dois_fatores_ativo }));
+    }
+
+    /**
+     * Convida (ou acrescenta) um admin à organização. Pessoa nova ganha conta no
+     * painel pelo mesmo convite de todo o hub (magic link → senha → 2FA). Quem já
+     * é admin de outra organização só ganha a linha nova, sem e-mail.
+     */
+    public async convidarAdmin(categoriaId: number, dados: ConvidarAdminDTO, convidadoPor: string): Promise<ConvidarAdminResposta> {
+        const nome = String(dados?.nome ?? '').trim().slice(0, 255);
+        const email = String(dados?.email ?? '').trim().toLowerCase().slice(0, 255);
+        if (!nome) throw erroComCodigo('Informe o nome.', 'VALIDATION');
+        if (!EMAIL_VALIDO.test(email)) throw erroComCodigo('E-mail inválido.', 'VALIDATION');
+
+        const cat = await db.select({ id: categorias.id }).from(categorias).where(eq(categorias.id, categoriaId)).limit(1);
+        if (!cat[0]) throw erroComCodigo('Organização não encontrada.', 'NOT_FOUND');
+
+        const painelId = await this.idDoPainel();
+        const existente = await db
+            .select({ id: usuarios.id })
+            .from(usuarios)
+            .where(and(eq(usuarios.appId, painelId), sql`lower(${usuarios.email}) = ${email}`))
+            .limit(1);
+
+        let usuarioId: number;
+        let contaNova = false;
+        let emailSent = false;
+        let magicLinkToken: string | undefined;
+
+        if (existente[0]) {
+            usuarioId = existente[0].id;
+            const ja = await db
+                .select({ u: adminsOrganizacao.usuarioId })
+                .from(adminsOrganizacao)
+                .where(and(eq(adminsOrganizacao.usuarioId, usuarioId), eq(adminsOrganizacao.categoriaId, categoriaId)))
+                .limit(1);
+            if (ja[0]) throw erroComCodigo('Esta pessoa já é admin desta organização.', 'DUPLICATE_ENTRY');
+        } else {
+            // Sem `emailHtml` e sem `password` de propósito: o convite sai pelo
+            // modelo do hub e a senha é a pessoa quem define (magic link).
+            const r = await new UserService().addUser({ app_id: String(painelId), nome, email, role: 'admin' } as CreateUserDTO);
+            usuarioId = Number(r.user.id);
+            contaNova = true;
+            emailSent = r.emailSent;
+            magicLinkToken = r.magicLinkToken;
+        }
+
+        await db.insert(adminsOrganizacao).values({ usuarioId, categoriaId, convidadoPor: convidadoPor.slice(0, 255) });
+
+        const admin = (await this.listarAdmins(categoriaId)).find((a) => a.usuario_id === usuarioId);
+        if (!admin) throw erroComCodigo('Falha ao registrar o admin.', 'ERRO_INTERNO');
+        return { admin, contaNova, emailSent, ...(magicLinkToken ? { magicLinkToken } : {}) };
+    }
+
+    /** Tira a pessoa da organização. A conta fica; sem organização, o painel não abre nada para ela. */
+    public async removerAdmin(categoriaId: number, usuarioId: number): Promise<void> {
+        const apagadas = await db
+            .delete(adminsOrganizacao)
+            .where(and(eq(adminsOrganizacao.categoriaId, categoriaId), eq(adminsOrganizacao.usuarioId, usuarioId)))
+            .returning({ u: adminsOrganizacao.usuarioId });
+        if (apagadas.length === 0) throw erroComCodigo('Admin não encontrado nesta organização.', 'NOT_FOUND');
+    }
+}
+
+export const organizacaoService = new OrganizacaoService();

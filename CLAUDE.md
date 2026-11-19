@@ -137,6 +137,13 @@ bump deixa o mecanismo mudo. Detalhes na seção *Versionamento* do README.
   logout com o token do aparelho preso ou no `POST /admin/aparelhos/:id/liberar`.
   Registro de tudo (nome + IP) em `login_aparelhos`. E-mail não é preso.
 
+- **Admins de organização** (19/11/2026, `db/012_admins_organizacao.sql`): o `/admin` tem dois
+  roteadores — `orgRouter` (rotas abertas ao admin de organização, cada uma com guarda do alvo) e
+  `adminRouter` com `soMaster`. **Rota nova de admin vai no `adminRouter`** (só master); abrir para
+  organização é mover para o `orgRouter` com `exigirAppNoEscopo`/`exigirUsuarioNoEscopo`/
+  `exigirOrganizacaoNoEscopo`. A conta do admin é do app `painel_do_hub` e precisa de 2FA ativo.
+  Ver a seção do README e `docs/plano-organizacoes-cofre.md`.
+
 ## Migrações
 
 `db/*.sql` são aplicadas manualmente no Postgres, em ordem. Não há runner nem

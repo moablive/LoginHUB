@@ -6,12 +6,17 @@ import {
   CategoriaController,
   TwoFactorController,
   BloqueioController,
-  AparelhoController
+  AparelhoController,
+  OrganizacaoController
 } from '../controllers';
 import { VendaPublicaController, VendaAdminController } from '../controllers/assinaturas';
 import { PasskeyController } from '../controllers/passkeys';
 import {
   adminMiddleware,
+  soMaster,
+  exigirAppNoEscopo,
+  exigirUsuarioNoEscopo,
+  exigirOrganizacaoNoEscopo,
   delegationMiddleware,
   authMiddleware,
   authMiddlewareEnrolamento,
@@ -106,12 +111,66 @@ mainRouter.use('/auth', authRouter);
 // ==========================================
 // 2. Admin Routes (Protected)
 // ==========================================
+// Dois roteadores no mesmo /admin (19/11/2026, admins de organização, db/012):
+//
+//   orgRouter   → o que o admin de ORGANIZAÇÃO também usa. Toda rota daqui tem
+//                 a guarda do alvo (app, usuário ou organização dele). O master
+//                 passa direto em todas.
+//   adminRouter → todo o resto, SÓ do master (`soMaster`). Rota nova entra
+//                 aqui por padrão: abrir para organização é decisão explícita,
+//                 movendo-a para o orgRouter com a guarda certa.
+//
+// O Express tenta o orgRouter primeiro; o que não casar ali cai no adminRouter.
+const orgRouter = Router();
+orgRouter.use(adminMiddleware as any);
+
+const doCorpo = (req: any) => req.body?.app_id;
+const daQuery = (req: any) => req.query?.app_id;
+const doParam = (req: any) => req.params?.id;
+
+// -- Quem sou eu (a tela monta os botões por isto; quem decide é a API)
+orgRouter.get('/eu', OrganizacaoController.eu as any);
+
+// -- Apps (a lista sai filtrada no controller) e categorias (idem)
+orgRouter.get('/apps', AppController.getAllApps as any);
+orgRouter.get('/apps/:id', exigirAppNoEscopo(doParam) as any, AppController.getById as any);
+orgRouter.get('/categorias', CategoriaController.listar as any);
+
+// -- Usuários dos apps da organização
+orgRouter.get('/apps/:id/users', exigirAppNoEscopo(doParam) as any, UserController.getUsersByApp as any);
+orgRouter.post('/users', exigirAppNoEscopo(doCorpo) as any, UserController.addUser as any);
+orgRouter.put('/users/:id', exigirUsuarioNoEscopo('id') as any, UserController.updateUser as any);
+orgRouter.patch('/users/:id/status', exigirUsuarioNoEscopo('id') as any, UserController.toggleUserStatus as any);
+orgRouter.post('/users/:id/reset-password', exigirUsuarioNoEscopo('id') as any, UserController.resetPassword as any);
+// Perdeu o celular E os códigos de recuperação: sem isto a conta ficava morta,
+// porque /auth/2fa/disable recusa desativar um 2FA obrigatório.
+orgRouter.post('/users/:id/reset-2fa', exigirUsuarioNoEscopo('id') as any, UserController.resetTwoFactor as any);
+orgRouter.delete('/users/:id', exigirUsuarioNoEscopo('id') as any, UserController.removeUser as any);
+
+// -- Lista negra do login (28/10/2026) e aparelhos (04/11/2026). Para o admin
+// de organização o `app_id` do corpo/query é obrigatório: é ele que o serviço
+// usa para amarrar a linha ao app.
+orgRouter.get('/apps/:id/bloqueios', exigirAppNoEscopo(doParam) as any, BloqueioController.listar as any);
+orgRouter.post('/bloqueios/:id/liberar', exigirAppNoEscopo(doCorpo) as any, BloqueioController.liberar as any);
+orgRouter.delete('/bloqueios/:id', exigirAppNoEscopo(daQuery) as any, BloqueioController.excluir as any);
+orgRouter.get('/apps/:id/aparelhos', exigirAppNoEscopo(doParam) as any, AparelhoController.listar as any);
+orgRouter.post('/aparelhos/:usuarioId/liberar', exigirAppNoEscopo(doCorpo) as any, AparelhoController.liberar as any);
+
+// -- Admins da organização: o botão "Convidar admin"
+orgRouter.get('/organizacoes/:categoriaId/admins', exigirOrganizacaoNoEscopo('categoriaId') as any, OrganizacaoController.listarAdmins as any);
+orgRouter.post('/organizacoes/:categoriaId/admins', exigirOrganizacaoNoEscopo('categoriaId') as any, OrganizacaoController.convidar as any);
+orgRouter.delete('/organizacoes/:categoriaId/admins/:usuarioId', exigirOrganizacaoNoEscopo('categoriaId') as any, OrganizacaoController.remover as any);
+
+mainRouter.use('/admin', orgRouter);
+
+// ------------------------------------------------------------------
+// Só o master
+// ------------------------------------------------------------------
 const adminRouter = Router();
 adminRouter.use(adminMiddleware as any);
+adminRouter.use(soMaster as any);
 
 // -- Apps
-adminRouter.get('/apps', AppController.getAllApps as any); 
-adminRouter.get('/apps/:id', AppController.getById as any);
 adminRouter.post('/apps', AppController.createApp as any);
 adminRouter.put('/apps/:id', AppController.updateApp as any);
 adminRouter.patch('/apps/:id/status', AppController.toggleAppStatus as any);
@@ -120,33 +179,13 @@ adminRouter.patch('/apps/:id/mover', AppController.moverApp as any);
 adminRouter.delete('/apps/:id', AppController.deleteApp as any);
 
 // -- Categorias (grupos de apps do painel; db/005_categorias_ordem.sql)
-adminRouter.get('/categorias', CategoriaController.listar as any);
 adminRouter.post('/categorias', CategoriaController.criar as any);
 adminRouter.put('/categorias/:id', CategoriaController.renomear as any);
 adminRouter.patch('/categorias/:id/mover', CategoriaController.mover as any);
 adminRouter.delete('/categorias/:id', CategoriaController.apagar as any);
 
-// -- Users (nested in apps or standalone)
-adminRouter.get('/apps/:id/users', UserController.getUsersByApp as any);
-
-// -- Lista negra do login (28/10/2026): o app lista e libera os bloqueios dele.
-adminRouter.get('/apps/:id/bloqueios', BloqueioController.listar as any);
-adminRouter.post('/bloqueios/:id/liberar', BloqueioController.liberar as any);
-adminRouter.delete('/bloqueios/:id', BloqueioController.excluir as any);
-
-// -- Um aparelho por conta de CPF (04/11/2026): o app lista e libera.
-adminRouter.get('/apps/:id/aparelhos', AparelhoController.listar as any);
-adminRouter.post('/aparelhos/:usuarioId/liberar', AparelhoController.liberar as any);
-
+// -- Todos os usuários de todos os apps
 adminRouter.get('/users', UserController.getAllUsers as any);
-adminRouter.post('/users', UserController.addUser as any);
-adminRouter.put('/users/:id', UserController.updateUser as any);
-adminRouter.patch('/users/:id/status', UserController.toggleUserStatus as any);
-adminRouter.post('/users/:id/reset-password', UserController.resetPassword as any);
-// Perdeu o celular E os códigos de recuperação: sem isto a conta ficava morta,
-// porque /auth/2fa/disable recusa desativar um 2FA obrigatório.
-adminRouter.post('/users/:id/reset-2fa', UserController.resetTwoFactor as any);
-adminRouter.delete('/users/:id', UserController.removeUser as any);
 
 // -- Venda por assinatura (10/11/2026; db/009_assinaturas_afiliados.sql):
 // preço do app, afiliados, assinantes e comissões.

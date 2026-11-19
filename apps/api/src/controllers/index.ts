@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import { AuthService, AppService, UserService, CategoriaService, twoFactorService, bloqueioService, aparelhoService } from '@loginhub/services';
-import { ipDoCliente } from '@loginhub/middlewares';
+import { AuthService, AppService, UserService, CategoriaService, twoFactorService, bloqueioService, aparelhoService, organizacaoService } from '@loginhub/services';
+import { ipDoCliente, escopoDe } from '@loginhub/middlewares';
 import { LoginInputDTO, CreateAppDTO, UpdateAppDTO, CreateUserDTO, UpdateUserDTO, DbError, DirecaoMovimento, CreateCategoriaDTO, UpdateCategoriaDTO } from '@loginhub/schema';
 
 const authService = new AuthService();
@@ -35,7 +35,11 @@ export class AuthController {
         res: Response
     ) {
         try {
-            const { email, password, app_id, aparelho_id, aparelho_nome } = req.body;
+            const { email, password, aparelho_id, aparelho_nome } = req.body;
+            // Painel do hub (admin de organização, db/012): o tenant é o app do
+            // painel, nunca o que o navegador mandar.
+            const app_id = req.body.painel === true ? String(await organizacaoService.idDoPainel()) : req.body.app_id;
+            if (req.body.painel === true) req.body.app_id = app_id;
 
             if (!email || !password) {
                 return res.status(400).json({
@@ -475,6 +479,12 @@ export class AppController {
     static async getAllApps(req: Request, res: Response) {
         try {
             const apps = await appService.getAllApps();
+            const escopo = escopoDe(req);
+            // Admin de organização vê só os apps das organizações dele.
+            if (escopo && !escopo.master) {
+                return res.status(200).json(apps.filter((a: { painelDoHub?: boolean; categoria_id: number | null }) =>
+                    !a.painelDoHub && a.categoria_id !== null && escopo.categorias.includes(a.categoria_id)));
+            }
             return res.status(200).json(apps);
         } catch (err: unknown) {
             console.error('[AppController] getAllApps:', err);
@@ -577,9 +587,12 @@ export class AppController {
 // ==========================================
 /** Grupos de apps do painel (db/005_categorias_ordem.sql). Só o master chega aqui. */
 export class CategoriaController {
-    static async listar(_req: Request, res: Response) {
+    static async listar(req: Request, res: Response) {
         try {
-            return res.status(200).json(await categoriaService.listar());
+            const todas = await categoriaService.listar();
+            const escopo = escopoDe(req);
+            if (escopo && !escopo.master) return res.status(200).json(todas.filter((c: { id: number }) => escopo.categorias.includes(c.id)));
+            return res.status(200).json(todas);
         } catch (err) {
             console.error('[CategoriaController] listar:', err);
             return res.status(500).json({ message: 'Erro Interno' });
@@ -636,7 +649,13 @@ export class CategoriaController {
 export class UserController {
     static async addUser(req: Request<Record<string, never>, Record<string, never>, CreateUserDTO>, res: Response) {
         try {
-            const result = await userService.addUser(req.body);
+            // Admin de organização (db/012) não manda HTML de e-mail nem senha:
+            // o convite sai pelo modelo do hub (sem isso, o SMTP do hub enviaria
+            // qualquer HTML que ele escrevesse) e a senha é a pessoa quem define.
+            const escopo = escopoDe(req);
+            const { emailHtml: _html, password: _senha, ...semHtmlNemSenha } = req.body ?? ({} as CreateUserDTO);
+            const dados: CreateUserDTO = escopo && !escopo.master ? semHtmlNemSenha : req.body;
+            const result = await userService.addUser(dados);
             return res.status(201).json({
                 message: result.emailSent
                     ? 'Convite enviado por e-mail com sucesso.'
@@ -746,7 +765,8 @@ export class UserController {
 
     static async resetPassword(req: Request<{ id: string }, {}, { emailHtml?: string }>, res: Response) {
         const { id } = req.params;
-        const { emailHtml } = req.body || {};
+        const escopo = escopoDe(req);
+        const emailHtml = escopo && !escopo.master ? undefined : (req.body || {}).emailHtml;
         try {
             const result = await userService.resetUserPassword(id, emailHtml);
             return res.status(200).json({
@@ -895,6 +915,71 @@ export class AparelhoController {
                 return res.status(404).json({ error: 'Não Encontrado', message: 'Esta conta não está presa a nenhum aparelho.' });
             }
             console.error(`[AparelhoController] liberar (${req.params.usuarioId}):`, err);
+            return res.status(500).json({ error: 'Erro Interno' });
+        }
+    }
+}
+
+
+// ==========================================
+// ORGANIZAÇÕES (admins de organização, db/012, 19/11/2026)
+// ==========================================
+export class OrganizacaoController {
+    /** GET /admin/eu — quem está no painel e de quais organizações cuida. */
+    static async eu(req: Request, res: Response) {
+        try {
+            const escopo = escopoDe(req);
+            if (!escopo) return res.status(403).json({ error: 'Acesso Proibido' });
+            return res.status(200).json(await organizacaoService.paraTela(escopo));
+        } catch (err) {
+            console.error('[OrganizacaoController] eu:', err);
+            return res.status(500).json({ error: 'Erro Interno' });
+        }
+    }
+
+    /** GET /admin/organizacoes/:categoriaId/admins */
+    static async listarAdmins(req: Request<{ categoriaId: string }>, res: Response) {
+        try {
+            return res.status(200).json(await organizacaoService.listarAdmins(Number(req.params.categoriaId)));
+        } catch (err) {
+            console.error('[OrganizacaoController] listarAdmins:', err);
+            return res.status(500).json({ error: 'Erro Interno' });
+        }
+    }
+
+    /** POST /admin/organizacoes/:categoriaId/admins `{ nome, email }` — o botão "Convidar admin". */
+    static async convidar(req: Request<{ categoriaId: string }>, res: Response) {
+        try {
+            const escopo = escopoDe(req);
+            const por = escopo?.master ? 'master' : (escopo?.email || 'admin');
+            const r = await organizacaoService.convidarAdmin(Number(req.params.categoriaId), req.body ?? {}, por);
+            return res.status(201).json(r);
+        } catch (err) {
+            const e = err as DbError;
+            if (e.code === 'VALIDATION') return res.status(400).json({ error: 'Dados Inválidos', message: e.message });
+            if (e.code === 'NOT_FOUND') return res.status(404).json({ message: e.message });
+            if (e.code === 'DUPLICATE_ENTRY') return res.status(409).json({ error: 'Conflito de Dados', message: e.message });
+            console.error('[OrganizacaoController] convidar:', err);
+            return res.status(500).json({ error: 'Erro Interno' });
+        }
+    }
+
+    /** DELETE /admin/organizacoes/:categoriaId/admins/:usuarioId — tira da organização (a conta fica). */
+    static async remover(req: Request<{ categoriaId: string; usuarioId: string }>, res: Response) {
+        try {
+            const escopo = escopoDe(req);
+            const usuarioId = Number(req.params.usuarioId);
+            if (!Number.isInteger(usuarioId) || usuarioId <= 0) return res.status(400).json({ error: 'ID inválido.' });
+            // Tirar a si mesmo trancaria a pessoa fora sem querer; quem faz isso é outro admin ou o master.
+            if (escopo && !escopo.master && escopo.usuarioId === usuarioId) {
+                return res.status(400).json({ error: 'PROPRIO_ADMIN', message: 'Você não pode se tirar da organização. Peça a outro admin.' });
+            }
+            await organizacaoService.removerAdmin(Number(req.params.categoriaId), usuarioId);
+            return res.status(200).json({ ok: true });
+        } catch (err) {
+            const e = err as DbError;
+            if (e.code === 'NOT_FOUND') return res.status(404).json({ message: e.message });
+            console.error('[OrganizacaoController] remover:', err);
             return res.status(500).json({ error: 'Erro Interno' });
         }
     }

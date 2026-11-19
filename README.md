@@ -56,6 +56,7 @@ Todo o ciclo de vida da conta — convite por e-mail, primeiro acesso via **Magi
 | 🤝 Convite com Provisionamento no App | ✅ | Apps que guardam dados próprios do usuário (CPF, comissão) criam o cadastro deles e o acesso no hub numa operação só. Ver fluxo 5️⃣. |
 | 🔥 Hot Reload no Docker | ✅ | O código vem do host por bind mount: salvar um arquivo reflete no container, sem rebuild. |
 | 🏷️ Aviso de Nova Versão | ✅ | O painel compara a própria versão com a do `GET /api` e oferece recarregar quando sai deploy. Badge `v1.0.1` no canto. Ver [Versionamento](#-versionamento-e-aviso-de-nova-versão). |
+| 🏢 Admins de organização | ✅ | Desde 19/11/2026 (v1.2.0): o master (ou outro admin) **convida admin de uma organização** pelo botão "Convidar admin"; ele entra pela aba Administrador do login (e-mail + senha + Google Authenticator) e vê só os apps da organização dele. Ver [Admins de organização](#-admins-de-organização-desde-19112026). |
 
 ---
 
@@ -1461,6 +1462,37 @@ segue a skill **apple-hig-design** (Human Interface Guidelines):
 | "Reduzir movimento" respeitado | `src/index.css` |
 
 Validação: `npm run build -w ui` (roda `vue-tsc` antes do `vite build`).
+
+---
+
+## 🏢 Admins de organização (desde 19/11/2026)
+
+**Organização = categoria do painel.** O admin de organização é uma conta comum do app
+**"LoginHUB · Painel"** (`aplicativos.painel_do_hub = TRUE`, sem categoria), com 2FA obrigatório,
+e a tabela `admins_organizacao` diz de quais organizações ele cuida (`db/012_admins_organizacao.sql`).
+
+| | |
+|---|---|
+| Login | Aba **Administrador**: `POST /auth/login` com `{ email, password, painel: true }` → desafio 2FA → sessão. O hub troca o `app_id` pelo do painel, seja qual for o enviado |
+| Quem sou eu | `GET /admin/eu` → `{ master, nome, email, organizacoes: [{ id, nome }] }` (master = todas) |
+| Convidar | `POST /admin/organizacoes/:categoriaId/admins` `{ nome, email }` — pessoa nova recebe o convite do hub; quem já tem conta no painel só ganha a organização |
+| Listar / tirar | `GET` e `DELETE /admin/organizacoes/:categoriaId/admins[/:usuarioId]` (ninguém se tira sozinho) |
+| Pode | Apps da organização: usuários (criar, editar, status, reset de senha e de 2FA, excluir), lista negra e aparelhos, admins |
+| Não pode (só master) | Apps (criar/editar/status/ordem/excluir), categorias, vendas, `GET /admin/users` global, contas do app do painel |
+
+Como a API garante (`apps/api/src/routes/index.ts`):
+
+- **Dois roteadores no `/admin`**: `orgRouter` (só as rotas abertas à organização, cada uma com a
+  guarda do alvo: `exigirAppNoEscopo`, `exigirUsuarioNoEscopo`, `exigirOrganizacaoNoEscopo`) e
+  `adminRouter` com `soMaster` para todo o resto. **Rota nova nasce só do master.**
+- O `adminMiddleware` confere no banco, a cada pedido, conta ativa + app do painel ativo + 2FA ativo
+  + piso de sessão + organizações, e põe `req.escopo`. Tirar da organização vale na hora.
+- Para o admin de organização, `emailHtml` e `password` do `POST /admin/users` (e o `emailHtml` do
+  reset) são descartados: o convite sai pelo modelo do hub, a senha é a pessoa quem define.
+- Alvo inexistente e alvo de outra organização recebem o mesmo 403 (`FORA_DA_ORGANIZACAO`).
+
+O plano das próximas frentes (biometria em todos os apps e cofre de senhas cifrado de ponta a
+ponta, com CLI `hub-pass`) está em [`docs/plano-organizacoes-cofre.md`](docs/plano-organizacoes-cofre.md).
 
 ---
 

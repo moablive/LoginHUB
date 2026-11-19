@@ -14,10 +14,11 @@ import {
   Squares2X2Icon,
   TagIcon,
   TrashIcon,
+  UserPlusIcon,
   UsersIcon,
 } from '@heroicons/vue/24/outline';
 import { appApi, authApi, categoriaApi } from '@loginhub/api-client';
-import type { App, Categoria, DirecaoMovimento } from '@loginhub/schema';
+import type { App, Categoria, DirecaoMovimento, EscopoDoPainel } from '@loginhub/schema';
 import { masks } from '@/utils/masks';
 import { getAppIntegration } from '@/config/integrations';
 import { getAppLinks } from '@/config/appLinks';
@@ -33,6 +34,7 @@ import UiSpinner from '@/components/ui/UiSpinner.vue';
 import StatusButton from '@/components/StatusButton.vue';
 import EditAppSheet from '@/components/apps/EditAppSheet.vue';
 import CategoriasSheet from '@/components/apps/CategoriasSheet.vue';
+import AdminsOrganizacaoSheet from '@/components/apps/AdminsOrganizacaoSheet.vue';
 import IntegrationBadge from '@/components/integration/IntegrationBadge.vue';
 import AppLinkBadge from '@/components/integration/AppLinkBadge.vue';
 
@@ -54,13 +56,24 @@ const alerta = ref<{ titulo: string; mensagem: string } | null>(null);
 
 const mostrarErro = (titulo: string, mensagem: string) => (alerta.value = { titulo, mensagem });
 
+// Quem está no painel (19/11/2026, db/012). Master vê e faz tudo; admin de
+// organização vê só os apps das organizações dele e não cria/edita/exclui app
+// nem mexe em categorias e vendas — a API recusa de qualquer jeito, a tela só
+// não oferece o que não vai funcionar.
+const eu = ref<EscopoDoPainel | null>(null);
+const master = computed(() => eu.value?.master === true);
+// "Convidar admin": aberta com a organização do grupo (ou a primeira).
+const adminsDe = ref<number | null | undefined>(undefined);
+const mostrarAdmins = computed(() => adminsDe.value !== undefined);
+
 // Busca dados iniciais. A API já devolve os apps na ordem do painel
 // (categoria, depois `ordem`); a tela só agrupa, nunca reordena.
 async function carregar() {
   try {
-    const [listaApps, listaCategorias] = await Promise.all([appApi.getAll(), categoriaApi.getAll()]);
+    const [listaApps, listaCategorias, quem] = await Promise.all([appApi.getAll(), categoriaApi.getAll(), authApi.eu()]);
     apps.value = listaApps;
     categorias.value = listaCategorias;
+    eu.value = quem;
   } catch (e) {
     console.error('Erro ao buscar aplicativos', e);
   } finally {
@@ -98,7 +111,7 @@ const grupos = computed(() => {
     if (lista.length > 0 || !buscando.value) resultado.push({ id: c.id, nome: c.nome, apps: lista });
   }
   const semCategoria = porCategoria.get(null) ?? [];
-  if (semCategoria.length > 0 || (!buscando.value && categorias.value.length > 0)) {
+  if (master.value && (semCategoria.length > 0 || (!buscando.value && categorias.value.length > 0))) {
     resultado.push({ id: null, nome: 'Sem categoria', apps: semCategoria });
   }
   return resultado;
@@ -200,15 +213,22 @@ const seta =
 
 <template>
   <div class="animate-fade-in">
-    <UiNavBar titulo="Aplicativos" subtitulo="LoginHub · gestão centralizada de aplicativos e infraestrutura">
+    <UiNavBar
+      titulo="Aplicativos"
+      :subtitulo="eu && !eu.master ? `LoginHub · ${eu.nome} · ${eu.organizacoes.map((o) => o.nome).join(', ')}` : 'LoginHub · gestão centralizada de aplicativos e infraestrutura'"
+    >
       <template #acoes>
-        <UiButton variante="plain" icone aria-label="Categorias" title="Criar, renomear e ordenar as categorias" @click="mostrarCategorias = true">
+        <UiButton v-if="master" variante="plain" icone aria-label="Categorias" title="Criar, renomear e ordenar as categorias" @click="mostrarCategorias = true">
           <TagIcon class="h-6 w-6" />
+        </UiButton>
+        <UiButton v-if="eu && eu.organizacoes.length > 0" variante="gray" tamanho="small" title="Convidar quem vai cuidar de uma organização" @click="adminsDe = null">
+          <UserPlusIcon class="h-4 w-4" />
+          Convidar admin
         </UiButton>
         <UiButton variante="plain" icone aria-label="Sair" title="Sair" class="!text-danger hover:!bg-danger/10" @click="mostrarSair = true">
           <ArrowRightOnRectangleIcon class="h-6 w-6" />
         </UiButton>
-        <UiButton tamanho="small" to="/apps/new">
+        <UiButton v-if="master" tamanho="small" to="/apps/new">
           <PlusIcon class="h-4 w-4" stroke-width="2.5" />
           Novo
         </UiButton>
@@ -238,7 +258,7 @@ const seta =
         </div>
         <div class="flex items-center gap-2 sm:w-[26rem]">
           <UiSearchField v-model="busca" placeholder="Buscar por nome, e-mail ou CNPJ" />
-          <UiButton variante="gray" tamanho="small" class="shrink-0" @click="mostrarCategorias = true">
+          <UiButton v-if="master" variante="gray" tamanho="small" class="shrink-0" @click="mostrarCategorias = true">
             <TagIcon class="h-4 w-4" />
             Categorias
             <span class="text-label-2">{{ categorias.length }}</span>
@@ -254,7 +274,7 @@ const seta =
           :titulo="buscando ? 'Nenhum resultado encontrado.' : 'Nenhum aplicativo cadastrado.'"
           :texto="buscando ? 'Tente outro nome, e-mail ou CNPJ.' : undefined"
         >
-          <UiButton v-if="!buscando" to="/apps/new"><PlusIcon class="h-5 w-5" />Novo aplicativo</UiButton>
+          <UiButton v-if="!buscando && master" to="/apps/new"><PlusIcon class="h-5 w-5" />Novo aplicativo</UiButton>
         </UiEmpty>
       </UiSection>
 
@@ -277,6 +297,17 @@ const seta =
               <span :class="grupo.id === null ? 'italic' : 'text-label'">{{ grupo.nome }}</span>
               <UiBadge>{{ grupo.apps.length }}</UiBadge>
             </span>
+            <UiButton
+              v-if="grupo.id !== null"
+              variante="plain"
+              tamanho="small"
+              :aria-label="`Admins de ${grupo.nome}`"
+              title="Admins desta organização: convidar e remover"
+              @click="adminsDe = grupo.id"
+            >
+              <UserPlusIcon class="h-4 w-4" />
+              Admins
+            </UiButton>
           </template>
 
           <p v-if="grupo.apps.length === 0" class="px-4 py-4 text-subhead italic text-label-2">
@@ -320,7 +351,8 @@ const seta =
                 </UiBadge>
               </span>
               <span class="md:flex md:justify-center">
-                <StatusButton :status="statusDe(app)" :nome="app.nome" @alternar="alternarStatus(app)" />
+                <StatusButton v-if="master" :status="statusDe(app)" :nome="app.nome" @alternar="alternarStatus(app)" />
+                <UiBadge v-else :tom="statusDe(app) === 'ativo' ? 'success' : 'neutro'">{{ statusDe(app) }}</UiBadge>
               </span>
               <span class="text-footnote text-label-2 md:text-subhead">{{ dataCadastro(app.data_cadastro) }}</span>
             </div>
@@ -328,6 +360,7 @@ const seta =
             <!-- ações -->
             <div class="-mx-2 flex items-center gap-1 md:mx-0 md:justify-end">
               <!-- Subir/descer dentro da categoria. Travado durante busca. -->
+              <template v-if="master">
               <button
                 type="button"
                 :class="seta"
@@ -348,16 +381,18 @@ const seta =
               >
                 <ChevronDownIcon class="h-5 w-5" />
               </button>
+              </template>
 
               <UiButton variante="tinted" tamanho="small" class="ml-auto md:ml-1" :to="`/apps/${app.id}/users`">Usuários</UiButton>
-              <UiButton variante="plain" icone :aria-label="`Vendas de ${app.nome}`" title="Vendas: preço, afiliados e assinantes" :to="`/apps/${app.id}/vendas`">
+              <UiButton v-if="master" variante="plain" icone :aria-label="`Vendas de ${app.nome}`" title="Vendas: preço, afiliados e assinantes" :to="`/apps/${app.id}/vendas`">
                 <BanknotesIcon class="h-5 w-5" />
               </UiButton>
 
-              <UiButton variante="plain" icone :aria-label="`Editar ${app.nome}`" title="Editar dados do aplicativo" @click="appParaEditar = app">
+              <UiButton v-if="master" variante="plain" icone :aria-label="`Editar ${app.nome}`" title="Editar dados do aplicativo" @click="appParaEditar = app">
                 <PencilSquareIcon class="h-5 w-5" />
               </UiButton>
               <UiButton
+                v-if="master"
                 variante="plain"
                 icone
                 class="!text-danger hover:!bg-danger/10"
@@ -383,7 +418,8 @@ const seta =
       @fechar="mostrarSair = false"
       @confirmar="sair"
     >
-      Você terá que inserir a <strong>Master Key</strong> novamente para acessar o painel administrativo da Astral Wave.
+      <template v-if="master">Você terá que inserir a <strong>Master Key</strong> novamente para acessar o painel administrativo da Astral Wave.</template>
+      <template v-else>Para voltar, entre de novo com e-mail, senha e o código do Google Authenticator.</template>
     </UiAlert>
 
     <UiAlert
@@ -400,6 +436,14 @@ const seta =
     >
       Você tem certeza que deseja realizar esta ação? <strong class="text-danger">Ela é irreversível.</strong>
     </UiAlert>
+
+    <AdminsOrganizacaoSheet
+      :aberto="mostrarAdmins"
+      :organizacoes="eu?.organizacoes ?? []"
+      :inicial="adminsDe ?? null"
+      :meu-email="eu?.email"
+      @fechar="adminsDe = undefined"
+    />
 
     <CategoriasSheet :aberto="mostrarCategorias" @fechar="mostrarCategorias = false" @mudou="carregar" />
 
