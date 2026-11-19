@@ -7,13 +7,15 @@ import {
     usuarios2fa,
     usuariosAparelho,
     adminsOrganizacao,
+    cofreAparelhos,
     JWTPayload,
     MASTER_LOGIN_EMAIL,
     MASTER_SUB,
     masterKeyFingerprint,
     masterKeyDoAmbiente
 } from '@loginhub/schema';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
+import { createHash, timingSafeEqual } from 'crypto';
 import cors, { CorsOptions } from 'cors';
 import client from 'prom-client';
 
@@ -262,6 +264,109 @@ export const exigirOrganizacaoNoEscopo = (param = 'categoriaId'): RequestHandler
     if (escopo?.master) return next();
     const id = Number((req.params as Record<string, string>)[param]);
     return escopo && Number.isInteger(id) && escopo.categorias.includes(id) ? next() : foraDoEscopo(res);
+};
+
+// ==========================================
+// 1a. COFRE DE SENHAS (db/013 e db/014, 19/11/2026)
+// ==========================================
+/**
+ * Quem é o dono do cofre deste pedido. Três credenciais:
+ *
+ *   `x-cofre-aparelho: <id>.<token>` → máquina aprovada do CLI `hub-pass`
+ *        (token conferido pelo sha256 guardado, aparelho não revogado);
+ *   sessão master (Master Key ou `x-api-key`) → dono 'master';
+ *   sessão de usuário do hub (mesmas checagens do `authMiddleware`: app ativo,
+ *        piso de sessão, vaga de aparelho do CPF) cujo app tem
+ *        `cofre_liberado` → dono 'u:<id>'.
+ *
+ * O cofre é cifrado no navegador/CLI: o dono só decide QUAIS textos cifrados
+ * a pessoa recebe e grava — abrir, só com a palavra-passe ou a chave do aparelho.
+ */
+export interface DonoDoCofre {
+    dono: string;
+    /** Preenchido quando a credencial é um aparelho aprovado. */
+    aparelhoId?: string;
+}
+
+export const donoDoCofre = (req: unknown): DonoDoCofre | undefined => (req as { cofre?: DonoDoCofre }).cofre;
+
+const UUID_COFRE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export const cofreAuth: RequestHandler = async (req, res, next) => {
+    const negar = () => res.status(401).json({ error: 'COFRE_SEM_CREDENCIAL', message: 'Entre de novo para usar o cofre.' });
+
+    // 1. Aparelho aprovado (CLI)
+    const cab = req.headers['x-cofre-aparelho'];
+    const bruto = Array.isArray(cab) ? cab[0] : cab;
+    if (bruto) {
+        const ponto = bruto.indexOf('.');
+        const id = bruto.slice(0, ponto);
+        const token = bruto.slice(ponto + 1);
+        if (ponto < 0 || !UUID_COFRE.test(id) || token.length < 20) return negar();
+        try {
+            const linhas = await db
+                .select({ dono: cofreAparelhos.dono, hash: cofreAparelhos.tokenHash })
+                .from(cofreAparelhos)
+                .where(and(eq(cofreAparelhos.id, id), isNull(cofreAparelhos.revogadoEm)))
+                .limit(1);
+            const a = linhas[0];
+            const hash = createHash('sha256').update(token).digest();
+            if (!a || a.hash.length !== 64 || !timingSafeEqual(hash, Buffer.from(a.hash, 'hex'))) {
+                return res.status(401).json({ error: 'APARELHO_REVOGADO', message: 'Este aparelho não está mais aprovado. Rode hub-pass login.' });
+            }
+            db.update(cofreAparelhos).set({ ultimoUso: new Date(), ip: ipDoCliente(req).slice(0, 64) }).where(eq(cofreAparelhos.id, id)).execute().catch(() => undefined);
+            (req as any).cofre = { dono: a.dono, aparelhoId: id.toLowerCase() } satisfies DonoDoCofre;
+            return next();
+        } catch (err) {
+            console.error('[cofreAuth] aparelho:', (err as Error).message);
+            return res.status(500).json({ error: 'Erro Interno' });
+        }
+    }
+
+    // 2. Master (chave ou sessão)
+    const validKey = masterKeyDoAmbiente();
+    const apiKey = req.headers['x-api-key'];
+    if (validKey && apiKey && (Array.isArray(apiKey) ? apiKey[0] : apiKey) === validKey) {
+        (req as any).cofre = { dono: 'master' } satisfies DonoDoCofre;
+        return next();
+    }
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!token || !jwtSecret) return negar();
+    let decoded: (JWTPayload & { action?: string }) | null = null;
+    try {
+        decoded = jwt.verify(token, jwtSecret) as unknown as JWTPayload & { action?: string };
+    } catch (err) {
+        if ((err as Error)?.name === 'TokenExpiredError') return res.status(401).json({ error: 'TOKEN_EXPIRADO', message: 'Sessão expirada. Renove o token.' });
+        return negar();
+    }
+    if (
+        validKey && !decoded.action && decoded.sub === MASTER_SUB && decoded.email === MASTER_LOGIN_EMAIL &&
+        !!decoded.mk && decoded.mk === masterKeyFingerprint(validKey)
+    ) {
+        (req as any).cofre = { dono: 'master' } satisfies DonoDoCofre;
+        return next();
+    }
+
+    // 3. Usuário de app liberado: as checagens da sessão são as do authMiddleware.
+    return authMiddleware(req, res, async () => {
+        try {
+            const app = await db
+                .select({ liberado: aplicativos.cofreLiberado })
+                .from(aplicativos)
+                .where(eq(aplicativos.id, Number(decoded!.app_id)))
+                .limit(1);
+            if (!app[0]?.liberado) {
+                return res.status(403).json({ error: 'COFRE_NAO_LIBERADO', message: 'O cofre não está liberado para o seu aplicativo. Fale com o administrador.' });
+            }
+            (req as any).cofre = { dono: `u:${Number(decoded!.sub)}` } satisfies DonoDoCofre;
+            return next();
+        } catch (err) {
+            console.error('[cofreAuth] app:', (err as Error).message);
+            return res.status(500).json({ error: 'Erro Interno' });
+        }
+    });
 };
 
 // ==========================================

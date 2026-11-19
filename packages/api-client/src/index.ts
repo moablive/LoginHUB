@@ -32,7 +32,8 @@ import type {
   ConvidarAdminDTO,
   ConvidarAdminResposta,
   CofreEstado,
-  CofreConta
+  CofreConta,
+  CofreAparelho
 } from '@loginhub/schema';
 
 // ==========================================
@@ -714,30 +715,39 @@ export const organizacaoApi = {
 };
 
 // ==========================================
-// COFRE DE SENHAS (db/013, 19/11/2026) — só texto cifrado viaja por aqui
+// COFRE DE SENHAS (db/013 e db/014, 19/11/2026) — só texto cifrado viaja por aqui
 // ==========================================
-// A cifra e a decifra moram na UI (apps/ui/src/features/cofre/cripto.ts).
+// A cifra e a decifra moram na UI (apps/ui/src/features/cofre/cripto.ts) e no
+// CLI hub-pass. Rotas em /cofre: master, usuário de app com cofre liberado.
 export const cofreApi = {
   estado: async (): Promise<CofreEstado> => {
-    const { data } = await api.get<CofreEstado>('/admin/cofre');
+    const { data } = await api.get<CofreEstado>('/cofre');
     return data;
   },
   criarConta: async (conta: CofreConta): Promise<void> => {
-    await api.post('/admin/cofre/conta', conta);
+    await api.post('/cofre/conta', conta);
   },
   trocarSenha: async (conta: Pick<CofreConta, 'kdf' | 'chave_por_senha'>): Promise<void> => {
-    await api.put('/admin/cofre/conta', conta);
+    await api.put('/cofre/conta', conta);
   },
   salvarCofre: async (id: string, dados: string): Promise<void> => {
-    await api.put(`/admin/cofre/cofres/${id}`, { dados });
+    await api.put(`/cofre/cofres/${id}`, { dados });
   },
   apagarCofre: async (id: string): Promise<void> => {
-    await api.delete(`/admin/cofre/cofres/${id}`);
+    await api.delete(`/cofre/cofres/${id}`);
   },
   salvarItem: async (id: string, cofreId: string, dados: string): Promise<void> => {
-    await api.put(`/admin/cofre/itens/${id}`, { cofre_id: cofreId, dados });
+    await api.put(`/cofre/itens/${id}`, { cofre_id: cofreId, dados });
   },
   apagarItem: async (id: string): Promise<void> => {
-    await api.delete(`/admin/cofre/itens/${id}`);
+    await api.delete(`/cofre/itens/${id}`);
+  },
+  /** Máquinas aprovadas do CLI hub-pass. */
+  aparelhos: async (): Promise<CofreAparelho[]> => {
+    const { data } = await api.get<CofreAparelho[]>('/cofre/aparelhos');
+    return data;
+  },
+  revogarAparelho: async (id: string): Promise<void> => {
+    await api.delete(`/cofre/aparelhos/${id}`);
   },
 };

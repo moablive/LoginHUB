@@ -7,6 +7,7 @@ import UiSheet from '@/components/ui/UiSheet.vue';
 import UiButton from '@/components/ui/UiButton.vue';
 import UiTextField from '@/components/ui/UiTextField.vue';
 import UiSelect from '@/components/ui/UiSelect.vue';
+import UiSwitch from '@/components/ui/UiSwitch.vue';
 import LogoUpload from './LogoUpload.vue';
 
 const props = withDefaults(
@@ -28,6 +29,8 @@ const form = reactive({
   urlBot: '',
   // '' = "Sem categoria". Vai como null para a API.
   categoria_id: '',
+  // Cofre de senhas para os usuários do app (db/014).
+  cofre_liberado: false,
 });
 const logo = ref<string | null>(null);
 const salvando = ref(false);
@@ -45,6 +48,7 @@ watch(
       urlPlataforma: app.platform_url || '',
       urlBot: app.bot_url || '',
       categoria_id: app.categoria_id ? String(app.categoria_id) : '',
+      cofre_liberado: app.cofreLiberado === true,
     });
     logo.value = app.logo ?? null;
     erro.value = null;
@@ -76,6 +80,7 @@ async function salvar() {
       platform_url: form.urlPlataforma.trim() || null,
       bot_url: form.urlBot.trim() || null,
       categoria_id: form.categoria_id ? Number(form.categoria_id) : null,
+      cofre_liberado: form.cofre_liberado,
     });
     emit('salvo');
   } catch (e) {
@@ -125,6 +130,16 @@ const EXEMPLO_BOT = 'https://t.me/seu_bot';
         :placeholder="EXEMPLO_BOT"
         dica="Enviada no e-mail de convite para o usuário acessar o bot."
       />
+      <div class="flex items-start justify-between gap-4 rounded-celula bg-fill-2 p-3">
+        <div>
+          <p class="text-subhead font-semibold">Cofre de senhas</p>
+          <p class="text-footnote text-label-2">
+            Cada usuário deste app pode criar o próprio cofre (senhas e 2FA) em loginhub.astralwavelabel.com/meu-cofre e
+            usar o CLI hub-pass. Só ele lê o dele.
+          </p>
+        </div>
+        <UiSwitch v-model="form.cofre_liberado" rotulo="Cofre de senhas liberado" />
+      </div>
     </form>
 
     <template #acoes>

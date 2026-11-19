@@ -312,6 +312,8 @@ export interface App {
      * categoria", que a lista mostra por último. `categoria_nome` vem junto
      * para a tela não precisar cruzar com /admin/categorias.
      */
+    /** Usuários do app podem ter cofre de senhas próprio (db/014). */
+    cofreLiberado?: boolean;
     categoria_id?: number | null;
     categoria_nome?: string | null;
     /** Posição dentro da categoria (1..n). Só muda por /admin/apps/:id/mover. */
@@ -349,6 +351,8 @@ export interface UpdateAppDTO {
     platform_url?: string | null | undefined;
     /** `null` tira o app da categoria; `undefined` não mexe. */
     categoria_id?: number | null | undefined;
+    /** Liga/desliga o cofre de senhas para os usuários do app (db/014). */
+    cofre_liberado?: boolean | undefined;
 }
 
 /** Direção de um movimento na lista: troca de lugar com o vizinho. */
@@ -491,6 +495,8 @@ export const aplicativos = pgTable('aplicativos', {
     // TRUE só no app "LoginHUB · Painel": as contas dele são os admins de
     // organização (db/012_admins_organizacao.sql). Um painel só (índice único).
     painelDoHub: boolean('painel_do_hub').notNull().default(false),
+    // TRUE = os usuários deste app podem ter cofre de senhas próprio (db/014).
+    cofreLiberado: boolean('cofre_liberado').notNull().default(false),
     // Grupo do painel. NULL = "Sem categoria". Apagar a categoria devolve os
     // apps para NULL (ON DELETE SET NULL), nunca apaga app.
     categoriaId: integer('categoria_id').references(() => categorias.id, { onDelete: 'set null' }),

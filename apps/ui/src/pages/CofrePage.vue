@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import axios from 'axios';
+import { cofreApi } from '@loginhub/api-client';
+import type { CofreAparelho } from '@loginhub/schema';
 import {
   ArrowPathIcon,
   ClipboardDocumentIcon,
+  CommandLineIcon,
   EyeIcon,
   EyeSlashIcon,
   KeyIcon,
@@ -31,6 +34,15 @@ import { codigoTotp, gerarSenha, lerTotp, segundosRestantes } from '@/features/c
  * (como sempre) e a PALAVRA-PASSE abre o cofre. A palavra-passe nunca sai deste
  * navegador; o servidor só guarda texto cifrado.
  */
+const props = withDefaults(
+  defineProps<{
+    /** `painel` = master dentro do painel (com o voltar); `usuario` = /meu-cofre, de um usuário de app. */
+    modo?: 'painel' | 'usuario';
+  }>(),
+  { modo: 'painel' },
+);
+const emit = defineEmits<{ sair: [] }>();
+
 const cofre = useCofre();
 const { existe, aberto, cofres, itens, ilegiveis } = cofre;
 
@@ -122,6 +134,38 @@ function trancar() {
   cofre.trancar();
   revelados.value = new Set();
 }
+
+// --- máquinas aprovadas do CLI hub-pass (db/014)
+const aparelhos = ref<CofreAparelho[]>([]);
+const mostrarAparelhos = ref(false);
+const aparelhoParaRevogar = ref<CofreAparelho | null>(null);
+async function carregarAparelhos() {
+  try {
+    aparelhos.value = await cofreApi.aparelhos();
+  } catch (e) {
+    erro.value = mensagemDe(e, 'Não foi possível listar os aparelhos.');
+  }
+}
+async function abrirAparelhos() {
+  mostrarAparelhos.value = true;
+  await carregarAparelhos();
+}
+async function revogarAparelho() {
+  const alvo = aparelhoParaRevogar.value;
+  if (!alvo) return;
+  ocupado.value = true;
+  try {
+    await cofreApi.revogarAparelho(alvo.id);
+    await carregarAparelhos();
+  } catch (e) {
+    erro.value = mensagemDe(e, 'Não foi possível revogar.');
+  } finally {
+    ocupado.value = false;
+    aparelhoParaRevogar.value = null;
+  }
+}
+const dataHora = (d: string | Date | null) =>
+  d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
 
 // --- tranca sozinho: 5 minutos sem mexer, ou a aba some por 5 minutos
 const OCIOSO_MS = 5 * 60 * 1000;
@@ -294,10 +338,13 @@ async function confirmarTrocaSenha() {
 
 <template>
   <div class="animate-fade-in">
-    <UiNavBar titulo="Cofre de senhas" voltar="/dashboard" voltar-texto="Aplicativos">
+    <UiNavBar titulo="Cofre de senhas" :voltar="props.modo === 'painel' ? '/dashboard' : undefined" voltar-texto="Aplicativos">
       <template #subtitulo>Cifrado no seu navegador · o servidor só guarda o que ninguém lê</template>
       <template #acoes>
         <template v-if="aberto">
+          <UiButton variante="plain" icone aria-label="Aparelhos do CLI" title="Máquinas aprovadas do CLI hub-pass" @click="abrirAparelhos">
+            <CommandLineIcon class="h-6 w-6" />
+          </UiButton>
           <UiButton variante="plain" icone aria-label="Trocar palavra-passe" title="Trocar a palavra-passe" @click="abrirTrocaSenha">
             <KeyIcon class="h-6 w-6" />
           </UiButton>
@@ -306,6 +353,7 @@ async function confirmarTrocaSenha() {
             Trancar
           </UiButton>
         </template>
+        <UiButton v-if="props.modo === 'usuario'" variante="plain" tamanho="small" @click="emit('sair')">Sair</UiButton>
       </template>
     </UiNavBar>
 
@@ -540,6 +588,43 @@ async function confirmarTrocaSenha() {
         <UiButton type="submit" form="form-senha" :carregando="ocupado">Salvar</UiButton>
       </template>
     </UiSheet>
+
+    <!-- FOLHA: aparelhos do CLI -->
+    <UiSheet :aberto="mostrarAparelhos" titulo="Aparelhos do CLI" subtitulo="Máquinas aprovadas para o hub-pass" largura="md" @fechar="mostrarAparelhos = false">
+      <div class="space-y-4">
+        <div class="rounded-celula bg-fill-2 p-3 text-footnote text-label-2">
+          Para aprovar uma máquina, rode nela <code class="font-mono text-label">hub-pass login</code> (e-mail, senha, código do
+          2FA e a palavra-passe do cofre). Revogar aqui desliga a máquina na hora: a chave que ficou nela não abre mais nada.
+        </div>
+        <p v-if="aparelhos.length === 0" class="py-3 text-subhead italic text-label-2">Nenhuma máquina aprovada ainda.</p>
+        <ul v-else class="divide-y rounded-celula bg-surface [&>*]:border-separator">
+          <li v-for="a in aparelhos" :key="a.id" class="flex items-center gap-3 px-3 py-3">
+            <div class="min-w-0 flex-1">
+              <p class="flex items-center gap-2 text-subhead font-semibold">
+                <span class="truncate">{{ a.nome }}</span>
+                <UiBadge v-if="a.revogado" tom="danger">revogado</UiBadge>
+                <UiBadge v-else tom="success">ativo</UiBadge>
+              </p>
+              <p class="text-caption-1 text-label-2">aprovado {{ dataHora(a.criado_em) }} · último uso {{ dataHora(a.ultimo_uso) }}{{ a.ip ? ` · ${a.ip}` : '' }}</p>
+            </div>
+            <UiButton v-if="!a.revogado" variante="destructive-tinted" tamanho="small" @click="aparelhoParaRevogar = a">Revogar</UiButton>
+          </li>
+        </ul>
+      </div>
+    </UiSheet>
+
+    <UiAlert
+      :aberto="!!aparelhoParaRevogar"
+      tom="danger"
+      titulo="Revogar esta máquina?"
+      :destaque="aparelhoParaRevogar?.nome"
+      confirmar="Revogar"
+      :carregando="ocupado"
+      @fechar="aparelhoParaRevogar = null"
+      @confirmar="revogarAparelho"
+    >
+      O hub-pass dela para de funcionar na hora. Para voltar, rode <code>hub-pass login</code> nela de novo.
+    </UiAlert>
 
     <UiAlert
       :aberto="!!itemParaApagar"

@@ -942,6 +942,7 @@ export class AppService {
             if (data.logo !== undefined) updateData.logo = data.logo || null;
             if (data.bot_url !== undefined) updateData.botUrl = urlBase(data.bot_url);
             if (data.platform_url !== undefined) updateData.platformUrl = urlBase(data.platform_url);
+            if (typeof data.cofre_liberado === 'boolean') updateData.cofreLiberado = data.cofre_liberado;
 
             // Trocar de categoria = sair do grupo atual e entrar no FIM do
             // novo. Só mexe na ordem se a categoria de fato mudou, senão

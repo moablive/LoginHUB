@@ -17,6 +17,8 @@ export const router = createRouter({
     // Enrolamento de 2FA compartilhado: os apps clientes mandam para cá com o
     // passe de 10 min que o login deles devolveu em `require2FASetup`. Uma
     // tela de QR só, em vez de oito divergindo.
+    // Cofre de senhas de usuário de app com o cofre liberado (db/014): login próprio na página.
+    { path: '/meu-cofre', name: 'meu-cofre', component: () => import('@/pages/MeuCofrePage.vue') },
     { path: '/enrolar-2fa', name: 'enrolar-2fa', component: () => import('@/pages/Enroll2FAPage.vue') },
 
     { path: '/', redirect: '/dashboard' },

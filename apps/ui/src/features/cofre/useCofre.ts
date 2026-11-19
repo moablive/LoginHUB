@@ -25,7 +25,6 @@ import {
  * Estado do cofre ABERTO. As chaves moram só na memória desta aba (nunca no
  * localStorage): trancar, recarregar a página ou fechar a aba esquece tudo.
  */
-const DONO = 'master';
 
 export interface CofreAberto {
   id: string;
@@ -50,6 +49,14 @@ export interface ItemAberto extends ItemCofre {
 }
 
 const bruto = shallowRef<CofreEstado | null>(null);
+
+// O dono ('master' ou 'u:<id>') vem do servidor e entra nos dados associados da
+// cifra: o cofre de uma conta não abre como se fosse de outra.
+const dono = (): string => {
+  const d = bruto.value?.dono;
+  if (!d) throw new Error('SEM_DONO');
+  return d;
+};
 const chaveConta = shallowRef<Uint8Array | null>(null);
 const cofres = ref<CofreAberto[]>([]);
 const itens = ref<ItemAberto[]>([]);
@@ -71,7 +78,7 @@ function abrirTudo(): void {
   const abertos: CofreAberto[] = [];
   for (const c of estado.cofres) {
     try {
-      const d = decifrarJson<{ nome: string; chave: string }>(conta, c.dados, adCofre(DONO, c.id));
+      const d = decifrarJson<{ nome: string; chave: string }>(conta, c.dados, adCofre(dono(), c.id));
       abertos.push({ id: c.id, nome: d.nome, chave: deB64(d.chave) });
     } catch {
       falhas++;
@@ -100,14 +107,15 @@ function abrirTudo(): void {
 
 /** Cria o cofre: devolve o kit de recuperação, que a tela mostra UMA vez. */
 async function criar(palavraPasse: string): Promise<string> {
+  if (!bruto.value) await carregar();
   const kdf = novosParametrosKdf();
   const mestra = await chaveMestraDe(palavraPasse, kdf);
   const conta = novaChave();
   const kit = novoKit();
   await cofreApi.criarConta({
     kdf,
-    chave_por_senha: cifrar(mestra, conta, adContaSenha(DONO)),
-    chave_por_kit: cifrar(chaveDoKit(kit.bytes), conta, adContaKit(DONO)),
+    chave_por_senha: cifrar(mestra, conta, adContaSenha(dono())),
+    chave_por_kit: cifrar(chaveDoKit(kit.bytes), conta, adContaKit(dono())),
   });
   mestra.fill(0);
   kit.bytes.fill(0);
@@ -125,7 +133,7 @@ async function abrirComSenha(palavraPasse: string): Promise<void> {
   if (!conta) throw new Error('SEM_COFRE');
   const mestra = await chaveMestraDe(palavraPasse, conta.kdf);
   try {
-    chaveConta.value = decifrar(mestra, conta.chave_por_senha, adContaSenha(DONO));
+    chaveConta.value = decifrar(mestra, conta.chave_por_senha, adContaSenha(dono()));
   } finally {
     mestra.fill(0);
   }
@@ -138,7 +146,7 @@ async function abrirComKit(kitTexto: string): Promise<void> {
   const conta = bruto.value?.conta;
   if (!conta) throw new Error('SEM_COFRE');
   const kit = kitDeTexto(kitTexto);
-  chaveConta.value = decifrar(chaveDoKit(kit), conta.chave_por_kit, adContaKit(DONO));
+  chaveConta.value = decifrar(chaveDoKit(kit), conta.chave_por_kit, adContaKit(dono()));
   kit.fill(0);
   abrirTudo();
 }
@@ -149,7 +157,7 @@ async function trocarSenha(nova: string): Promise<void> {
   if (!conta) throw new Error('TRANCADO');
   const kdf = novosParametrosKdf();
   const mestra = await chaveMestraDe(nova, kdf);
-  await cofreApi.trocarSenha({ kdf, chave_por_senha: cifrar(mestra, conta, adContaSenha(DONO)) });
+  await cofreApi.trocarSenha({ kdf, chave_por_senha: cifrar(mestra, conta, adContaSenha(dono())) });
   mestra.fill(0);
   await carregar();
 }
@@ -169,7 +177,7 @@ async function salvarCofre(nome: string, id?: string): Promise<void> {
   const existente = id ? cofres.value.find((c) => c.id === id) : undefined;
   const cofreId = existente?.id ?? novoId();
   const chave = existente?.chave ?? novaChave();
-  await cofreApi.salvarCofre(cofreId, cifrarJson(conta, { nome: nome.trim(), chave: b64(chave) }, adCofre(DONO, cofreId)));
+  await cofreApi.salvarCofre(cofreId, cifrarJson(conta, { nome: nome.trim(), chave: b64(chave) }, adCofre(dono(), cofreId)));
   await carregar();
   abrirTudo();
 }

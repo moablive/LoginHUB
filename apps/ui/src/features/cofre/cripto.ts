@@ -149,6 +149,8 @@ export const adContaSenha = (dono: string) => `cofre-conta:${dono}:senha`;
 export const adContaKit = (dono: string) => `cofre-conta:${dono}:kit`;
 export const adCofre = (dono: string, id: string) => `cofre:${dono}:${id}`;
 export const adItem = (cofreId: string, id: string) => `cofre-item:${cofreId}:${id}`;
+/** Chave da conta embrulhada pela chave de uma máquina aprovada do CLI (db/014). */
+export const adAparelho = (dono: string, aparelhoId: string) => `cofre-aparelho:${dono}:${aparelhoId}`;
 
 // ------------------------------------------------------------ 2FA (TOTP, RFC 6238)
 

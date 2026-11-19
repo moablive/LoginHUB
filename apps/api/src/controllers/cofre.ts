@@ -1,13 +1,14 @@
 import { Request, Response } from 'express';
 import { cofreService } from '@loginhub/services';
-import { escopoDe } from '@loginhub/middlewares';
+import { donoDoCofre, ipDoCliente } from '@loginhub/middlewares';
 
 /**
- * Cofre de senhas (db/013_cofre.sql, 19/11/2026). Só o master por enquanto
- * (rotas no `adminRouter`, atrás do `soMaster`): o dono é sempre 'master'.
- * O corpo é texto cifrado no navegador; aqui só se guarda e devolve.
+ * Cofre de senhas (db/013 e db/014, 19/11/2026). Rotas em /cofre atrás do
+ * `cofreAuth`, que decide o dono: 'master', 'u:<id>' (usuário de app com cofre
+ * liberado) ou o dono do aparelho aprovado do CLI. O corpo é texto cifrado no
+ * navegador/CLI; aqui só se guarda e devolve.
  */
-const donoDe = (req: Request): string | null => (escopoDe(req)?.master ? 'master' : null);
+const donoDe = (req: Request): string | null => donoDoCofre(req)?.dono ?? null;
 
 function responder(res: Response, err: unknown, acao: string) {
     const e = err as Error & { code?: string };
@@ -19,19 +20,19 @@ function responder(res: Response, err: unknown, acao: string) {
 }
 
 export class CofreController {
-    /** GET /admin/cofre — conta (embrulhos + parâmetros do Argon2id), cofres e itens, tudo cifrado. */
+    /** GET /cofre — conta (embrulhos + parâmetros do Argon2id), cofres e itens, tudo cifrado. */
     static async estado(req: Request, res: Response) {
         const dono = donoDe(req);
         if (!dono) return res.status(403).json({ error: 'SO_MASTER' });
         try {
             res.setHeader('Cache-Control', 'no-store');
-            return res.status(200).json(await cofreService.estado(dono));
+            return res.status(200).json(await cofreService.estado(dono, donoDoCofre(req)?.aparelhoId));
         } catch (err) {
             return responder(res, err, 'estado');
         }
     }
 
-    /** POST /admin/cofre/conta `{ kdf, chave_por_senha, chave_por_kit }` — cria o cofre (uma vez). */
+    /** POST /cofre/conta `{ kdf, chave_por_senha, chave_por_kit }` — cria o cofre (uma vez). */
     static async criarConta(req: Request, res: Response) {
         const dono = donoDe(req);
         if (!dono) return res.status(403).json({ error: 'SO_MASTER' });
@@ -43,7 +44,7 @@ export class CofreController {
         }
     }
 
-    /** PUT /admin/cofre/conta `{ kdf, chave_por_senha }` — palavra-passe nova. */
+    /** PUT /cofre/conta `{ kdf, chave_por_senha }` — palavra-passe nova. */
     static async trocarSenha(req: Request, res: Response) {
         const dono = donoDe(req);
         if (!dono) return res.status(403).json({ error: 'SO_MASTER' });
@@ -55,7 +56,7 @@ export class CofreController {
         }
     }
 
-    /** PUT /admin/cofre/cofres/:id `{ dados }` — cria ou atualiza. */
+    /** PUT /cofre/cofres/:id `{ dados }` — cria ou atualiza. */
     static async salvarCofre(req: Request<{ id: string }>, res: Response) {
         const dono = donoDe(req);
         if (!dono) return res.status(403).json({ error: 'SO_MASTER' });
@@ -67,7 +68,7 @@ export class CofreController {
         }
     }
 
-    /** DELETE /admin/cofre/cofres/:id — apaga o cofre e todos os itens dele. */
+    /** DELETE /cofre/cofres/:id — apaga o cofre e todos os itens dele. */
     static async apagarCofre(req: Request<{ id: string }>, res: Response) {
         const dono = donoDe(req);
         if (!dono) return res.status(403).json({ error: 'SO_MASTER' });
@@ -79,7 +80,7 @@ export class CofreController {
         }
     }
 
-    /** PUT /admin/cofre/itens/:id `{ cofre_id, dados }` — cria ou atualiza. */
+    /** PUT /cofre/itens/:id `{ cofre_id, dados }` — cria ou atualiza. */
     static async salvarItem(req: Request<{ id: string }>, res: Response) {
         const dono = donoDe(req);
         if (!dono) return res.status(403).json({ error: 'SO_MASTER' });
@@ -91,7 +92,7 @@ export class CofreController {
         }
     }
 
-    /** DELETE /admin/cofre/itens/:id */
+    /** DELETE /cofre/itens/:id */
     static async apagarItem(req: Request<{ id: string }>, res: Response) {
         const dono = donoDe(req);
         if (!dono) return res.status(403).json({ error: 'SO_MASTER' });
@@ -100,6 +101,49 @@ export class CofreController {
             return res.status(200).json({ ok: true });
         } catch (err) {
             return responder(res, err, 'apagarItem');
+        }
+    }
+
+    // ------------------------------------------------------------ aparelhos do CLI (db/014)
+
+    /** POST /cofre/aparelhos `{ id, nome, chave_por_aparelho }` → `{ token }` (uma vez). Só com login de verdade. */
+    static async registrarAparelho(req: Request, res: Response) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SEM_DONO' });
+        if (donoDoCofre(req)?.aparelhoId) return res.status(403).json({ error: 'APARELHO_NAO_APROVA', message: 'Um aparelho não aprova outro: entre com a sua conta.' });
+        try {
+            const r = await cofreService.registrarAparelho(dono, req.body?.id, req.body?.nome, req.body?.chave_por_aparelho, ipDoCliente(req));
+            res.setHeader('Cache-Control', 'no-store');
+            return res.status(201).json(r);
+        } catch (err) {
+            return responder(res, err, 'registrarAparelho');
+        }
+    }
+
+    /** GET /cofre/aparelhos */
+    static async listarAparelhos(req: Request, res: Response) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SEM_DONO' });
+        try {
+            return res.status(200).json(await cofreService.listarAparelhos(dono));
+        } catch (err) {
+            return responder(res, err, 'listarAparelhos');
+        }
+    }
+
+    /** DELETE /cofre/aparelhos/:id — revoga (o próprio aparelho pode se revogar: é o `hub-pass logout`). */
+    static async revogarAparelho(req: Request<{ id: string }>, res: Response) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SEM_DONO' });
+        const aparelho = donoDoCofre(req)?.aparelhoId;
+        if (aparelho && aparelho !== String(req.params.id).toLowerCase()) {
+            return res.status(403).json({ error: 'APARELHO_NAO_REVOGA_OUTRO', message: 'Revogue outras máquinas pelo navegador.' });
+        }
+        try {
+            await cofreService.revogarAparelho(dono, req.params.id);
+            return res.status(200).json({ ok: true });
+        } catch (err) {
+            return responder(res, err, 'revogarAparelho');
         }
     }
 }

@@ -27,7 +27,8 @@ import {
   rateLimitStatus2FA,
   rateLimitCheckout,
   rateLimitVendaLeitura,
-  rateLimitPasskey
+  rateLimitPasskey,
+  cofreAuth
 } from '@loginhub/middlewares';
 
 export const mainRouter = Router();
@@ -201,16 +202,28 @@ adminRouter.post('/assinaturas/conferir', VendaAdminController.conferir as any);
 adminRouter.post('/assinaturas/:id/cancelar', VendaAdminController.cancelar as any);
 adminRouter.post('/assinaturas/:id/reenviar-acesso', VendaAdminController.reenviarAcesso as any);
 
-// -- Cofre de senhas (db/013_cofre.sql, 19/11/2026): só texto cifrado no navegador.
-adminRouter.get('/cofre', CofreController.estado as any);
-adminRouter.post('/cofre/conta', CofreController.criarConta as any);
-adminRouter.put('/cofre/conta', CofreController.trocarSenha as any);
-adminRouter.put('/cofre/cofres/:id', CofreController.salvarCofre as any);
-adminRouter.delete('/cofre/cofres/:id', CofreController.apagarCofre as any);
-adminRouter.put('/cofre/itens/:id', CofreController.salvarItem as any);
-adminRouter.delete('/cofre/itens/:id', CofreController.apagarItem as any);
-
 mainRouter.use('/admin', adminRouter);
+
+// ==========================================
+// 2b. Cofre de senhas (db/013 e db/014, 19/11/2026)
+// ==========================================
+// Fora do /admin: além do master, usam o cofre os usuários de app com cofre
+// liberado e as máquinas aprovadas do CLI hub-pass. O `cofreAuth` decide o dono;
+// tudo o que entra e sai aqui é texto cifrado no navegador/CLI.
+const cofreRouter = Router();
+cofreRouter.use(cofreAuth as any);
+cofreRouter.get('/', CofreController.estado as any);
+cofreRouter.post('/conta', CofreController.criarConta as any);
+cofreRouter.put('/conta', CofreController.trocarSenha as any);
+cofreRouter.put('/cofres/:id', CofreController.salvarCofre as any);
+cofreRouter.delete('/cofres/:id', CofreController.apagarCofre as any);
+cofreRouter.put('/itens/:id', CofreController.salvarItem as any);
+cofreRouter.delete('/itens/:id', CofreController.apagarItem as any);
+cofreRouter.get('/aparelhos', CofreController.listarAparelhos as any);
+cofreRouter.post('/aparelhos', CofreController.registrarAparelho as any);
+cofreRouter.delete('/aparelhos/:id', CofreController.revogarAparelho as any);
+
+mainRouter.use('/cofre', cofreRouter);
 
 // ==========================================
 // 3. Venda pública (página de venda do app e aviso do Mercado Pago)

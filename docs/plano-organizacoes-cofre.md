@@ -65,6 +65,9 @@ Safari no Mac ("Adicionar ao Dock") não roda extensão, então lá o Proton Pas
 
 ## C. Cofre de senhas cifrado de ponta a ponta
 
+> **v1.4.0 (19/11/2026):** cofre também para os usuários dos apps liberados pelo master (`/meu-cofre`, dono
+> `u:<id>`) e o CLI `hub-pass` com máquina aprovada (revogável) — ver o README.
+>
 > **Primeira entrega no ar (v1.3.0, 19/11/2026):** botão **Cofre** no painel (só o master), palavra-passe +
 > kit de recuperação, vários cofres, itens com usuário, senha (gerador), URL, notas e **código 2FA ao vivo**,
 > tranca sozinho em 5 min e ao sair da tela. Banco `db/013_cofre.sql` (só texto cifrado), API

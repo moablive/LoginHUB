@@ -1502,6 +1502,22 @@ dele; nem a Master Key nem o banco abrem um item. Itens: título, usuário, senh
 chave do 2FA, com o código de 6 dígitos ao vivo. Tranca sozinho com 5 min parado e ao sair da tela. Teste:
 `npx tsx scripts/teste-cofre-cripto.ts`.
 
+#### Cofre dos usuários dos apps e CLI `hub-pass` (v1.4.0)
+
+- **Por app**: o master liga "Cofre de senhas" na edição do app (`aplicativos.cofre_liberado`, `db/014`). Ligado,
+  cada usuário daquele app (um DJ da Astral Wave, por exemplo) cria o **próprio** cofre em
+  `loginhub.astralwavelabel.com/meu-cofre`, entrando com a conta do app + 2FA e escolhendo a palavra-passe dele.
+  Dono `u:<id>`; ninguém mais lê (nem o master).
+- **Rotas `/cofre/*`** atrás do `cofreAuth`: sessão master, sessão de usuário de app liberado ou máquina aprovada.
+- **CLI `hub-pass`** (`cli/hub-pass`, TypeScript, um arquivo só para `node` ≥ 20, gerado por `build.sh`), no molde
+  do `pass-cli`: `login` aprova a máquina uma vez (e-mail + senha + 2FA + palavra-passe; `master` usa a Master
+  Key); a máquina guarda token + chave do aparelho em `~/.config/hub-pass/sessao.json` (600) e o servidor
+  (`cofre_aparelhos`) só o hash do token e a chave da conta embrulhada pela chave do aparelho. Revogar (na tela,
+  ícone do terminal, ou `hub-pass logout`) zera o embrulho. Comandos: `vault list|create`, `item
+  list|view|totp|create|update|delete` (aceita `--vault-name`/`--item-title` do pass-cli), `password generate`,
+  `run` (`VAR=hub://Cofre/Item/campo`). Instalação nas máquinas: `~/sh/hub-pass-instalar.sh` (awlsrv, bf, Mac).
+- Teste ponta a ponta: `LOGINHUB_MASTER_KEY=… npx tsx scripts/teste-cofre-cli.ts`.
+
 O plano das próximas frentes (biometria em todos os apps e cofre de senhas cifrado de ponta a
 ponta, com CLI `hub-pass`) está em [`docs/plano-organizacoes-cofre.md`](docs/plano-organizacoes-cofre.md).
 

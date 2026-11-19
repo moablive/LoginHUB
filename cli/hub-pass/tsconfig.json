@@ -1,0 +1,19 @@
+{
+  // Só checagem de tipos (npx tsc -p cli/hub-pass); quem gera o arquivo é o build.sh (esbuild).
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["es2022", "dom"],
+    "types": ["node"],
+    "typeRoots": ["../../node_modules/@types"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": false,
+    "paths": { "@loginhub/schema": ["../../packages/schema/src/index.ts"] }
+  },
+  "include": ["src/**/*.ts"]
+}

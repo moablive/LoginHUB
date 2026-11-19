@@ -1,7 +1,8 @@
+import crypto from 'crypto';
 import { db } from '@loginhub/database';
-import { cofreContas, cofreCofres, cofreItens } from '@loginhub/schema';
-import type { CofreConta, CofreEstado, CofreKdf } from '@loginhub/schema';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { cofreContas, cofreCofres, cofreItens, cofreAparelhos } from '@loginhub/schema';
+import type { CofreAparelho, CofreConta, CofreEstado, CofreKdf } from '@loginhub/schema';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 /**
  * Cofre de senhas cifrado de ponta a ponta (db/013_cofre.sql, 19/11/2026).
@@ -16,6 +17,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const MAX_DADOS = 64 * 1024;
 const MAX_COFRES = 100;
 const MAX_ITENS = 5000;
+const MAX_APARELHOS = 20;
 
 const erro = (mensagem: string, code: string) => Object.assign(new Error(mensagem), { code });
 
@@ -46,9 +48,9 @@ function kdf(valor: unknown): CofreKdf {
 }
 
 export class CofreService {
-    public async estado(dono: string): Promise<CofreEstado> {
+    public async estado(dono: string, aparelhoId?: string): Promise<CofreEstado> {
         const conta = await db.select().from(cofreContas).where(eq(cofreContas.dono, dono)).limit(1);
-        if (!conta[0]) return { conta: null, cofres: [], itens: [] };
+        if (!conta[0]) return { dono, conta: null, cofres: [], itens: [] };
         const cofres = await db
             .select({ id: cofreCofres.id, dados: cofreCofres.dados, atualizado_em: cofreCofres.atualizadoEm })
             .from(cofreCofres)
@@ -61,11 +63,78 @@ export class CofreService {
                   .where(inArray(cofreItens.cofreId, ids))
             : [];
         const c = conta[0];
+        let aparelho: CofreEstado['aparelho'];
+        if (aparelhoId) {
+            const a = await db
+                .select({ chave: cofreAparelhos.chavePorAparelho })
+                .from(cofreAparelhos)
+                .where(and(eq(cofreAparelhos.id, aparelhoId), eq(cofreAparelhos.dono, dono), isNull(cofreAparelhos.revogadoEm)))
+                .limit(1);
+            if (a[0]?.chave) aparelho = { id: aparelhoId, chave_por_aparelho: a[0].chave };
+        }
         return {
+            dono,
             conta: { kdf: c.kdf as CofreKdf, chave_por_senha: c.chavePorSenha, chave_por_kit: c.chavePorKit },
+            ...(aparelho ? { aparelho } : {}),
             cofres,
             itens,
         };
+    }
+
+    // ------------------------------------------------------------ aparelhos (CLI hub-pass, db/014)
+
+    /**
+     * Aprova uma máquina. O CLI já abriu a conta com a palavra-passe e manda a
+     * chave da conta embrulhada pela chave da máquina; aqui nasce o token de
+     * acesso (devolvido UMA vez; guardamos só o sha256 dele).
+     */
+    public async registrarAparelho(dono: string, idBruto: unknown, nomeBruto: unknown, chaveBruta: unknown, ip: string | null): Promise<{ token: string }> {
+        const id = uuid(idBruto, 'id');
+        const chave = envelope(chaveBruta, 'chave_por_aparelho');
+        const nome = String(nomeBruto ?? '').trim().slice(0, 120) || 'Aparelho';
+        const conta = await db.select({ d: cofreContas.dono }).from(cofreContas).where(eq(cofreContas.dono, dono)).limit(1);
+        if (!conta[0]) throw erro('Crie o cofre primeiro.', 'NOT_FOUND');
+        const ativos = await db
+            .select({ n: sql<number>`count(*)` })
+            .from(cofreAparelhos)
+            .where(and(eq(cofreAparelhos.dono, dono), isNull(cofreAparelhos.revogadoEm)));
+        if (Number(ativos[0]?.n ?? 0) >= MAX_APARELHOS) throw erro('Limite de aparelhos atingido: revogue um antes.', 'VALIDATION');
+        const token = crypto.randomBytes(32).toString('base64url');
+        const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+        try {
+            await db.insert(cofreAparelhos).values({ id, dono, nome, tokenHash, chavePorAparelho: chave, ip: ip?.slice(0, 64) ?? null });
+        } catch (e) {
+            if ((e as { code?: string }).code === '23505') throw erro('Aparelho já registrado.', 'DUPLICATE_ENTRY');
+            throw e;
+        }
+        return { token };
+    }
+
+    public async listarAparelhos(dono: string): Promise<CofreAparelho[]> {
+        const linhas = await db
+            .select({
+                id: cofreAparelhos.id,
+                nome: cofreAparelhos.nome,
+                ip: cofreAparelhos.ip,
+                criado_em: cofreAparelhos.criadoEm,
+                ultimo_uso: cofreAparelhos.ultimoUso,
+                revogado_em: cofreAparelhos.revogadoEm,
+            })
+            .from(cofreAparelhos)
+            .where(eq(cofreAparelhos.dono, dono))
+            .orderBy(desc(cofreAparelhos.criadoEm));
+        return linhas.map(({ revogado_em, ...l }: any) => ({ ...l, revogado: !!revogado_em }));
+    }
+
+    /** Revoga: zera o embrulho da chave e invalida o token. A chave que ficou na máquina não abre mais nada. */
+    public async revogarAparelho(dono: string, idBruto: unknown): Promise<void> {
+        const id = uuid(idBruto, 'id');
+        const r = await db
+            .update(cofreAparelhos)
+            .set({ revogadoEm: new Date(), chavePorAparelho: null })
+            .where(and(eq(cofreAparelhos.id, id), eq(cofreAparelhos.dono, dono), isNull(cofreAparelhos.revogadoEm)))
+            .returning({ id: cofreAparelhos.id });
+        if (r.length === 0) throw erro('Aparelho não encontrado.', 'NOT_FOUND');
     }
 
     /** Cria a conta do cofre. Uma por dono: a segunda tentativa é 409 (não sobrescreve nada). */
