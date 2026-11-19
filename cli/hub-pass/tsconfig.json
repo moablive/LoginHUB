@@ -6,14 +6,18 @@
     "moduleResolution": "bundler",
     "lib": ["es2022", "dom"],
     "types": ["node"],
-    "typeRoots": ["../../node_modules/@types"],
+    "typeRoots": ["./node_modules/@types", "../../node_modules/@types"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "skipLibCheck": true,
     "noEmit": true,
     "allowImportingTsExtensions": false,
-    "paths": { "@loginhub/schema": ["../../packages/schema/src/index.ts"] }
+    "paths": {
+      "@loginhub/schema": ["./src/tipos-cofre.ts"],
+      "@noble/hashes/*": ["./node_modules/@noble/hashes/*"],
+      "@noble/ciphers/*": ["./node_modules/@noble/ciphers/*"]
+    }
   },
   "include": ["src/**/*.ts"]
 }
