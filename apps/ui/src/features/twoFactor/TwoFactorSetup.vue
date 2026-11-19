@@ -30,7 +30,15 @@ const props = defineProps<{
    * componente numa tela de configurações, onde ativar é de fato opcional.
    */
   autoIniciar?: boolean;
+  /**
+   * Texto do botão que aparece embaixo dos códigos de recuperação (19/11/2026).
+   * Sem ele a tela parava nos códigos, sem caminho para seguir — foi o que o
+   * dono viu ao ativar o 2FA de um admin novo. Com ele, o clique emite
+   * `concluido` e quem usa o componente decide para onde ir.
+   */
+  rotuloContinuar?: string;
 }>();
+const emit = defineEmits<{ concluido: [] }>();
 
 const { etapa, dadosSetup, backupCodes, status, erro, carregando, carregarStatus, iniciar, confirmar } = useTwoFactor();
 const codigo = ref('');
@@ -86,6 +94,7 @@ async function copiar() {
     <p class="text-footnote text-label-2">
       Suas outras sessões foram encerradas. Você precisará entrar de novo nos outros dispositivos.
     </p>
+    <UiButton v-if="rotuloContinuar" tamanho="large" bloco @click="emit('concluido')">{{ rotuloContinuar }}</UiButton>
   </div>
 
   <div v-else-if="etapa === 'ativo'" class="space-y-1 text-center">

@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/vue/24/outline';
-import { authApi } from '@loginhub/api-client';
+import { authApi, marcarAdminDeOrganizacao } from '@loginhub/api-client';
 import AuthShell from '@/components/AuthShell.vue';
 import UiButton from '@/components/ui/UiButton.vue';
 import UiTextField from '@/components/ui/UiTextField.vue';
@@ -27,7 +27,28 @@ const precisaEnrolar = ref(false);
 // fecha o login aqui mesmo.
 const desafio = ref<string | null>(null);
 
+// Enrolamento concluído numa conta que NÃO é do painel (convite de outro app):
+// a pessoa volta ao app dela; o hub não tem para onde mandá-la.
+const prontoNoApp = ref(false);
+
 let timer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Depois dos códigos de recuperação (19/11/2026). O `verify-setup` já gravou
+ * uma sessão: se ela abre o painel (`/admin/eu`), é um admin de organização e
+ * ele entra direto; senão é conta de outro app e a tela diz para voltar a ele.
+ */
+async function aposEnrolar() {
+  try {
+    await authApi.eu();
+    marcarAdminDeOrganizacao();
+    await router.push('/dashboard');
+  } catch {
+    localStorage.removeItem('awl_token');
+    precisaEnrolar.value = false;
+    prontoNoApp.value = true;
+  }
+}
 onBeforeUnmount(() => clearTimeout(timer));
 
 function concluir() {
@@ -95,8 +116,16 @@ async function salvar() {
     titulo="Senha definida. Falta um passo."
     texto="Este convite exige verificação em duas etapas. Tenha o celular à mão com o Google Authenticator instalado."
   >
-    <TwoFactorSetup auto-iniciar />
+    <TwoFactorSetup auto-iniciar rotulo-continuar="Já guardei os códigos — entrar" @concluido="aposEnrolar" />
   </AuthShell>
+
+  <AuthShell
+    v-else-if="prontoNoApp"
+    titulo="Tudo pronto!"
+    tom="success"
+    :icone="CheckCircleIcon"
+    texto="Senha e verificação em duas etapas configuradas. Volte ao aplicativo e entre com o seu e-mail, a senha nova e o código do Google Authenticator."
+  />
 
   <AuthShell
     v-else-if="sucesso"
