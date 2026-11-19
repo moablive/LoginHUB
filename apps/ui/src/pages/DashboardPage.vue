@@ -215,7 +215,7 @@ const dataCadastro = (d?: string | Date | null) =>
   d ? new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
 
 // Colunas da lista no desktop; no celular cada linha empilha.
-const GRADE = 'md:grid md:grid-cols-[minmax(0,1fr)_10.5rem_7.5rem_7rem_6rem_16.5rem] md:items-center md:gap-4';
+const GRADE = 'md:grid md:grid-cols-[minmax(0,1fr)_10.5rem_7.5rem_7rem_6rem_21.5rem] md:items-center md:gap-4';
 const seta =
   'flex h-toque w-9 items-center justify-center rounded-lg text-label-2 hover:bg-accent/10 hover:text-accent disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-label-2';
 </script>
@@ -419,6 +419,16 @@ const seta =
               </template>
 
               <UiButton variante="tinted" tamanho="small" class="ml-auto md:ml-1" :to="`/apps/${app.id}/users`">Usuários</UiButton>
+              <!-- Gerenciar os admins da organização do app: convidar, resetar senha, tirar. -->
+              <UiButton
+                v-if="app.categoria_id !== null && app.categoria_id !== undefined"
+                variante="tinted"
+                tamanho="small"
+                :title="`Admins de ${app.nome}: convidar, resetar senha e tirar`"
+                @click="adminsDe = app.categoria_id"
+              >
+                Admins
+              </UiButton>
               <UiButton v-if="master" variante="plain" icone :aria-label="`Vendas de ${app.nome}`" title="Vendas: preço, afiliados e assinantes" :to="`/apps/${app.id}/vendas`">
                 <BanknotesIcon class="h-5 w-5" />
               </UiButton>
