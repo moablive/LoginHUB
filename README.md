@@ -1491,6 +1491,17 @@ Como a API garante (`apps/api/src/routes/index.ts`):
   reset) são descartados: o convite sai pelo modelo do hub, a senha é a pessoa quem define.
 - Alvo inexistente e alvo de outra organização recebem o mesmo 403 (`FORA_DA_ORGANIZACAO`).
 
+### 🔐 Cofre de senhas (desde 19/11/2026, v1.3.0)
+
+Botão **Cofre** no painel (só o master). Duas portas: a Master Key abre o painel, a **palavra-passe** abre o
+cofre — e ela nunca sai do navegador. Argon2id (64 MiB, 3 passadas) → chave mestra → chave da conta → chave
+de cada cofre → itens, tudo em XChaCha20-Poly1305 com dados associados (dono, cofre, item), envelope `v1.`.
+O **kit de recuperação** (256 bits em base32) é a outra porta da chave da conta. O servidor
+(`db/013_cofre.sql`, `/admin/cofre/*`, `CofreService`) só guarda e devolve texto cifrado e confere a forma
+dele; nem a Master Key nem o banco abrem um item. Itens: título, usuário, senha (gerador), URL, notas e a
+chave do 2FA, com o código de 6 dígitos ao vivo. Tranca sozinho com 5 min parado e ao sair da tela. Teste:
+`npx tsx scripts/teste-cofre-cripto.ts`.
+
 O plano das próximas frentes (biometria em todos os apps e cofre de senhas cifrado de ponta a
 ponta, com CLI `hub-pass`) está em [`docs/plano-organizacoes-cofre.md`](docs/plano-organizacoes-cofre.md).
 

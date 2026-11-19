@@ -683,3 +683,6 @@ export * from './passkeys';
 // Admins de organização: contas do app do painel com poder sobre as categorias
 // (organizações) em que têm linha (db/012_admins_organizacao.sql).
 export * from './organizacoes';
+
+// Cofre de senhas cifrado de ponta a ponta (db/013_cofre.sql).
+export * from './cofre';

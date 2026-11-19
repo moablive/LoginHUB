@@ -1,0 +1,572 @@
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import axios from 'axios';
+import {
+  ArrowPathIcon,
+  ClipboardDocumentIcon,
+  EyeIcon,
+  EyeSlashIcon,
+  KeyIcon,
+  LockClosedIcon,
+  LockOpenIcon,
+  PencilSquareIcon,
+  PlusIcon,
+  ShieldCheckIcon,
+  TrashIcon,
+} from '@heroicons/vue/24/outline';
+import UiNavBar from '@/components/ui/UiNavBar.vue';
+import UiButton from '@/components/ui/UiButton.vue';
+import UiTextField from '@/components/ui/UiTextField.vue';
+import UiSearchField from '@/components/ui/UiSearchField.vue';
+import UiSheet from '@/components/ui/UiSheet.vue';
+import UiAlert from '@/components/ui/UiAlert.vue';
+import UiBadge from '@/components/ui/UiBadge.vue';
+import UiSpinner from '@/components/ui/UiSpinner.vue';
+import UiEmpty from '@/components/ui/UiEmpty.vue';
+import { useCofre, type ItemAberto, type ItemCofre } from '@/features/cofre/useCofre';
+import { codigoTotp, gerarSenha, lerTotp, segundosRestantes } from '@/features/cofre/cripto';
+
+/**
+ * Cofre de senhas (19/11/2026, db/013). Duas portas: a Master Key abre o painel
+ * (como sempre) e a PALAVRA-PASSE abre o cofre. A palavra-passe nunca sai deste
+ * navegador; o servidor só guarda texto cifrado.
+ */
+const cofre = useCofre();
+const { existe, aberto, cofres, itens, ilegiveis } = cofre;
+
+const carregando = ref(true);
+const erro = ref<string | null>(null);
+const ocupado = ref(false);
+
+// --- criar / abrir
+const palavra = ref('');
+const confirmacao = ref('');
+const usarKit = ref(false);
+const kitDigitado = ref('');
+const kitMostrado = ref<string | null>(null);
+const kitGuardado = ref(false);
+const pedirNovaSenha = ref(false);
+
+const mensagemDe = (e: unknown, padrao: string): string => {
+  if (e instanceof Error && e.message === 'CHAVE_ERRADA') return usarKit.value ? 'Kit de recuperação errado.' : 'Palavra-passe errada.';
+  if (e instanceof Error && (e.message === 'KIT_INVALIDO' || e.message === 'BASE32_INVALIDO')) return 'Kit de recuperação incompleto ou com caractere errado.';
+  if (axios.isAxiosError(e) && e.response?.data?.message) return String(e.response.data.message);
+  return padrao;
+};
+
+onMounted(async () => {
+  try {
+    await cofre.carregar();
+  } catch (e) {
+    erro.value = mensagemDe(e, 'Não foi possível carregar o cofre.');
+  } finally {
+    carregando.value = false;
+  }
+});
+
+const senhaFraca = computed(() => palavra.value.length > 0 && palavra.value.length < 12);
+
+async function criar() {
+  if (palavra.value.length < 12) return void (erro.value = 'Use pelo menos 12 caracteres (melhor: 4 a 6 palavras soltas).');
+  if (palavra.value !== confirmacao.value) return void (erro.value = 'As duas palavras-passe não são iguais.');
+  ocupado.value = true;
+  erro.value = null;
+  try {
+    kitMostrado.value = await cofre.criar(palavra.value);
+    palavra.value = '';
+    confirmacao.value = '';
+  } catch (e) {
+    erro.value = mensagemDe(e, 'Não foi possível criar o cofre.');
+  } finally {
+    ocupado.value = false;
+  }
+}
+
+async function abrir() {
+  ocupado.value = true;
+  erro.value = null;
+  try {
+    if (usarKit.value) {
+      await cofre.abrirComKit(kitDigitado.value);
+      kitDigitado.value = '';
+      pedirNovaSenha.value = true;
+    } else {
+      await cofre.abrirComSenha(palavra.value);
+    }
+    palavra.value = '';
+  } catch (e) {
+    erro.value = mensagemDe(e, 'Não foi possível abrir o cofre.');
+  } finally {
+    ocupado.value = false;
+  }
+}
+
+async function definirNovaSenha() {
+  if (palavra.value.length < 12) return void (erro.value = 'Use pelo menos 12 caracteres.');
+  if (palavra.value !== confirmacao.value) return void (erro.value = 'As duas palavras-passe não são iguais.');
+  ocupado.value = true;
+  erro.value = null;
+  try {
+    await cofre.trocarSenha(palavra.value);
+    palavra.value = '';
+    confirmacao.value = '';
+    pedirNovaSenha.value = false;
+  } catch (e) {
+    erro.value = mensagemDe(e, 'Não foi possível trocar a palavra-passe.');
+  } finally {
+    ocupado.value = false;
+  }
+}
+
+function trancar() {
+  cofre.trancar();
+  revelados.value = new Set();
+}
+
+// --- tranca sozinho: 5 minutos sem mexer, ou a aba some por 5 minutos
+const OCIOSO_MS = 5 * 60 * 1000;
+let ultimoUso = Date.now();
+const marcarUso = () => (ultimoUso = Date.now());
+let relogio: ReturnType<typeof setInterval> | undefined;
+const agora = ref(Date.now());
+onMounted(() => {
+  for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, marcarUso);
+  relogio = setInterval(() => {
+    agora.value = Date.now();
+    if (aberto.value && Date.now() - ultimoUso > OCIOSO_MS) trancar();
+  }, 1000);
+});
+onBeforeUnmount(() => {
+  for (const ev of ['pointerdown', 'keydown']) window.removeEventListener(ev, marcarUso);
+  clearInterval(relogio);
+  // Sair da tela tranca: as chaves não ficam vivas no resto do painel.
+  trancar();
+});
+
+// --- lista
+const cofreAtual = ref<string | null>(null);
+watch(
+  cofres,
+  (lista) => {
+    if (!lista.find((c) => c.id === cofreAtual.value)) cofreAtual.value = lista[0]?.id ?? null;
+  },
+  { immediate: true },
+);
+const busca = ref('');
+const visiveis = computed(() => {
+  const termo = busca.value.trim().toLowerCase();
+  return itens.value.filter(
+    (i) =>
+      (termo ? true : i.cofre_id === cofreAtual.value) &&
+      (!termo || i.titulo.toLowerCase().includes(termo) || i.usuario.toLowerCase().includes(termo) || i.url.toLowerCase().includes(termo)),
+  );
+});
+const nomeDoCofre = (id: string) => cofres.value.find((c) => c.id === id)?.nome ?? '';
+const totalNoCofre = (id: string) => itens.value.filter((i) => i.cofre_id === id).length;
+
+const revelados = ref(new Set<string>());
+function alternarRevelar(id: string) {
+  const s = new Set(revelados.value);
+  if (s.has(id)) s.delete(id);
+  else s.add(id);
+  revelados.value = s;
+}
+
+const copiado = ref<string | null>(null);
+let limparCopia: ReturnType<typeof setTimeout> | undefined;
+async function copiar(valor: string, chave: string) {
+  try {
+    await navigator.clipboard.writeText(valor);
+    copiado.value = chave;
+    clearTimeout(limparCopia);
+    // Some da área de transferência em 30 s (quando o navegador deixa).
+    limparCopia = setTimeout(() => {
+      copiado.value = null;
+      void navigator.clipboard.writeText('').catch(() => undefined);
+    }, 30000);
+  } catch {
+    erro.value = 'O navegador não deixou copiar.';
+  }
+}
+
+function codigoDe(item: ItemAberto): { codigo: string; resta: number } | null {
+  const t = lerTotp(item.totp);
+  if (!t) return null;
+  return { codigo: codigoTotp(t, agora.value), resta: segundosRestantes(t, agora.value) };
+}
+
+// --- editar item
+const VAZIO: ItemCofre = { titulo: '', usuario: '', senha: '', url: '', totp: '', notas: '' };
+// Qual item a folha edita (null = fechada) e o formulário dela, separados para
+// o formulário nunca ser nulo no template.
+const editando = ref<{ id?: string; cofreId: string } | null>(null);
+const form = ref<ItemCofre>({ ...VAZIO });
+const verSenhaEdicao = ref(false);
+const totpInvalido = computed(() => !!form.value.totp.trim() && !lerTotp(form.value.totp));
+
+function novoItem() {
+  if (!cofreAtual.value) return;
+  verSenhaEdicao.value = false;
+  form.value = { ...VAZIO };
+  editando.value = { cofreId: cofreAtual.value };
+}
+function editarItem(item: ItemAberto) {
+  verSenhaEdicao.value = false;
+  const { titulo, usuario, senha, url, totp, notas } = item;
+  form.value = { titulo, usuario, senha, url, totp, notas };
+  editando.value = { id: item.id, cofreId: item.cofre_id };
+}
+function gerarNaEdicao() {
+  form.value.senha = gerarSenha();
+  verSenhaEdicao.value = true;
+}
+async function salvarItem() {
+  const e = editando.value;
+  if (!e || !form.value.titulo.trim() || totpInvalido.value) return;
+  ocupado.value = true;
+  erro.value = null;
+  try {
+    await cofre.salvarItem(e.cofreId, { ...form.value, titulo: form.value.titulo.trim() }, e.id);
+    editando.value = null;
+  } catch (err) {
+    erro.value = mensagemDe(err, 'Não foi possível salvar.');
+  } finally {
+    ocupado.value = false;
+  }
+}
+const itemParaApagar = ref<ItemAberto | null>(null);
+async function apagarItem() {
+  const alvo = itemParaApagar.value;
+  if (!alvo) return;
+  ocupado.value = true;
+  try {
+    await cofre.apagarItem(alvo.id);
+  } catch (err) {
+    erro.value = mensagemDe(err, 'Não foi possível apagar.');
+  } finally {
+    ocupado.value = false;
+    itemParaApagar.value = null;
+  }
+}
+
+// --- cofres (grupos)
+const editandoCofre = ref<{ id?: string; nome: string } | null>(null);
+async function salvarCofre() {
+  const e = editandoCofre.value;
+  if (!e || !e.nome.trim()) return;
+  ocupado.value = true;
+  try {
+    await cofre.salvarCofre(e.nome, e.id);
+    editandoCofre.value = null;
+  } catch (err) {
+    erro.value = mensagemDe(err, 'Não foi possível salvar o cofre.');
+  } finally {
+    ocupado.value = false;
+  }
+}
+const cofreParaApagar = ref<{ id: string; nome: string } | null>(null);
+async function apagarCofre() {
+  const alvo = cofreParaApagar.value;
+  if (!alvo) return;
+  ocupado.value = true;
+  try {
+    await cofre.apagarCofre(alvo.id);
+  } catch (err) {
+    erro.value = mensagemDe(err, 'Não foi possível apagar o cofre.');
+  } finally {
+    ocupado.value = false;
+    cofreParaApagar.value = null;
+  }
+}
+
+const trocandoSenha = ref(false);
+function abrirTrocaSenha() {
+  palavra.value = '';
+  confirmacao.value = '';
+  erro.value = null;
+  trocandoSenha.value = true;
+}
+async function confirmarTrocaSenha() {
+  await definirNovaSenha();
+  if (!erro.value) trocandoSenha.value = false;
+}
+</script>
+
+<template>
+  <div class="animate-fade-in">
+    <UiNavBar titulo="Cofre de senhas" voltar="/dashboard" voltar-texto="Aplicativos">
+      <template #subtitulo>Cifrado no seu navegador · o servidor só guarda o que ninguém lê</template>
+      <template #acoes>
+        <template v-if="aberto">
+          <UiButton variante="plain" icone aria-label="Trocar palavra-passe" title="Trocar a palavra-passe" @click="abrirTrocaSenha">
+            <KeyIcon class="h-6 w-6" />
+          </UiButton>
+          <UiButton tamanho="small" variante="gray" @click="trancar">
+            <LockClosedIcon class="h-4 w-4" />
+            Trancar
+          </UiButton>
+        </template>
+      </template>
+    </UiNavBar>
+
+    <div v-if="carregando" class="flex justify-center py-16 text-label-2"><UiSpinner class="h-8 w-8" /></div>
+
+    <!-- KIT DE RECUPERAÇÃO: aparece uma vez, logo depois de criar -->
+    <div v-else-if="kitMostrado" class="mx-auto mt-6 max-w-lg space-y-4 rounded-celula bg-surface p-6">
+      <div class="flex items-center gap-2">
+        <ShieldCheckIcon class="h-7 w-7 text-success" />
+        <h2 class="text-title-3 font-semibold">Cofre criado. Guarde o kit de recuperação.</h2>
+      </div>
+      <p class="text-subhead text-label-2">
+        É a única outra forma de abrir o cofre se você esquecer a palavra-passe. Imprima ou escreva em papel e guarde longe
+        do computador. <strong class="text-danger">Ele não aparece de novo e ninguém (nem o servidor) consegue recuperá-lo.</strong>
+      </p>
+      <p class="select-all break-all rounded-lg bg-fill-2 p-4 text-center font-mono text-headline tracking-wider">{{ kitMostrado }}</p>
+      <UiButton variante="tinted" bloco @click="copiar(kitMostrado, 'kit')">
+        <ClipboardDocumentIcon class="h-5 w-5" />{{ copiado === 'kit' ? 'Copiado' : 'Copiar o kit' }}
+      </UiButton>
+      <label class="flex items-center gap-2 text-subhead">
+        <input v-model="kitGuardado" type="checkbox" class="h-5 w-5" />
+        Já guardei o kit fora do computador.
+      </label>
+      <UiButton tamanho="large" bloco :disabled="!kitGuardado" @click="kitMostrado = null">Abrir o cofre</UiButton>
+    </div>
+
+    <!-- CRIAR -->
+    <div v-else-if="!existe" class="mx-auto mt-6 max-w-lg space-y-4 rounded-celula bg-surface p-6">
+      <div class="flex items-center gap-2">
+        <LockClosedIcon class="h-7 w-7 text-accent" />
+        <h2 class="text-title-3 font-semibold">Criar o seu cofre</h2>
+      </div>
+      <p class="text-subhead text-label-2">
+        Escolha uma <strong>palavra-passe</strong> só sua, diferente da Master Key. Ela cifra o cofre aqui no navegador e nunca vai
+        para o servidor. Dica: 4 a 6 palavras soltas que só você liga (ex.: <em>cavalo-azul-pavilhão-chuva</em>).
+      </p>
+      <form class="space-y-3" @submit.prevent="criar">
+        <UiTextField v-model="palavra" rotulo="Palavra-passe" type="password" revelar autocomplete="new-password" required :erro="senhaFraca ? 'Pelo menos 12 caracteres.' : null" />
+        <UiTextField v-model="confirmacao" rotulo="Repita a palavra-passe" type="password" revelar autocomplete="new-password" required />
+        <p v-if="erro" role="alert" class="rounded-celula bg-danger/10 p-3 text-subhead text-danger">{{ erro }}</p>
+        <UiButton type="submit" tamanho="large" bloco :carregando="ocupado" :disabled="!palavra || !confirmacao">
+          {{ ocupado ? 'Criando (alguns segundos)…' : 'Criar cofre' }}
+        </UiButton>
+      </form>
+    </div>
+
+    <!-- PALAVRA-PASSE NOVA depois do kit -->
+    <div v-else-if="aberto && pedirNovaSenha" class="mx-auto mt-6 max-w-lg space-y-4 rounded-celula bg-surface p-6">
+      <h2 class="text-title-3 font-semibold">Cofre aberto pelo kit. Escolha uma palavra-passe nova.</h2>
+      <form class="space-y-3" @submit.prevent="definirNovaSenha">
+        <UiTextField v-model="palavra" rotulo="Palavra-passe nova" type="password" revelar autocomplete="new-password" required />
+        <UiTextField v-model="confirmacao" rotulo="Repita" type="password" revelar autocomplete="new-password" required />
+        <p v-if="erro" role="alert" class="rounded-celula bg-danger/10 p-3 text-subhead text-danger">{{ erro }}</p>
+        <UiButton type="submit" tamanho="large" bloco :carregando="ocupado">Salvar palavra-passe</UiButton>
+      </form>
+    </div>
+
+    <!-- TRANCADO -->
+    <div v-else-if="!aberto" class="mx-auto mt-6 max-w-lg space-y-4 rounded-celula bg-surface p-6">
+      <div class="flex items-center gap-2">
+        <LockClosedIcon class="h-7 w-7 text-accent" />
+        <h2 class="text-title-3 font-semibold">Cofre trancado</h2>
+      </div>
+      <form class="space-y-3" @submit.prevent="abrir">
+        <UiTextField v-if="!usarKit" v-model="palavra" rotulo="Palavra-passe" type="password" revelar autocomplete="current-password" required />
+        <UiTextField v-else v-model="kitDigitado" rotulo="Kit de recuperação" placeholder="XXXX-XXXX-…" autocomplete="off" required />
+        <p v-if="erro" role="alert" class="rounded-celula bg-danger/10 p-3 text-subhead text-danger">{{ erro }}</p>
+        <UiButton type="submit" tamanho="large" bloco :carregando="ocupado" :disabled="usarKit ? !kitDigitado : !palavra">
+          <LockOpenIcon class="h-5 w-5" />{{ ocupado ? 'Abrindo…' : 'Abrir' }}
+        </UiButton>
+        <UiButton variante="plain" tamanho="small" @click="(usarKit = !usarKit), (erro = null)">
+          {{ usarKit ? 'Usar a palavra-passe' : 'Esqueci a palavra-passe (usar o kit de recuperação)' }}
+        </UiButton>
+      </form>
+    </div>
+
+    <!-- ABERTO -->
+    <div v-else class="mt-4 space-y-4">
+      <p v-if="ilegiveis > 0" class="rounded-celula bg-warning/10 p-3 text-subhead text-warning">
+        {{ ilegiveis }} registro(s) não abriram: foram alterados fora do cofre ou estão corrompidos.
+      </p>
+      <p v-if="erro" role="alert" class="rounded-celula bg-danger/10 p-3 text-subhead text-danger">{{ erro }}</p>
+
+      <!-- cofres -->
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          v-for="c in cofres"
+          :key="c.id"
+          type="button"
+          class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-subhead font-medium"
+          :class="c.id === cofreAtual ? 'bg-accent text-white' : 'bg-fill-2 text-label'"
+          @click="cofreAtual = c.id"
+          @dblclick="editandoCofre = { id: c.id, nome: c.nome }"
+        >
+          {{ c.nome }}
+          <span class="text-caption-1 opacity-70">{{ totalNoCofre(c.id) }}</span>
+        </button>
+        <UiButton variante="plain" tamanho="small" @click="editandoCofre = { nome: '' }"><PlusIcon class="h-4 w-4" />Cofre</UiButton>
+        <UiButton
+          v-if="cofreAtual"
+          variante="plain"
+          tamanho="small"
+          @click="editandoCofre = { id: cofreAtual, nome: nomeDoCofre(cofreAtual) }"
+        >
+          <PencilSquareIcon class="h-4 w-4" />Renomear
+        </UiButton>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <UiSearchField v-model="busca" placeholder="Buscar em todos os cofres" />
+        <UiButton tamanho="small" :disabled="!cofreAtual" @click="novoItem"><PlusIcon class="h-4 w-4" />Item</UiButton>
+      </div>
+
+      <UiEmpty v-if="visiveis.length === 0" :icone="KeyIcon" :titulo="busca ? 'Nada encontrado.' : 'Cofre vazio.'" :texto="busca ? undefined : 'Guarde aqui senhas e códigos 2FA.'" />
+
+      <ul v-else class="space-y-2">
+        <li v-for="item in visiveis" :key="item.id" class="rounded-celula bg-surface p-4">
+          <div class="flex items-start gap-3">
+            <div class="min-w-0 flex-1 space-y-1">
+              <p class="flex flex-wrap items-center gap-2 text-headline font-semibold">
+                <span class="truncate">{{ item.titulo }}</span>
+                <UiBadge v-if="busca">{{ nomeDoCofre(item.cofre_id) }}</UiBadge>
+              </p>
+              <a v-if="item.url" :href="/^https?:\/\//i.test(item.url) ? item.url : undefined" target="_blank" rel="noopener noreferrer" class="block truncate text-footnote text-accent">{{ item.url }}</a>
+
+              <div v-if="item.usuario" class="flex items-center gap-2 text-subhead">
+                <span class="w-16 shrink-0 text-label-2">Usuário</span>
+                <span class="truncate font-mono">{{ item.usuario }}</span>
+                <button type="button" class="text-accent" :title="'Copiar usuário'" @click="copiar(item.usuario, item.id + ':u')">
+                  <ClipboardDocumentIcon class="h-4 w-4" />
+                </button>
+                <span v-if="copiado === item.id + ':u'" class="text-caption-1 text-success">copiado</span>
+              </div>
+
+              <div v-if="item.senha" class="flex items-center gap-2 text-subhead">
+                <span class="w-16 shrink-0 text-label-2">Senha</span>
+                <span class="truncate font-mono">{{ revelados.has(item.id) ? item.senha : '••••••••••' }}</span>
+                <button type="button" class="text-label-2" :title="revelados.has(item.id) ? 'Esconder' : 'Mostrar'" @click="alternarRevelar(item.id)">
+                  <EyeSlashIcon v-if="revelados.has(item.id)" class="h-4 w-4" /><EyeIcon v-else class="h-4 w-4" />
+                </button>
+                <button type="button" class="text-accent" title="Copiar senha" @click="copiar(item.senha, item.id + ':s')">
+                  <ClipboardDocumentIcon class="h-4 w-4" />
+                </button>
+                <span v-if="copiado === item.id + ':s'" class="text-caption-1 text-success">copiada (some em 30 s)</span>
+              </div>
+
+              <div v-if="codigoDe(item)" class="flex items-center gap-2 text-subhead">
+                <span class="w-16 shrink-0 text-label-2">2FA</span>
+                <span class="font-mono text-title-3 tracking-widest text-accent">{{ codigoDe(item)!.codigo }}</span>
+                <span class="text-caption-1 text-label-2">{{ codigoDe(item)!.resta }}s</span>
+                <button type="button" class="text-accent" title="Copiar código" @click="copiar(codigoDe(item)!.codigo, item.id + ':t')">
+                  <ClipboardDocumentIcon class="h-4 w-4" />
+                </button>
+                <span v-if="copiado === item.id + ':t'" class="text-caption-1 text-success">copiado</span>
+              </div>
+
+              <p v-if="item.notas" class="whitespace-pre-wrap text-footnote text-label-2">{{ item.notas }}</p>
+            </div>
+            <div class="flex shrink-0 flex-col gap-1">
+              <UiButton variante="plain" icone :aria-label="`Editar ${item.titulo}`" @click="editarItem(item)"><PencilSquareIcon class="h-5 w-5" /></UiButton>
+              <UiButton variante="plain" icone class="!text-danger hover:!bg-danger/10" :aria-label="`Apagar ${item.titulo}`" @click="itemParaApagar = item">
+                <TrashIcon class="h-5 w-5" />
+              </UiButton>
+            </div>
+          </div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- FOLHA: item -->
+    <UiSheet :aberto="!!editando" :titulo="editando?.id ? 'Editar item' : 'Novo item'" :subtitulo="editando ? nomeDoCofre(editando.cofreId) : ''" :bloqueado="ocupado" @fechar="editando = null">
+      <form v-if="editando" id="form-item" class="space-y-3" @submit.prevent="salvarItem">
+        <UiTextField v-model="form.titulo" rotulo="Título" placeholder="Ex.: GitHub, Cloudflare, awlsrv sudo" required />
+        <UiTextField v-model="form.usuario" rotulo="Usuário / e-mail" autocomplete="off" />
+        <div class="space-y-1">
+          <UiTextField v-model="form.senha" rotulo="Senha" :type="verSenhaEdicao ? 'text' : 'password'" autocomplete="new-password" />
+          <div class="flex gap-2">
+            <UiButton variante="plain" tamanho="small" @click="verSenhaEdicao = !verSenhaEdicao">{{ verSenhaEdicao ? 'Esconder' : 'Mostrar' }}</UiButton>
+            <UiButton variante="plain" tamanho="small" @click="gerarNaEdicao">
+              <ArrowPathIcon class="h-4 w-4" />Gerar senha forte
+            </UiButton>
+          </div>
+        </div>
+        <UiTextField v-model="form.url" rotulo="Endereço (URL)" placeholder="https://…" autocomplete="off" />
+        <UiTextField
+          v-model="form.totp"
+          rotulo="Chave do 2FA (opcional)"
+          placeholder="JBSW Y3DP… ou otpauth://totp/…"
+          autocomplete="off"
+          dica="A chave que o site mostra ao ativar o 2FA (texto embaixo do QR). O cofre passa a mostrar o código de 6 dígitos."
+          :erro="totpInvalido ? 'Chave de 2FA inválida.' : null"
+        />
+        <label class="block text-footnote text-label-2">
+          Notas
+          <textarea v-model="form.notas" rows="3" class="mt-1 w-full rounded-lg bg-fill-2 p-3 text-body text-label outline-none focus:ring-2 focus:ring-accent/40" />
+        </label>
+      </form>
+      <template #acoes>
+        <UiButton variante="gray" @click="editando = null">Cancelar</UiButton>
+        <UiButton type="submit" form="form-item" :carregando="ocupado" :disabled="!form.titulo.trim() || totpInvalido">Salvar</UiButton>
+      </template>
+    </UiSheet>
+
+    <!-- FOLHA: cofre -->
+    <UiSheet :aberto="!!editandoCofre" :titulo="editandoCofre?.id ? 'Renomear cofre' : 'Novo cofre'" largura="sm" :bloqueado="ocupado" @fechar="editandoCofre = null">
+      <form v-if="editandoCofre" id="form-cofre" class="space-y-3" @submit.prevent="salvarCofre">
+        <UiTextField v-model="editandoCofre.nome" rotulo="Nome" placeholder="Ex.: SERVIDORES, Bancos, Sul" required />
+      </form>
+      <template #acoes>
+        <UiButton
+          v-if="editandoCofre?.id"
+          variante="destructive-tinted"
+          @click="(cofreParaApagar = { id: editandoCofre.id, nome: editandoCofre.nome }), (editandoCofre = null)"
+        >
+          Apagar
+        </UiButton>
+        <UiButton variante="gray" @click="editandoCofre = null">Cancelar</UiButton>
+        <UiButton type="submit" form="form-cofre" :carregando="ocupado" :disabled="!editandoCofre?.nome.trim()">Salvar</UiButton>
+      </template>
+    </UiSheet>
+
+    <!-- FOLHA: trocar palavra-passe -->
+    <UiSheet :aberto="trocandoSenha" titulo="Trocar a palavra-passe" largura="sm" :bloqueado="ocupado" @fechar="trocandoSenha = false">
+      <form id="form-senha" class="space-y-3" @submit.prevent="confirmarTrocaSenha">
+        <p class="text-subhead text-label-2">O kit de recuperação continua o mesmo. Cofres e itens não mudam.</p>
+        <UiTextField v-model="palavra" rotulo="Palavra-passe nova" type="password" revelar autocomplete="new-password" required />
+        <UiTextField v-model="confirmacao" rotulo="Repita" type="password" revelar autocomplete="new-password" required />
+        <p v-if="erro" role="alert" class="rounded-celula bg-danger/10 p-3 text-subhead text-danger">{{ erro }}</p>
+      </form>
+      <template #acoes>
+        <UiButton variante="gray" @click="trocandoSenha = false">Cancelar</UiButton>
+        <UiButton type="submit" form="form-senha" :carregando="ocupado">Salvar</UiButton>
+      </template>
+    </UiSheet>
+
+    <UiAlert
+      :aberto="!!itemParaApagar"
+      tom="danger"
+      :icone="TrashIcon"
+      titulo="Apagar este item?"
+      :destaque="itemParaApagar?.titulo"
+      confirmar="Apagar"
+      :carregando="ocupado"
+      @fechar="itemParaApagar = null"
+      @confirmar="apagarItem"
+    >
+      Some do cofre para sempre.
+    </UiAlert>
+
+    <UiAlert
+      :aberto="!!cofreParaApagar"
+      tom="danger"
+      :icone="TrashIcon"
+      titulo="Apagar o cofre inteiro?"
+      :destaque="cofreParaApagar?.nome"
+      confirmar="Apagar tudo"
+      :carregando="ocupado"
+      @fechar="cofreParaApagar = null"
+      @confirmar="apagarCofre"
+    >
+      O cofre e <strong class="text-danger">todos os itens dele</strong> somem para sempre.
+    </UiAlert>
+  </div>
+</template>

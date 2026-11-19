@@ -7,6 +7,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   LinkIcon,
+  LockClosedIcon,
   MagnifyingGlassIcon,
   PencilSquareIcon,
   PlusIcon,
@@ -229,6 +230,10 @@ const seta =
       <template #acoes>
         <UiButton v-if="master" variante="plain" icone aria-label="Categorias" title="Criar, renomear e ordenar as categorias" @click="mostrarCategorias = true">
           <TagIcon class="h-6 w-6" />
+        </UiButton>
+        <UiButton v-if="master" variante="gray" tamanho="small" to="/cofre" title="Cofre de senhas e códigos 2FA, cifrado no navegador">
+          <LockClosedIcon class="h-4 w-4" />
+          Cofre
         </UiButton>
         <UiButton v-if="eu && eu.organizacoes.length > 0" variante="gray" tamanho="small" title="Convidar quem vai cuidar de uma organização" @click="adminsDe = null">
           <UserPlusIcon class="h-4 w-4" />

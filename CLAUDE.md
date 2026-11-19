@@ -144,6 +144,10 @@ bump deixa o mecanismo mudo. Detalhes na seção *Versionamento* do README.
   `exigirOrganizacaoNoEscopo`. A conta do admin é do app `painel_do_hub` e precisa de 2FA ativo.
   Ver a seção do README e `docs/plano-organizacoes-cofre.md`.
 
+- **Cofre de senhas** (19/11/2026, `db/013_cofre.sql`): o servidor NUNCA cifra nem decifra — só guarda texto
+  `v1.<nonce>.<cifra>`. Toda a cripto mora em `apps/ui/src/features/cofre/cripto.ts` (@noble). Trocar
+  algoritmo = envelope `v2.` novo, sem quebrar o `v1.`. Mudou o cripto.ts → `npx tsx scripts/teste-cofre-cripto.ts`.
+
 ## Migrações
 
 `db/*.sql` são aplicadas manualmente no Postgres, em ordem. Não há runner nem

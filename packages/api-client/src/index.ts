@@ -30,7 +30,9 @@ import type {
   EscopoDoPainel,
   AdminOrganizacao,
   ConvidarAdminDTO,
-  ConvidarAdminResposta
+  ConvidarAdminResposta,
+  CofreEstado,
+  CofreConta
 } from '@loginhub/schema';
 
 // ==========================================
@@ -708,5 +710,34 @@ export const organizacaoApi = {
   /** Tira da organização; a conta fica (sem organização, o painel não abre nada). */
   remover: async (categoriaId: number, usuarioId: number): Promise<void> => {
     await api.delete(`/admin/organizacoes/${categoriaId}/admins/${usuarioId}`);
+  },
+};
+
+// ==========================================
+// COFRE DE SENHAS (db/013, 19/11/2026) — só texto cifrado viaja por aqui
+// ==========================================
+// A cifra e a decifra moram na UI (apps/ui/src/features/cofre/cripto.ts).
+export const cofreApi = {
+  estado: async (): Promise<CofreEstado> => {
+    const { data } = await api.get<CofreEstado>('/admin/cofre');
+    return data;
+  },
+  criarConta: async (conta: CofreConta): Promise<void> => {
+    await api.post('/admin/cofre/conta', conta);
+  },
+  trocarSenha: async (conta: Pick<CofreConta, 'kdf' | 'chave_por_senha'>): Promise<void> => {
+    await api.put('/admin/cofre/conta', conta);
+  },
+  salvarCofre: async (id: string, dados: string): Promise<void> => {
+    await api.put(`/admin/cofre/cofres/${id}`, { dados });
+  },
+  apagarCofre: async (id: string): Promise<void> => {
+    await api.delete(`/admin/cofre/cofres/${id}`);
+  },
+  salvarItem: async (id: string, cofreId: string, dados: string): Promise<void> => {
+    await api.put(`/admin/cofre/itens/${id}`, { cofre_id: cofreId, dados });
+  },
+  apagarItem: async (id: string): Promise<void> => {
+    await api.delete(`/admin/cofre/itens/${id}`);
   },
 };

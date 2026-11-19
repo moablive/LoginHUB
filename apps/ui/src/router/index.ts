@@ -33,6 +33,8 @@ export const router = createRouter({
         { path: 'apps/new', name: 'app-novo', component: () => import('@/pages/CreateAppPage.vue'), meta: { soMaster: true } },
         { path: 'apps/:id/users', name: 'app-usuarios', component: () => import('@/pages/AppUsersPage.vue'), props: true },
         // Venda por assinatura: preço, afiliados, assinantes e comissões (db/009).
+        // Cofre de senhas cifrado no navegador (db/013, 19/11/2026). Só o master por enquanto.
+        { path: 'cofre', name: 'cofre', component: () => import('@/pages/CofrePage.vue'), meta: { soMaster: true } },
         { path: 'apps/:id/vendas', name: 'app-vendas', component: () => import('@/pages/AppVendasPage.vue'), props: true, meta: { soMaster: true } },
       ],
     },

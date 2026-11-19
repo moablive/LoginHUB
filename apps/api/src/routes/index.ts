@@ -11,6 +11,7 @@ import {
 } from '../controllers';
 import { VendaPublicaController, VendaAdminController } from '../controllers/assinaturas';
 import { PasskeyController } from '../controllers/passkeys';
+import { CofreController } from '../controllers/cofre';
 import {
   adminMiddleware,
   soMaster,
@@ -199,6 +200,15 @@ adminRouter.post('/afiliados/:id/pagar-comissoes', VendaAdminController.pagarCom
 adminRouter.post('/assinaturas/conferir', VendaAdminController.conferir as any);
 adminRouter.post('/assinaturas/:id/cancelar', VendaAdminController.cancelar as any);
 adminRouter.post('/assinaturas/:id/reenviar-acesso', VendaAdminController.reenviarAcesso as any);
+
+// -- Cofre de senhas (db/013_cofre.sql, 19/11/2026): só texto cifrado no navegador.
+adminRouter.get('/cofre', CofreController.estado as any);
+adminRouter.post('/cofre/conta', CofreController.criarConta as any);
+adminRouter.put('/cofre/conta', CofreController.trocarSenha as any);
+adminRouter.put('/cofre/cofres/:id', CofreController.salvarCofre as any);
+adminRouter.delete('/cofre/cofres/:id', CofreController.apagarCofre as any);
+adminRouter.put('/cofre/itens/:id', CofreController.salvarItem as any);
+adminRouter.delete('/cofre/itens/:id', CofreController.apagarItem as any);
 
 mainRouter.use('/admin', adminRouter);
 

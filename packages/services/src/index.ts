@@ -16,6 +16,7 @@ export { BloqueioService, bloqueioService, LIMITE_POR_IP, LIMITE_POR_CONTA } fro
 export { AparelhoService, aparelhoService, ehContaDeCpf } from './AparelhoService';
 export { AssinaturaService, assinaturaService, iniciarConferenciaDeAssinaturas } from './AssinaturaService';
 export { PasskeyService, passkeyService } from './PasskeyService';
+export { CofreService, cofreService } from './CofreService';
 import {
     LoginInputDTO,
     AparelhoDoLogin,

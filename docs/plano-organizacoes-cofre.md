@@ -65,6 +65,13 @@ Safari no Mac ("Adicionar ao Dock") não roda extensão, então lá o Proton Pas
 
 ## C. Cofre de senhas cifrado de ponta a ponta
 
+> **Primeira entrega no ar (v1.3.0, 19/11/2026):** botão **Cofre** no painel (só o master), palavra-passe +
+> kit de recuperação, vários cofres, itens com usuário, senha (gerador), URL, notas e **código 2FA ao vivo**,
+> tranca sozinho em 5 min e ao sair da tela. Banco `db/013_cofre.sql` (só texto cifrado), API
+> `/admin/cofre/*` (só master), cifra em `apps/ui/src/features/cofre/cripto.ts`, teste em
+> `scripts/teste-cofre-cripto.ts`. Falta: biometria (PRF), CLI `hub-pass`, cofre dos admins de
+> organização, cofres compartilhados, importar do Proton Pass.
+
 Objetivo: cofres (SERVIDORES, Sul…) com senhas, códigos 2FA e notas, que **nem o servidor do hub
 consegue ler**, com um CLI igual ao `pass-cli`.
 
