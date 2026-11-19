@@ -11,6 +11,7 @@ import {
   PencilSquareIcon,
   PlusIcon,
   PuzzlePieceIcon,
+  ShieldCheckIcon,
   Squares2X2Icon,
   TagIcon,
   TrashIcon,
@@ -213,7 +214,7 @@ const dataCadastro = (d?: string | Date | null) =>
   d ? new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
 
 // Colunas da lista no desktop; no celular cada linha empilha.
-const GRADE = 'md:grid md:grid-cols-[minmax(0,1fr)_10.5rem_4.5rem_7rem_6rem_16.5rem] md:items-center md:gap-4';
+const GRADE = 'md:grid md:grid-cols-[minmax(0,1fr)_10.5rem_7.5rem_7rem_6rem_16.5rem] md:items-center md:gap-4';
 const seta =
   'flex h-toque w-9 items-center justify-center rounded-lg text-label-2 hover:bg-accent/10 hover:text-accent disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-label-2';
 </script>
@@ -290,7 +291,7 @@ const seta =
         <div :class="GRADE" class="hidden px-4 text-caption-1 font-semibold uppercase tracking-wide text-label-2 md:grid">
           <span>Aplicativo</span>
           <span>Documento</span>
-          <span class="text-center">Usuários</span>
+          <span class="text-center">Usuários · Admins</span>
           <span class="text-center">Status</span>
           <span>Cadastro</span>
           <span class="text-right">Ações</span>
@@ -355,10 +356,21 @@ const seta =
             <div class="flex flex-wrap items-center gap-x-3 gap-y-2 md:contents">
               <span class="font-mono text-footnote text-label-2 md:text-subhead">{{ masks.cnpj(app.documento) }}</span>
               <span class="md:flex md:justify-center">
-                <UiBadge :tom="(app.total_usuarios || 0) > 0 ? 'accent' : 'neutro'" :title="`${app.total_usuarios || 0} usuários`">
-                  <UsersIcon class="h-3 w-3" />
-                  {{ app.total_usuarios || 0 }}
-                </UiBadge>
+                <span class="inline-flex items-center gap-1.5">
+                  <UiBadge :tom="(app.total_usuarios || 0) > 0 ? 'accent' : 'neutro'" :title="`${app.total_usuarios || 0} usuários`">
+                    <UsersIcon class="h-3 w-3" />
+                    {{ app.total_usuarios || 0 }}
+                  </UiBadge>
+                  <!-- Admins da organização do app (db/012): quem cuida dele no hub. -->
+                  <UiBadge
+                    v-if="app.categoria_id !== null && app.categoria_id !== undefined"
+                    :tom="adminsDoGrupo(app.categoria_id) > 0 ? 'success' : 'neutro'"
+                    :title="`${adminsDoGrupo(app.categoria_id)} admin(s) da organização cuidam deste app`"
+                  >
+                    <ShieldCheckIcon class="h-3 w-3" />
+                    {{ adminsDoGrupo(app.categoria_id) }}
+                  </UiBadge>
+                </span>
               </span>
               <span class="md:flex md:justify-center">
                 <StatusButton v-if="master" :status="statusDe(app)" :nome="app.nome" @alternar="alternarStatus(app)" />
