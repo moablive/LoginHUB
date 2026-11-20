@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import axios from 'axios';
 import { EnvelopeIcon, KeyIcon, LockClosedIcon } from '@heroicons/vue/24/outline';
 import { authApi, marcarAdminDeOrganizacao } from '@loginhub/api-client';
@@ -18,6 +18,16 @@ import TwoFactorChallenge from '@/features/twoFactor/TwoFactorChallenge.vue';
  *   Master Key    → o master do hub, como sempre foi.
  */
 const router = useRouter();
+const route = useRoute();
+/**
+ * `?volta=` (19/11/2026): a entrada pelo cofre (/cofre/entrada) manda para cá
+ * quando o navegador não tem sessão do hub e volta depois do login. Só caminho
+ * interno da própria entrada pelo cofre: nada de mandar para outro site.
+ */
+const volta = (): string | null => {
+  const v = typeof route.query.volta === 'string' ? route.query.volta : '';
+  return v.startsWith('/cofre/entrada?') ? v : null;
+};
 const modo = ref<'admin' | 'master'>('admin');
 const MODOS = [
   { valor: 'admin' as const, rotulo: 'Administrador' },
@@ -51,7 +61,7 @@ async function entrarMaster() {
     // a MASTER_API_KEY. O painel não conhece a chave — antes ele a tinha no
     // bundle (`VITE_MASTER_KEY`) e comparava no navegador.
     await authApi.loginMaster(chave.value);
-    await router.push('/dashboard');
+    await router.push(volta() ?? '/dashboard');
   } catch (e: unknown) {
     console.error('Erro no login:', e);
     erro.value = mensagemDoErro(e, 'Master Key inválida ou acesso negado.');

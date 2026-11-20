@@ -1,8 +1,9 @@
 import { computed, ref, shallowRef } from 'vue';
 import { cofreApi } from '@loginhub/api-client';
-import type { CofreDigital, CofreEstado } from '@loginhub/schema';
+import type { CofreDigital, CofreEntradaPedido, CofreEstado } from '@loginhub/schema';
 import { randomBytes } from '@noble/ciphers/utils.js';
 import { criarDigital, pedirSegredo } from './digital';
+import { assinarEntrada, desafioDoPasse, mensagemDaEntrada, novaChaveDeEntrada, type EntradaDoItem } from './entrada';
 import {
   adCofre,
   adContaKit,
@@ -44,6 +45,8 @@ export interface ItemCofre {
   /** Chave base32 ou URI otpauth:// do 2FA do site. */
   totp: string;
   notas: string;
+  /** Item que guarda a chave de entrada de uma conta de app (db/016). */
+  entrada?: EntradaDoItem;
 }
 
 export interface ItemAberto extends ItemCofre {
@@ -264,9 +267,67 @@ async function salvarItem(cofreId: string, dados: ItemCofre, id?: string): Promi
 }
 
 async function apagarItem(id: string): Promise<void> {
+  // Item com chave de entrada: tira a entrada no hub antes (sem a privada ela não serve, mas não fica pendurada).
+  const entrada = itens.value.find((i) => i.id === id)?.entrada;
+  if (entrada) {
+    try {
+      await cofreApi.revogarEntrada(entrada.id);
+    } catch (e) {
+      if ((e as { response?: { status?: number } }).response?.status !== 404) throw e;
+    }
+  }
   await cofreApi.apagarItem(id);
   await carregar();
   abrirTudo();
+}
+
+// ------------------------------------------------ entrada pelo cofre (db/016)
+
+/**
+ * Guarda no cofre a chave de entrada da conta do pedido: gera o par, prova ao
+ * hub que tem a privada (assina o desafio do cadastro) e grava a privada como
+ * item do primeiro cofre. Se o item não gravar, a entrada sai do hub.
+ */
+async function guardarEntrada(passe: string, pedido: CofreEntradaPedido, nome: string): Promise<void> {
+  if (!chaveConta.value) throw new Error('TRANCADO');
+  const conta = pedido.conta;
+  if (pedido.acao !== 'cadastro' || !conta) throw new Error('PASSE_INVALIDO');
+  if (!cofres.value.length) await salvarCofre('Geral');
+  const alvo = cofres.value[0];
+  if (!alvo) throw new Error('COFRE_NAO_ENCONTRADO');
+  const { publica, privada } = await novaChaveDeEntrada();
+  const id = novoId();
+  const assinatura = await assinarEntrada(privada, mensagemDaEntrada('cadastro', pedido.app.id, conta.id, desafioDoPasse(passe)));
+  await cofreApi.registrarEntrada({ id, passe, nome: nome.trim().slice(0, 120) || 'Cofre do LoginHUB', chave_publica: publica, assinatura });
+  const entrada: EntradaDoItem = { id, app_id: pedido.app.id, app_nome: pedido.app.nome, origem: pedido.app.origem, usuario_id: conta.id, conta: conta.email, privada };
+  try {
+    await salvarItem(
+      alvo.id,
+      {
+        titulo: `${pedido.app.nome} · entrada pelo cofre`,
+        usuario: conta.email,
+        senha: '',
+        url: pedido.app.origem,
+        totp: '',
+        notas: `Chave de entrada do ${pedido.app.nome}: o botão "Entrar pelo cofre" do app abre este cofre e ela assina a entrada. Apagar este item tira a entrada.`,
+        entrada,
+      },
+    );
+  } catch (e) {
+    await cofreApi.revogarEntrada(id).catch(() => undefined);
+    throw e;
+  }
+}
+
+/** Itens com chave de entrada para o app (o cofre precisa estar aberto). */
+const entradasDoApp = (appId: number): ItemAberto[] => itens.value.filter((i) => i.entrada?.app_id === appId);
+
+/** Assina a entrada pedida pelo passe com a chave do item. */
+async function assinarParaEntrar(item: ItemAberto, passe: string): Promise<{ entrada_id: string; assinatura: string }> {
+  const e = item.entrada;
+  if (!e) throw new Error('SEM_ENTRADA');
+  const assinatura = await assinarEntrada(e.privada, mensagemDaEntrada('entrar', e.app_id, e.usuario_id, desafioDoPasse(passe)));
+  return { entrada_id: e.id, assinatura };
 }
 
 export function useCofre() {
@@ -292,5 +353,8 @@ export function useCofre() {
     apagarCofre,
     salvarItem,
     apagarItem,
+    guardarEntrada,
+    entradasDoApp,
+    assinarParaEntrar,
   };
 }

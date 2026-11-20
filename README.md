@@ -1541,6 +1541,25 @@ ponta, com CLI `hub-pass`) está em [`docs/plano-organizacoes-cofre.md`](docs/pl
 
 ---
 
+#### Entrada pelo cofre (v1.6.0)
+
+Pedido do dono em 19/11/2026: a biometria do Escritórios 3D deve morar no **próprio cofre do LoginHUB**, não numa passkey que o Proton Pass (ou a Apple) guarda. Uma página web não pode se registrar no navegador como guardador de passkeys, então a chave de entrada da conta vai **cifrada dentro do cofre** e o cofre assina a entrada.
+
+| Peça | O que faz |
+|---|---|
+| `db/016_cofre_entradas.sql` | `cofre_entradas`: id, dono do cofre, conta de app (`usuario_id`), chave pública Ed25519 (base64url), nome, uso, `revogada_em` |
+| `apps/ui/src/features/cofre/entrada.ts` | Gera o par Ed25519 (WebCrypto), assina a linha `loginhub-cofre-entrada-v1\|<acao>\|<app>\|<conta>\|<desafio>` |
+| Item do cofre | A chave privada vai no campo `entrada` de um item ("<app> · entrada pelo cofre", selo **entrada pelo cofre**). Apagar o item tira a entrada no hub |
+| `/cofre/entrada?passe=…` (`CofreEntradaPage.vue`) | Página para onde o app manda a pessoa. Sem sessão do hub, vai ao login (Master Key) e volta. Abre o cofre com a digital (ou a palavra-passe), guarda a chave (cadastro) ou assina a entrada (entrar) e devolve para a origem do app cadastrada no hub (`platform_url`), com a assinatura no `#` |
+| `/auth/cofre-entrada/*` | `login/opcoes` e `login/verificar` (públicas, rate limit da passkey; a verificação devolve a mesma sessão do login com senha + 2FA), `registro/opcoes`, `GET /`, `DELETE /:id` (sessão completa) |
+| `/cofre/entradas*` | `pedido` (o que a página mostra), `POST` (guarda a chave pública; exige a assinatura do desafio do cadastro), `DELETE /:id`. A máquina do CLI não cadastra nem tira |
+
+- O passe é o mesmo das passkeys: JWT de 5 minutos com o desafio, de uso único (`jti` queimado). A assinatura amarra ação, app, conta e desafio: não serve para outro app, outra conta nem outra vez.
+- Cadastrar exige a sessão completa do app **e** o cofre aberto. O "Resetar 2FA" do painel tira as passkeys e as entradas pelo cofre da conta.
+- A digital do cofre passou a pedir o leitor do aparelho (`authenticatorAttachment: 'platform'` e `hints: ['client-device']`): o Touch ID aparece e o Proton Pass não toma o pedido. A passkey do Proton não devolve o PRF.
+- Liga por app junto com a passkey (`aplicativos.webauthn_rp_id` + `platform_url` https). Primeiro app: o Escritórios 3D (app 18), que tem o botão "Entrar pelo cofre do LoginHUB" e o ☰ Menu → 🔐 Biometria → "Guardar a entrada no cofre do LoginHUB".
+- Teste: `NODE_PATH=cli/hub-pass/node_modules npx tsx scripts/teste-cofre-entrada.ts` (a assinatura da UI confere do jeito do hub; outro app, conta, desafio ou chave não conferem).
+
 ## 🔑 Sessão master e a master key
 
 O painel do hub tem uma credencial só: a `MASTER_API_KEY`. Ela **não** muda de

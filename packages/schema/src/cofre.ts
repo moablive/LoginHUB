@@ -1,4 +1,4 @@
-import { pgTable, varchar, text, timestamp, uuid, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, text, timestamp, uuid, jsonb, integer } from 'drizzle-orm/pg-core';
 
 
 // ==========================================
@@ -64,6 +64,48 @@ export const cofreDigitais = pgTable('cofre_digitais', {
     ultimoUso: timestamp('ultimo_uso'),
     revogadoEm: timestamp('revogado_em'),
 });
+
+/**
+ * Entrada pelo cofre (db/016): chave pública Ed25519 de uma conta de app. A
+ * privada mora cifrada num item do cofre do `dono`; o hub só confere assinaturas.
+ */
+export const cofreEntradas = pgTable('cofre_entradas', {
+    id: uuid('id').primaryKey(),
+    dono: varchar('dono', { length: 64 }).notNull().references(() => cofreContas.dono, { onDelete: 'cascade' }),
+    // FK para usuarios(id) fica só no SQL (db/016): importar `usuarios` daqui faria um ciclo com o index.
+    usuarioId: integer('usuario_id').notNull(),
+    chavePublica: varchar('chave_publica', { length: 64 }).notNull(),
+    nome: varchar('nome', { length: 120 }).notNull(),
+    criadoEm: timestamp('criado_em').notNull().defaultNow(),
+    ultimoUso: timestamp('ultimo_uso'),
+    revogadaEm: timestamp('revogada_em'),
+});
+
+/** O que o cofre mostra antes de guardar ou de assinar uma entrada (POST /cofre/entradas/pedido). */
+export interface CofreEntradaPedido {
+    acao: 'cadastro' | 'entrar';
+    app: { id: number; nome: string; origem: string };
+    /** Só no cadastro: a conta do app que a chave vai abrir. */
+    conta?: { id: number; nome: string | null; email: string };
+}
+
+/** POST /cofre/entradas */
+export interface CofreEntradaNova {
+    id: string;
+    passe: string;
+    nome: string;
+    chave_publica: string;
+    /** Assinatura Ed25519 (base64url) da mensagem de cadastro: prova que a privada existe. */
+    assinatura: string;
+}
+
+/** Entrada na lista do app (sem a chave). */
+export interface CofreEntrada {
+    id: string;
+    nome: string;
+    criado_em: string | Date;
+    ultimo_uso: string | Date | null;
+}
 
 /** Digital ativa, como vem no GET /cofre: o navegador precisa disto para abrir. */
 export interface CofreDigitalEmbrulho {

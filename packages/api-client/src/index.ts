@@ -35,7 +35,9 @@ import type {
   CofreConta,
   CofreAparelho,
   CofreDigital,
-  CofreDigitalNova
+  CofreDigitalNova,
+  CofreEntradaNova,
+  CofreEntradaPedido
 } from '@loginhub/schema';
 
 // ==========================================
@@ -765,5 +767,16 @@ export const cofreApi = {
   },
   usouDigital: async (id: string): Promise<void> => {
     await api.post(`/cofre/digitais/${id}/uso`, {});
+  },
+  /** Entrada pelo cofre (db/016): o que o app pediu (guardar a chave ou entrar). */
+  pedidoDeEntrada: async (passe: string): Promise<CofreEntradaPedido> => {
+    const { data } = await api.post<CofreEntradaPedido>('/cofre/entradas/pedido', { passe });
+    return data;
+  },
+  registrarEntrada: async (entrada: CofreEntradaNova): Promise<void> => {
+    await api.post('/cofre/entradas', entrada);
+  },
+  revogarEntrada: async (id: string): Promise<void> => {
+    await api.delete(`/cofre/entradas/${id}`);
   },
 };

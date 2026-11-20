@@ -12,6 +12,7 @@ import {
 import { VendaPublicaController, VendaAdminController } from '../controllers/assinaturas';
 import { PasskeyController } from '../controllers/passkeys';
 import { CofreController } from '../controllers/cofre';
+import { EntradaController } from '../controllers/entradas';
 import {
   adminMiddleware,
   soMaster,
@@ -107,6 +108,17 @@ passkeyRouter.get('/', authMiddleware as any, PasskeyController.listar as any);
 passkeyRouter.delete('/:id', ...gestao, PasskeyController.revogar as any);
 
 authRouter.use('/passkey', passkeyRouter);
+
+// -- Entrada pelo cofre (db/016): a chave da conta mora cifrada no cofre do
+//    LoginHUB e assina um desafio de uso único. Mesmas regras da passkey:
+//    entrar é público com rate limit; cadastrar e gerir exigem sessão completa.
+const entradaRouter = Router();
+entradaRouter.post('/login/opcoes', rateLimitPasskey as any, EntradaController.opcoesDeLogin as any);
+entradaRouter.post('/login/verificar', rateLimitPasskey as any, EntradaController.verificarLogin as any);
+entradaRouter.post('/registro/opcoes', ...gestao, EntradaController.opcoesDeRegistro as any);
+entradaRouter.get('/', authMiddleware as any, EntradaController.listar as any);
+entradaRouter.delete('/:id', ...gestao, EntradaController.revogar as any);
+authRouter.use('/cofre-entrada', entradaRouter);
 
 mainRouter.use('/auth', authRouter);
 
@@ -227,6 +239,10 @@ cofreRouter.get('/digitais', CofreController.listarDigitais as any);
 cofreRouter.post('/digitais', CofreController.registrarDigital as any);
 cofreRouter.delete('/digitais/:id', CofreController.revogarDigital as any);
 cofreRouter.post('/digitais/:id/uso', CofreController.usouDigital as any);
+// Entradas pelo cofre (db/016): o cofre aberto guarda a chave de uma conta de app e assina a entrada.
+cofreRouter.post('/entradas/pedido', EntradaController.pedido as any);
+cofreRouter.post('/entradas', EntradaController.registrar as any);
+cofreRouter.delete('/entradas/:id', EntradaController.revogarPeloCofre as any);
 
 mainRouter.use('/cofre', cofreRouter);
 

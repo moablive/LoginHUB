@@ -26,6 +26,8 @@ export class ErroDigital extends Error {
 // O lib.dom do TypeScript ainda não descreve a extensão PRF; só o pedaço que usamos.
 type PrfEntrada = { eval?: { first: BufferSource }; evalByCredential?: Record<string, { first: BufferSource }> };
 type PrfSaida = { enabled?: boolean; results?: { first?: ArrayBuffer } };
+// `hints` (WebAuthn L3) ainda não está no lib.dom de todas as versões: vai por espalhamento, sem tipo.
+const NO_APARELHO: object = { hints: ['client-device'] };
 
 export const b64url = (bytes: Uint8Array): string => {
   let bin = '';
@@ -67,7 +69,9 @@ export async function pedirSegredo(credenciais: { credencial_id: string; prf_sal
         rpId: window.location.hostname,
         userVerification: 'required',
         timeout: 60000,
-        allowCredentials: credenciais.map((x) => ({ type: 'public-key' as const, id: deB64url(x.credencial_id) as BufferSource })),
+        allowCredentials: credenciais.map((x) => ({ type: 'public-key' as const, id: deB64url(x.credencial_id) as BufferSource, transports: ['internal', 'hybrid'] as AuthenticatorTransport[] })),
+        // Leitor do próprio aparelho primeiro (Touch ID/Face ID), não a janela de um gerenciador de terceiros.
+        ...NO_APARELHO,
         extensions: { prf: { evalByCredential: porCredencial } satisfies PrfEntrada } as AuthenticationExtensionsClientInputs,
       },
     })) as PublicKeyCredential | null;
@@ -101,7 +105,10 @@ export async function criarDigital(dono: string, nome: string, sal: Uint8Array):
         ],
         timeout: 60000,
         attestation: 'none',
-        authenticatorSelection: { residentKey: 'preferred', userVerification: 'required' },
+        // `platform` + `client-device`: a digital do cofre nasce no leitor do aparelho (Senhas da Apple/Google, com PRF).
+        // Sem isso o Proton Pass do Chrome toma o pedido e a passkey dele não devolve o PRF (19/11/2026).
+        authenticatorSelection: { authenticatorAttachment: 'platform', residentKey: 'preferred', userVerification: 'required' },
+        ...NO_APARELHO,
         extensions: { prf: { eval: { first: sal as BufferSource } } satisfies PrfEntrada } as AuthenticationExtensionsClientInputs,
       },
     })) as PublicKeyCredential | null;

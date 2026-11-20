@@ -7,8 +7,8 @@ import {
     verifyAuthenticationResponse,
 } from '@simplewebauthn/server';
 import { db } from '@loginhub/database';
-import { aplicativos, usuarios, usuariosPasskeys } from '@loginhub/schema';
-import type { Passkey, PasskeyOpcoes } from '@loginhub/schema';
+import { aplicativos, cofreEntradas, usuarios, usuariosPasskeys } from '@loginhub/schema';
+import type { CofreEntrada, CofreEntradaPedido, Passkey, PasskeyOpcoes } from '@loginhub/schema';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { ehContaDeCpf } from './AparelhoService';
 
@@ -34,7 +34,7 @@ import { ehContaDeCpf } from './AparelhoService';
 const DESAFIO_TTL_SEGUNDOS = 300;
 const MAX_PASSKEYS_POR_CONTA = 10;
 
-type AcaoDoDesafio = 'passkey-registro' | 'passkey-login';
+type AcaoDoDesafio = 'passkey-registro' | 'passkey-login' | 'cofre-registro' | 'cofre-login';
 
 interface PasseDoDesafio {
     action: AcaoDoDesafio;
@@ -68,15 +68,46 @@ const segredo = (): string => {
 const emitirPasse = (dados: Omit<PasseDoDesafio, 'jti' | 'exp'>): string =>
     jwt.sign({ ...dados, jti: crypto.randomBytes(12).toString('hex') }, segredo(), { expiresIn: DESAFIO_TTL_SEGUNDOS });
 
-const lerPasse = (token: unknown, acao: AcaoDoDesafio): PasseDoDesafio => {
+const lerPasse = (token: unknown, acao: AcaoDoDesafio | AcaoDoDesafio[]): PasseDoDesafio => {
     let passe: PasseDoDesafio;
     try {
         passe = jwt.verify(String(token ?? ''), segredo()) as PasseDoDesafio;
     } catch {
         throw new Error('CHALLENGE_INVALIDO');
     }
-    if (passe.action !== acao || !passe.ch || !passe.jti) throw new Error('CHALLENGE_INVALIDO');
+    const aceitas = Array.isArray(acao) ? acao : [acao];
+    if (!aceitas.includes(passe.action) || !passe.ch || !passe.jti) throw new Error('CHALLENGE_INVALIDO');
     return passe;
+};
+
+// ------------------------------------------------ entrada pelo cofre (db/016)
+
+const MAX_ENTRADAS_POR_CONTA = 10;
+const CHAVE_PUBLICA = /^[A-Za-z0-9_-]{43}$/;
+const ASSINATURA = /^[A-Za-z0-9_-]{86}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * O que a chave do cofre assina. Amarra a assinatura à ação, ao app, à conta e
+ * ao desafio de uso único: uma assinatura não serve para outro app, outra conta
+ * nem outra vez. A UI monta a mesma linha (apps/ui/src/features/cofre/entrada.ts).
+ */
+export const mensagemDaEntrada = (acao: 'cadastro' | 'entrar', appId: number | string, usuarioId: number | string, desafio: string): string =>
+    `loginhub-cofre-entrada-v1|${acao}|${appId}|${usuarioId}|${desafio}`;
+
+const assinaturaConfere = (chavePublica: string, mensagem: string, assinatura: unknown): boolean => {
+    if (typeof assinatura !== 'string' || !ASSINATURA.test(assinatura) || !CHAVE_PUBLICA.test(chavePublica)) return false;
+    try {
+        const chave = crypto.createPublicKey({ key: { kty: 'OKP', crv: 'Ed25519', x: chavePublica }, format: 'jwk' });
+        return crypto.verify(null, Buffer.from(mensagem, 'utf8'), chave, Buffer.from(assinatura, 'base64url'));
+    } catch {
+        return false;
+    }
+};
+
+const urlDoCofre = (passe: string): string => {
+    const base = (process.env.UI_PUBLIC_URL || 'https://loginhub.astralwavelabel.com').replace(/\/+$/, '');
+    return `${base}/cofre/entrada?passe=${encodeURIComponent(passe)}`;
 };
 
 interface ConfigDoApp {
@@ -270,6 +301,113 @@ export class PasskeyService {
         return String(p.usuarioId);
     }
 
+    // ------------------------------------------------ entrada pelo cofre (db/016)
+
+    /**
+     * Cadastro da entrada pelo cofre: passe de 5 minutos para a conta da sessão
+     * (exige sessão completa, como a passkey). O app manda a pessoa ao `url`, o
+     * cofre aberto gera o par Ed25519 e chama `registrarEntrada`.
+     */
+    public async entradaOpcoesDeRegistro(usuarioId: string): Promise<{ passe: string; url: string }> {
+        const u = await this.conta(usuarioId);
+        const cfg = await this.configDoApp(u.appId);
+        const passe = emitirPasse({ action: 'cofre-registro', ch: crypto.randomBytes(32).toString('base64url'), sub: String(u.id), app_id: String(cfg.appId) });
+        return { passe, url: urlDoCofre(passe) };
+    }
+
+    /** Desafio para entrar pelo cofre. Público, como o da passkey: não diz se alguma conta existe. */
+    public async entradaOpcoesDeLogin(appId: unknown): Promise<{ passe: string; url: string }> {
+        const cfg = await this.configDoApp(Number(appId));
+        const passe = emitirPasse({ action: 'cofre-login', ch: crypto.randomBytes(32).toString('base64url'), app_id: String(cfg.appId) });
+        return { passe, url: urlDoCofre(passe) };
+    }
+
+    /** O que o cofre mostra antes de guardar ou de assinar (rota do cofre, com dono). Não queima o passe. */
+    public async descreverEntrada(passeTexto: unknown): Promise<CofreEntradaPedido> {
+        const passe = lerPasse(passeTexto, ['cofre-registro', 'cofre-login']);
+        const cfg = await this.configDoApp(Number(passe.app_id));
+        const app = { id: cfg.appId, nome: cfg.appNome, origem: cfg.origem };
+        if (passe.action === 'cofre-login') return { acao: 'entrar', app };
+        const u = await this.conta(String(passe.sub));
+        if (u.appId !== cfg.appId) throw new Error('CHALLENGE_INVALIDO');
+        return { acao: 'cadastro', app, conta: { id: u.id, nome: u.nome ?? null, email: u.email } };
+    }
+
+    /** Guarda a chave pública que o cofre do `dono` gerou para a conta do passe. */
+    public async registrarEntrada(dono: string, corpo: Record<string, unknown>): Promise<CofreEntrada & { app: { id: number; nome: string; origem: string } }> {
+        const passe = lerPasse(corpo.passe, 'cofre-registro');
+        const u = await this.conta(String(passe.sub));
+        const cfg = await this.configDoApp(Number(passe.app_id));
+        if (u.appId !== cfg.appId) throw new Error('CHALLENGE_INVALIDO');
+        const id = String(corpo.id ?? '');
+        const chavePublica = String(corpo.chave_publica ?? '');
+        if (!UUID.test(id) || !CHAVE_PUBLICA.test(chavePublica)) throw new Error('ENTRADA_INVALIDA');
+        if (!assinaturaConfere(chavePublica, mensagemDaEntrada('cadastro', cfg.appId, u.id, passe.ch), corpo.assinatura)) throw new Error('ENTRADA_INVALIDA');
+        const ativas = await db
+            .select({ id: cofreEntradas.id })
+            .from(cofreEntradas)
+            .where(and(eq(cofreEntradas.usuarioId, u.id), isNull(cofreEntradas.revogadaEm)));
+        if (ativas.length >= MAX_ENTRADAS_POR_CONTA) throw new Error('PASSKEY_LIMITE');
+        queimarPasse(passe);
+        const nome = String(corpo.nome ?? '').trim().slice(0, 120) || 'Cofre do LoginHUB';
+        try {
+            const rows = await db.insert(cofreEntradas).values({ id, dono, usuarioId: u.id, chavePublica, nome }).returning();
+            const e = rows[0];
+            return { id: e.id, nome: e.nome, criado_em: e.criadoEm, ultimo_uso: e.ultimoUso, app: { id: cfg.appId, nome: cfg.appNome, origem: cfg.origem } };
+        } catch (e: any) {
+            if (e.code === '23505') throw new Error('PASSKEY_JA_CADASTRADA');
+            throw e;
+        }
+    }
+
+    /** Confere a assinatura do cofre e devolve o id da conta. A sessão quem emite é o AuthService. */
+    public async verificarEntrada(appId: unknown, passeTexto: unknown, entradaId: unknown, assinatura: unknown): Promise<string> {
+        const passe = lerPasse(passeTexto, 'cofre-login');
+        if (passe.app_id !== String(Number(appId))) throw new Error('CHALLENGE_INVALIDO');
+        const cfg = await this.configDoApp(Number(appId));
+        if (typeof entradaId !== 'string' || !UUID.test(entradaId)) throw new Error('ENTRADA_INVALIDA');
+        queimarPasse(passe);
+        const rows = await db
+            .select({ entrada: cofreEntradas, appId: usuarios.appId })
+            .from(cofreEntradas)
+            .innerJoin(usuarios, eq(usuarios.id, cofreEntradas.usuarioId))
+            .where(and(eq(cofreEntradas.id, entradaId), isNull(cofreEntradas.revogadaEm)))
+            .limit(1);
+        const linha = rows[0];
+        if (!linha || linha.appId !== cfg.appId) throw new Error('ENTRADA_INVALIDA');
+        const e = linha.entrada;
+        if (!assinaturaConfere(e.chavePublica, mensagemDaEntrada('entrar', cfg.appId, e.usuarioId, passe.ch), assinatura)) {
+            console.warn(`[PasskeyService] entrada pelo cofre recusada (${e.id})`);
+            throw new Error('ENTRADA_INVALIDA');
+        }
+        // Conta bloqueada (ou virou CPF) não entra, mesmo com a chave certa.
+        await this.conta(String(e.usuarioId));
+        await db.update(cofreEntradas).set({ ultimoUso: new Date() }).where(eq(cofreEntradas.id, e.id));
+        return String(e.usuarioId);
+    }
+
+    /** Entradas pelo cofre da própria conta (tela do app). */
+    public async listarEntradas(usuarioId: string): Promise<CofreEntrada[]> {
+        const rows = await db
+            .select()
+            .from(cofreEntradas)
+            .where(and(eq(cofreEntradas.usuarioId, Number(usuarioId)), isNull(cofreEntradas.revogadaEm)))
+            .orderBy(desc(cofreEntradas.criadoEm));
+        return rows.map((e: typeof rows[0]) => ({ id: e.id, nome: e.nome, criado_em: e.criadoEm, ultimo_uso: e.ultimoUso }));
+    }
+
+    /** Tira uma entrada: pela conta do app (`usuarioId`) ou pelo dono do cofre (`dono`, ao apagar o item). */
+    public async revogarEntrada(id: string, quem: { usuarioId?: string; dono?: string }): Promise<void> {
+        if (!UUID.test(String(id)) || (!quem.usuarioId && !quem.dono)) throw new Error('PASSKEY_NAO_ENCONTRADA');
+        const filtro = quem.usuarioId ? eq(cofreEntradas.usuarioId, Number(quem.usuarioId)) : eq(cofreEntradas.dono, String(quem.dono));
+        const rows = await db
+            .update(cofreEntradas)
+            .set({ revogadaEm: new Date() })
+            .where(and(eq(cofreEntradas.id, String(id)), filtro, isNull(cofreEntradas.revogadaEm)))
+            .returning({ id: cofreEntradas.id });
+        if (rows.length === 0) throw new Error('PASSKEY_NAO_ENCONTRADA');
+    }
+
     // -------------------------------------------------------------- gestão
 
     /** O app tem biometria ligada? Público: a tela de login decide se mostra o botão. */
@@ -307,7 +445,13 @@ export class PasskeyService {
             .set({ revogadaEm: new Date() })
             .where(and(eq(usuariosPasskeys.usuarioId, Number(usuarioId)), isNull(usuariosPasskeys.revogadaEm)))
             .returning({ id: usuariosPasskeys.id });
-        return rows.length;
+        // As entradas pelo cofre caem junto: são outra forma de entrar sem senha.
+        const entradas = await db
+            .update(cofreEntradas)
+            .set({ revogadaEm: new Date() })
+            .where(and(eq(cofreEntradas.usuarioId, Number(usuarioId)), isNull(cofreEntradas.revogadaEm)))
+            .returning({ id: cofreEntradas.id });
+        return rows.length + entradas.length;
     }
 }
 

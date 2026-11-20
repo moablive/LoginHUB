@@ -19,6 +19,8 @@ export const router = createRouter({
     // tela de QR só, em vez de oito divergindo.
     // Cofre de senhas de usuário de app com o cofre liberado (db/014): login próprio na página.
     { path: '/meu-cofre', name: 'meu-cofre', component: () => import('@/pages/MeuCofrePage.vue') },
+    // Entrada pelo cofre (db/016): o app manda para cá com o passe; a página cuida da sessão do hub e do cofre.
+    { path: '/cofre/entrada', name: 'cofre-entrada', component: () => import('@/pages/CofreEntradaPage.vue') },
     { path: '/enrolar-2fa', name: 'enrolar-2fa', component: () => import('@/pages/Enroll2FAPage.vue') },
 
     { path: '/', redirect: '/dashboard' },

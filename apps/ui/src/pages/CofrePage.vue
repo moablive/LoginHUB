@@ -333,8 +333,9 @@ function novoItem() {
 }
 function editarItem(item: ItemAberto) {
   verSenhaEdicao.value = false;
-  const { titulo, usuario, senha, url, totp, notas } = item;
-  form.value = { titulo, usuario, senha, url, totp, notas };
+  // `entrada` (chave de entrada pelo cofre, db/016) vai junto: o formulário não mostra, mas salvar não pode perdê-la.
+  const { titulo, usuario, senha, url, totp, notas, entrada } = item;
+  form.value = { titulo, usuario, senha, url, totp, notas, ...(entrada ? { entrada } : {}) };
   editando.value = { id: item.id, cofreId: item.cofre_id };
 }
 function gerarNaEdicao() {
@@ -562,6 +563,7 @@ async function confirmarTrocaSenha() {
               <p class="flex flex-wrap items-center gap-2 text-headline font-semibold">
                 <span class="truncate">{{ item.titulo }}</span>
                 <UiBadge v-if="busca">{{ nomeDoCofre(item.cofre_id) }}</UiBadge>
+                <UiBadge v-if="item.entrada" title="Chave de entrada pelo cofre (db/016): o app entra com ela">entrada pelo cofre</UiBadge>
               </p>
               <a v-if="item.url" :href="/^https?:\/\//i.test(item.url) ? item.url : undefined" target="_blank" rel="noopener noreferrer" class="block truncate text-footnote text-accent">{{ item.url }}</a>
 
