@@ -12,6 +12,7 @@ import UiSpinner from '@/components/ui/UiSpinner.vue';
 import { useCofre, type ItemAberto } from '@/features/cofre/useCofre';
 import { digitalSuportada, ErroDigital } from '@/features/cofre/digital';
 import { entradaSuportada } from '@/features/cofre/entrada';
+import { ErroEntradaPorItem, itensDeLoginDoApp, passeDeCadastroPeloItem } from '@/features/cofre/entradaPorItem';
 
 /**
  * /cofre/entrada?passe=… (19/11/2026, db/016, pedido do dono: "a biometria do
@@ -51,12 +52,17 @@ const MENSAGEM_DIGITAL: Record<ErroDigital['codigo'], string> = {
 };
 function mensagemDe(e: unknown, padrao: string): string {
   if (e instanceof ErroDigital) return MENSAGEM_DIGITAL[e.codigo];
+  if (e instanceof ErroEntradaPorItem) return e.message;
   if (e instanceof Error && e.message === 'CHAVE_ERRADA') return 'Palavra-passe errada.';
   if (axios.isAxiosError(e) && e.response?.data?.message) return String(e.response.data.message);
   return padrao;
 }
 
 const entradas = computed<ItemAberto[]>(() => (pedido.value && aberto.value ? cofre.entradasDoApp(pedido.value.app.id) : []));
+// Sem chave de entrada ainda, mas com o login do app guardado no cofre: o cofre faz o login e guarda a chave.
+const itensDeLogin = computed<ItemAberto[]>(() =>
+  pedido.value?.acao === 'entrar' && aberto.value && !entradas.value.length ? itensDeLoginDoApp(cofre.itens.value, pedido.value.app.origem) : [],
+);
 const jaGuardada = computed(() => !!pedido.value?.conta && entradas.value.some((i) => i.entrada?.usuario_id === pedido.value?.conta?.id));
 
 onMounted(async () => {
@@ -161,6 +167,27 @@ async function entrar(item: ItemAberto) {
   }
 }
 
+/** Entra com o login guardado no item, guarda a chave de entrada e assina o pedido do app. */
+async function entrarComItem(item: ItemAberto) {
+  const p = pedido.value;
+  if (!p) return;
+  erro.value = null;
+  ocupado.value = true;
+  try {
+    const passeDeCadastro = await passeDeCadastroPeloItem(item, p.app.id);
+    const cadastro = await cofreApi.pedidoDeEntrada(passeDeCadastro);
+    if (cadastro.acao !== 'cadastro' || cadastro.app.id !== p.app.id) throw new Error('PASSE_INVALIDO');
+    await cofre.guardarEntrada(passeDeCadastro, cadastro, nomeDoAparelho());
+    const nova = cofre.entradasDoApp(p.app.id).find((i) => i.entrada?.usuario_id === cadastro.conta?.id);
+    if (!nova) throw new Error('SEM_ENTRADA');
+    await entrar(nova);
+  } catch (e) {
+    erro.value = mensagemDe(e, 'Não deu para entrar com o login guardado no cofre.');
+  } finally {
+    ocupado.value = false;
+  }
+}
+
 const titulo = computed(() => {
   const p = pedido.value;
   if (!p) return 'Cofre do LoginHUB';
@@ -221,9 +248,18 @@ const texto = computed(() => {
 
       <!-- aberto, entrar -->
       <template v-else>
-        <p v-if="!entradas.length" class="rounded-celula bg-fill-2 p-3 text-subhead">
-          Nenhuma entrada do {{ pedido.app.nome }} neste cofre. Entre no {{ pedido.app.nome }} com e-mail e senha e guarde a entrada
-          em ☰ Menu → 🔐 Biometria.
+        <template v-if="!entradas.length && itensDeLogin.length">
+          <p class="rounded-celula bg-fill-2 p-3 text-subhead">
+            Este cofre tem o login do {{ pedido.app.nome }}. O cofre entra com ele uma vez, guarda a chave de entrada e, das próximas
+            vezes, só assina.
+          </p>
+          <UiButton v-for="i in itensDeLogin" :key="i.id" tamanho="large" bloco :carregando="ocupado" @click="entrarComItem(i)">
+            <KeyIcon class="h-5 w-5" /> Entrar como {{ i.usuario }}
+          </UiButton>
+        </template>
+        <p v-else-if="!entradas.length" class="rounded-celula bg-fill-2 p-3 text-subhead">
+          Nenhuma entrada do {{ pedido.app.nome }} neste cofre. Guarde no cofre um item com o endereço, o e-mail, a senha e o 2FA do
+          {{ pedido.app.nome }}, ou entre no aplicativo com e-mail e senha e use "Guardar a entrada no cofre do LoginHUB".
         </p>
         <UiButton v-for="i in entradas" :key="i.id" tamanho="large" bloco :carregando="ocupado" @click="entrar(i)">
           Entrar como {{ i.entrada?.conta }}

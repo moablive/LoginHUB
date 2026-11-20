@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import axios from 'axios';
-import { cofreApi } from '@loginhub/api-client';
+import { appApi, cofreApi } from '@loginhub/api-client';
 import type { CofreAparelho, CofreDigital } from '@loginhub/schema';
 import {
   ArrowPathIcon,
@@ -27,6 +27,7 @@ import UiAlert from '@/components/ui/UiAlert.vue';
 import UiBadge from '@/components/ui/UiBadge.vue';
 import UiSpinner from '@/components/ui/UiSpinner.vue';
 import UiEmpty from '@/components/ui/UiEmpty.vue';
+import CofreItemIcone, { type LogoDeApp } from '@/components/CofreItemIcone.vue';
 import { useCofre, type ItemAberto, type ItemCofre } from '@/features/cofre/useCofre';
 import { codigoTotp, gerarSenha, lerTotp, segundosRestantes } from '@/features/cofre/cripto';
 import { digitalSuportada, ErroDigital } from '@/features/cofre/digital';
@@ -80,7 +81,27 @@ const mensagemDe = (e: unknown, padrao: string): string => {
   return padrao;
 };
 
+// Logos dos aplicativos do hub, por host: o item cujo endereço é de um app mostra o logo dele (CofreItemIcone).
+// Só o painel (master) lista os apps; no /meu-cofre a lista fica vazia e vale o favicon do site.
+const logosDosApps = ref<LogoDeApp[]>([]);
+async function carregarLogos() {
+  if (props.modo !== 'painel') return;
+  try {
+    logosDosApps.value = (await appApi.getAll()).flatMap((a) => {
+      if (!a.logo || !a.platform_url) return [];
+      try {
+        return [{ id: a.id, host: new URL(a.platform_url).hostname.toLowerCase(), logo: a.logo }];
+      } catch {
+        return [];
+      }
+    });
+  } catch {
+    /* sem a lista, os itens caem no favicon do site ou nas iniciais */
+  }
+}
+
 onMounted(async () => {
+  void carregarLogos();
   try {
     await cofre.carregar();
   } catch (e) {
@@ -559,6 +580,7 @@ async function confirmarTrocaSenha() {
       <ul v-else class="space-y-2">
         <li v-for="item in visiveis" :key="item.id" class="rounded-celula bg-surface p-4">
           <div class="flex items-start gap-3">
+            <CofreItemIcone :titulo="item.titulo" :url="item.url" :apps="logosDosApps" />
             <div class="min-w-0 flex-1 space-y-1">
               <p class="flex flex-wrap items-center gap-2 text-headline font-semibold">
                 <span class="truncate">{{ item.titulo }}</span>
