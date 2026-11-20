@@ -3,6 +3,30 @@
 @tailwind utilities;
 
 /*
+ * Ligaduras e ícones da Nerd Font (20/11/2026, pedido do dono: "=>" vira a
+ * seta, como no terminal). A JetBrainsMono Nerd Font Mono (a mesma do
+ * OmegaShell, licença OFL em public/fontes/OFL.txt) entra na frente da fonte
+ * do sistema, mas o `unicode-range` a prende a `<`, `=`, `>` e às faixas de
+ * ícone da Nerd Font: o resto do texto continua na fonte do sistema (HIG) e o
+ * navegador só baixa o arquivo na tela que tiver um desses caracteres. Fora
+ * do `font-mono` de propósito: senha e usuário nunca aparecem com ligadura.
+ */
+@font-face {
+  font-family: 'LoginHUB Nerd';
+  src: url('/fontes/JetBrainsMonoNerdFontMono-Regular.woff2') format('woff2');
+  font-weight: 100 500;
+  font-display: swap;
+  unicode-range: U+3C-3E, U+E000-F8FF, U+F0000-FFFFD;
+}
+@font-face {
+  font-family: 'LoginHUB Nerd';
+  src: url('/fontes/JetBrainsMonoNerdFontMono-Bold.woff2') format('woff2');
+  font-weight: 600 900;
+  font-display: swap;
+  unicode-range: U+3C-3E, U+E000-F8FF, U+F0000-FFFFD;
+}
+
+/*
  * Tokens da Apple HIG (skill apple-hig-design, valores oficiais de 25/10/2026).
  *
  * Cor por papel: `--label-*` é texto, `--fundo-*` é fundo, `--separador` é só

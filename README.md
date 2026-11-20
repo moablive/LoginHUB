@@ -1573,6 +1573,15 @@ Pedido do dono em 20/11/2026: criar e organizar cofres como no Proton Pass. Só 
 - **Mover item de cofre**: a folha do item ganhou o campo **Cofre** (quando há mais de um). Trocar o cofre de um item que já existe recifra o item com a chave do cofre novo e regrava (`PUT /cofre/itens/:id` com o `cofre_id` novo). Em "Todos os itens", o item novo nasce no primeiro cofre e o campo deixa escolher outro.
 - Em "Todos os itens" e na busca, cada item mostra o selo com o nome do cofre dele.
 
+#### Ligaduras e ícones da Nerd Font (v1.8.0)
+
+Pedido do dono em 20/11/2026: títulos como `SRV => Jellyfin` devem mostrar a seta (ligadura), como no terminal. O painel inteiro passou a ter a **JetBrainsMono Nerd Font Mono** (a mesma do OmegaShell; `apps/ui/public/fontes/`, licença OFL) na frente da fonte do sistema, presa por `unicode-range` a `<`, `=`, `>` e às faixas de ícone da Nerd Font (`apps/ui/src/index.css`, família `LoginHUB Nerd`, primeira do `font-sans` no `tailwind.config.js`).
+
+- Viram ligadura: `=>`, `<=`, `>=`, `==`, `<=>` e as outras feitas só de `<`, `=`, `>`. As que usam `-`, `!` ou `|` (`->`, `!=`) não, porque esses caracteres ficaram na fonte do sistema para não mudar o texto corrido.
+- Ícones da Nerd Font colados num título ou numa nota aparecem.
+- O resto do texto continua na fonte do sistema (HIG), e o arquivo (1 MB por peso) só é baixado na tela que tiver um desses caracteres.
+- Campos em `font-mono` (usuário, senha, 2FA) ficam fora de propósito: senha nunca aparece com ligadura.
+
 ## 🔑 Sessão master e a master key
 
 O painel do hub tem uma credencial só: a `MASTER_API_KEY`. Ela **não** muda de

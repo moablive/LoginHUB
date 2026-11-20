@@ -40,7 +40,8 @@ export default {
         indigo: canal('--indigo'),
       },
       fontFamily: {
-        sans: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', 'Inter', 'system-ui', 'sans-serif'],
+        // 'LoginHUB Nerd' só cobre `<=>` e os ícones da Nerd Font (unicode-range em src/index.css).
+        sans: ['"LoginHUB Nerd"', '-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', 'Inter', 'system-ui', 'sans-serif'],
         mono: ['ui-monospace', '"SF Mono"', 'Menlo', 'monospace'],
       },
       // Escala iOS Large, números oficiais da HIG. Body é 17, não 14.
