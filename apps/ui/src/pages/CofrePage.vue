@@ -5,6 +5,7 @@ import { appApi, cofreApi } from '@loginhub/api-client';
 import type { CofreAparelho, CofreDigital } from '@loginhub/schema';
 import {
   ArrowPathIcon,
+  ChevronDownIcon,
   ClipboardDocumentIcon,
   CommandLineIcon,
   EyeIcon,
@@ -16,18 +17,23 @@ import {
   PencilSquareIcon,
   PlusIcon,
   ShieldCheckIcon,
+  Squares2X2Icon,
   TrashIcon,
 } from '@heroicons/vue/24/outline';
 import UiNavBar from '@/components/ui/UiNavBar.vue';
 import UiButton from '@/components/ui/UiButton.vue';
 import UiTextField from '@/components/ui/UiTextField.vue';
 import UiSearchField from '@/components/ui/UiSearchField.vue';
+import UiSelect from '@/components/ui/UiSelect.vue';
 import UiSheet from '@/components/ui/UiSheet.vue';
 import UiAlert from '@/components/ui/UiAlert.vue';
 import UiBadge from '@/components/ui/UiBadge.vue';
 import UiSpinner from '@/components/ui/UiSpinner.vue';
 import UiEmpty from '@/components/ui/UiEmpty.vue';
 import CofreItemIcone, { type LogoDeApp } from '@/components/CofreItemIcone.vue';
+import CofreFolha from '@/components/cofre/CofreFolha.vue';
+import CofreLista from '@/components/cofre/CofreLista.vue';
+import { estiloDoCofre, iconeDoCofre, type AparenciaCofre } from '@/features/cofre/aparencia';
 import { useCofre, type ItemAberto, type ItemCofre } from '@/features/cofre/useCofre';
 import { codigoTotp, gerarSenha, lerTotp, segundosRestantes } from '@/features/cofre/cripto';
 import { digitalSuportada, ErroDigital } from '@/features/cofre/digital';
@@ -285,26 +291,34 @@ onBeforeUnmount(() => {
   trancar();
 });
 
-// --- lista
+// --- lista. `cofreAtual` nulo = "Todos os itens" (como o Proton Pass abre).
 const cofreAtual = ref<string | null>(null);
-watch(
-  cofres,
-  (lista) => {
-    if (!lista.find((c) => c.id === cofreAtual.value)) cofreAtual.value = lista[0]?.id ?? null;
-  },
-  { immediate: true },
-);
+watch(cofres, (lista) => {
+  if (cofreAtual.value && !lista.find((c) => c.id === cofreAtual.value)) cofreAtual.value = null;
+});
 const busca = ref('');
 const visiveis = computed(() => {
   const termo = busca.value.trim().toLowerCase();
   return itens.value.filter(
     (i) =>
-      (termo ? true : i.cofre_id === cofreAtual.value) &&
+      (termo || cofreAtual.value === null ? true : i.cofre_id === cofreAtual.value) &&
       (!termo || i.titulo.toLowerCase().includes(termo) || i.usuario.toLowerCase().includes(termo) || i.url.toLowerCase().includes(termo)),
   );
 });
 const nomeDoCofre = (id: string) => cofres.value.find((c) => c.id === id)?.nome ?? '';
-const totalNoCofre = (id: string) => itens.value.filter((i) => i.cofre_id === id).length;
+const contagem = computed(() => {
+  const n: Record<string, number> = {};
+  for (const i of itens.value) n[i.cofre_id] = (n[i.cofre_id] ?? 0) + 1;
+  return n;
+});
+const cofreEscolhido = computed(() => cofres.value.find((c) => c.id === cofreAtual.value) ?? null);
+const quantos = (n: number) => (n === 1 ? '1 item' : `${n} itens`);
+// No celular a lista dos cofres vem numa folha, aberta pelo botão do cofre atual.
+const mostrarCofres = ref(false);
+function escolherCofre(id: string | null) {
+  cofreAtual.value = id;
+  mostrarCofres.value = false;
+}
 
 const revelados = ref(new Set<string>());
 function alternarRevelar(id: string) {
@@ -347,10 +361,12 @@ const verSenhaEdicao = ref(false);
 const totpInvalido = computed(() => !!form.value.totp.trim() && !lerTotp(form.value.totp));
 
 function novoItem() {
-  if (!cofreAtual.value) return;
+  // Em "Todos os itens" o item nasce no primeiro cofre; a folha deixa trocar.
+  const cofreId = cofreAtual.value ?? cofres.value[0]?.id;
+  if (!cofreId) return;
   verSenhaEdicao.value = false;
   form.value = { ...VAZIO };
-  editando.value = { cofreId: cofreAtual.value };
+  editando.value = { cofreId };
 }
 function editarItem(item: ItemAberto) {
   verSenhaEdicao.value = false;
@@ -392,14 +408,31 @@ async function apagarItem() {
   }
 }
 
-// --- cofres (grupos)
-const editandoCofre = ref<{ id?: string; nome: string } | null>(null);
-async function salvarCofre() {
+// --- cofres: criar, editar (nome, cor, ícone) e apagar, pela lista (CofreLista) e pela folha (CofreFolha)
+const editandoCofre = ref<{ id?: string; nome: string; icone?: string; cor?: string } | null>(null);
+function novoCofre() {
+  mostrarCofres.value = false;
+  editandoCofre.value = { nome: '' };
+}
+function editarCofre(id: string) {
+  const c = cofres.value.find((x) => x.id === id);
+  if (!c) return;
+  mostrarCofres.value = false;
+  editandoCofre.value = { id: c.id, nome: c.nome, icone: c.icone, cor: c.cor };
+}
+function pedirApagarCofre(id: string) {
+  mostrarCofres.value = false;
+  cofreParaApagar.value = { id, nome: nomeDoCofre(id) };
+}
+async function salvarCofre(dados: { nome: string } & AparenciaCofre) {
   const e = editandoCofre.value;
-  if (!e || !e.nome.trim()) return;
+  if (!e) return;
   ocupado.value = true;
+  erro.value = null;
   try {
-    await cofre.salvarCofre(e.nome, e.id);
+    const id = await cofre.salvarCofre(dados.nome, e.id, { icone: dados.icone, cor: dados.cor });
+    // Cofre novo já abre escolhido, pronto para receber itens.
+    if (!e.id) cofreAtual.value = id;
     editandoCofre.value = null;
   } catch (err) {
     erro.value = mensagemDe(err, 'Não foi possível salvar o cofre.');
@@ -539,103 +572,111 @@ async function confirmarTrocaSenha() {
     </div>
 
     <!-- ABERTO -->
-    <div v-else class="mt-4 space-y-4">
-      <p v-if="ilegiveis > 0" class="rounded-celula bg-warning/10 p-3 text-subhead text-warning">
-        {{ ilegiveis }} registro(s) não abriram: foram alterados fora do cofre ou estão corrompidos.
-      </p>
-      <p v-if="erro" role="alert" class="rounded-celula bg-danger/10 p-3 text-subhead text-danger">{{ erro }}</p>
+    <div v-else class="mt-4 lg:grid lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start lg:gap-6">
+      <!-- cofres: coluna no computador; no celular, a folha aberta pelo botão do cofre atual -->
+      <aside class="hidden lg:sticky lg:top-4 lg:block">
+        <CofreLista :cofres="cofres" :contagem="contagem" :total="itens.length" :atual="cofreAtual" @escolher="escolherCofre" @novo="novoCofre" @editar="editarCofre" @apagar="pedirApagarCofre" />
+      </aside>
 
-      <!-- cofres -->
-      <div class="flex flex-wrap items-center gap-2">
-        <button
-          v-for="c in cofres"
-          :key="c.id"
-          type="button"
-          class="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-subhead font-medium"
-          :class="c.id === cofreAtual ? 'bg-accent text-white' : 'bg-fill-2 text-label'"
-          @click="cofreAtual = c.id"
-          @dblclick="editandoCofre = { id: c.id, nome: c.nome }"
-        >
-          {{ c.nome }}
-          <span class="text-caption-1 opacity-70">{{ totalNoCofre(c.id) }}</span>
+      <div class="space-y-4">
+        <p v-if="ilegiveis > 0" class="rounded-celula bg-warning/10 p-3 text-subhead text-warning">
+          {{ ilegiveis }} registro(s) não abriram: foram alterados fora do cofre ou estão corrompidos.
+        </p>
+        <p v-if="erro" role="alert" class="rounded-celula bg-danger/10 p-3 text-subhead text-danger">{{ erro }}</p>
+
+        <button type="button" class="flex w-full items-center gap-3 rounded-celula bg-surface p-2 text-left lg:hidden" aria-haspopup="dialog" @click="mostrarCofres = true">
+          <span v-if="cofreEscolhido" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full" :style="estiloDoCofre(cofreEscolhido.cor)" aria-hidden="true">
+            <component :is="iconeDoCofre(cofreEscolhido.icone)" class="h-5 w-5" />
+          </span>
+          <span v-else class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent" aria-hidden="true">
+            <Squares2X2Icon class="h-5 w-5" />
+          </span>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-headline font-semibold">{{ cofreEscolhido?.nome ?? 'Todos os itens' }}</span>
+            <span class="block text-footnote text-label-2">{{ quantos(cofreEscolhido ? (contagem[cofreEscolhido.id] ?? 0) : itens.length) }} · trocar de cofre</span>
+          </span>
+          <ChevronDownIcon class="mr-2 h-5 w-5 shrink-0 text-label-2" />
         </button>
-        <UiButton variante="plain" tamanho="small" @click="editandoCofre = { nome: '' }"><PlusIcon class="h-4 w-4" />Cofre</UiButton>
-        <UiButton
-          v-if="cofreAtual"
-          variante="plain"
-          tamanho="small"
-          @click="editandoCofre = { id: cofreAtual, nome: nomeDoCofre(cofreAtual) }"
-        >
-          <PencilSquareIcon class="h-4 w-4" />Renomear
-        </UiButton>
-      </div>
 
-      <div class="flex items-center gap-2">
-        <UiSearchField v-model="busca" placeholder="Buscar em todos os cofres" />
-        <UiButton tamanho="small" :disabled="!cofreAtual" @click="novoItem"><PlusIcon class="h-4 w-4" />Item</UiButton>
-      </div>
+        <div class="flex items-center gap-2">
+          <UiSearchField v-model="busca" placeholder="Buscar em todos os cofres" />
+          <UiButton tamanho="small" :disabled="cofres.length === 0" @click="novoItem"><PlusIcon class="h-4 w-4" />Item</UiButton>
+        </div>
 
-      <UiEmpty v-if="visiveis.length === 0" :icone="KeyIcon" :titulo="busca ? 'Nada encontrado.' : 'Cofre vazio.'" :texto="busca ? undefined : 'Guarde aqui senhas e códigos 2FA.'" />
+        <UiEmpty
+          v-if="visiveis.length === 0"
+          :icone="KeyIcon"
+          :titulo="busca ? 'Nada encontrado.' : cofres.length === 0 ? 'Nenhum cofre ainda.' : 'Cofre vazio.'"
+          :texto="busca ? undefined : cofres.length === 0 ? 'Crie um cofre pelo + da lista de cofres.' : 'Guarde aqui senhas e códigos 2FA.'"
+        />
 
-      <ul v-else class="space-y-2">
-        <li v-for="item in visiveis" :key="item.id" class="rounded-celula bg-surface p-4">
-          <div class="flex items-start gap-3">
-            <CofreItemIcone :titulo="item.titulo" :url="item.url" :apps="logosDosApps" />
-            <div class="min-w-0 flex-1 space-y-1">
-              <p class="flex flex-wrap items-center gap-2 text-headline font-semibold">
-                <span class="truncate">{{ item.titulo }}</span>
-                <UiBadge v-if="busca">{{ nomeDoCofre(item.cofre_id) }}</UiBadge>
-                <UiBadge v-if="item.entrada" title="Chave de entrada pelo cofre (db/016): o app entra com ela">entrada pelo cofre</UiBadge>
-              </p>
-              <a v-if="item.url" :href="/^https?:\/\//i.test(item.url) ? item.url : undefined" target="_blank" rel="noopener noreferrer" class="block truncate text-footnote text-accent">{{ item.url }}</a>
+        <ul v-else class="space-y-2">
+          <li v-for="item in visiveis" :key="item.id" class="rounded-celula bg-surface p-4">
+            <div class="flex items-start gap-3">
+              <CofreItemIcone :titulo="item.titulo" :url="item.url" :apps="logosDosApps" />
+              <div class="min-w-0 flex-1 space-y-1">
+                <p class="flex flex-wrap items-center gap-2 text-headline font-semibold">
+                  <span class="truncate">{{ item.titulo }}</span>
+                  <UiBadge v-if="busca || cofreAtual === null">{{ nomeDoCofre(item.cofre_id) }}</UiBadge>
+                  <UiBadge v-if="item.entrada" title="Chave de entrada pelo cofre (db/016): o app entra com ela">entrada pelo cofre</UiBadge>
+                </p>
+                <a v-if="item.url" :href="/^https?:\/\//i.test(item.url) ? item.url : undefined" target="_blank" rel="noopener noreferrer" class="block truncate text-footnote text-accent">{{ item.url }}</a>
 
-              <div v-if="item.usuario" class="flex items-center gap-2 text-subhead">
-                <span class="w-16 shrink-0 text-label-2">Usuário</span>
-                <span class="truncate font-mono">{{ item.usuario }}</span>
-                <button type="button" class="text-accent" :title="'Copiar usuário'" @click="copiar(item.usuario, item.id + ':u')">
-                  <ClipboardDocumentIcon class="h-4 w-4" />
-                </button>
-                <span v-if="copiado === item.id + ':u'" class="text-caption-1 text-success">copiado</span>
+                <div v-if="item.usuario" class="flex items-center gap-2 text-subhead">
+                  <span class="w-16 shrink-0 text-label-2">Usuário</span>
+                  <span class="truncate font-mono">{{ item.usuario }}</span>
+                  <button type="button" class="text-accent" :title="'Copiar usuário'" @click="copiar(item.usuario, item.id + ':u')">
+                    <ClipboardDocumentIcon class="h-4 w-4" />
+                  </button>
+                  <span v-if="copiado === item.id + ':u'" class="text-caption-1 text-success">copiado</span>
+                </div>
+
+                <div v-if="item.senha" class="flex items-center gap-2 text-subhead">
+                  <span class="w-16 shrink-0 text-label-2">Senha</span>
+                  <span class="truncate font-mono">{{ revelados.has(item.id) ? item.senha : '••••••••••' }}</span>
+                  <button type="button" class="text-label-2" :title="revelados.has(item.id) ? 'Esconder' : 'Mostrar'" @click="alternarRevelar(item.id)">
+                    <EyeSlashIcon v-if="revelados.has(item.id)" class="h-4 w-4" /><EyeIcon v-else class="h-4 w-4" />
+                  </button>
+                  <button type="button" class="text-accent" title="Copiar senha" @click="copiar(item.senha, item.id + ':s')">
+                    <ClipboardDocumentIcon class="h-4 w-4" />
+                  </button>
+                  <span v-if="copiado === item.id + ':s'" class="text-caption-1 text-success">copiada (some em 30 s)</span>
+                </div>
+
+                <div v-if="codigoDe(item)" class="flex items-center gap-2 text-subhead">
+                  <span class="w-16 shrink-0 text-label-2">2FA</span>
+                  <span class="font-mono text-title-3 tracking-widest text-accent">{{ codigoDe(item)!.codigo }}</span>
+                  <span class="text-caption-1 text-label-2">{{ codigoDe(item)!.resta }}s</span>
+                  <button type="button" class="text-accent" title="Copiar código" @click="copiar(codigoDe(item)!.codigo, item.id + ':t')">
+                    <ClipboardDocumentIcon class="h-4 w-4" />
+                  </button>
+                  <span v-if="copiado === item.id + ':t'" class="text-caption-1 text-success">copiado</span>
+                </div>
+
+                <p v-if="item.notas" class="whitespace-pre-wrap text-footnote text-label-2">{{ item.notas }}</p>
               </div>
-
-              <div v-if="item.senha" class="flex items-center gap-2 text-subhead">
-                <span class="w-16 shrink-0 text-label-2">Senha</span>
-                <span class="truncate font-mono">{{ revelados.has(item.id) ? item.senha : '••••••••••' }}</span>
-                <button type="button" class="text-label-2" :title="revelados.has(item.id) ? 'Esconder' : 'Mostrar'" @click="alternarRevelar(item.id)">
-                  <EyeSlashIcon v-if="revelados.has(item.id)" class="h-4 w-4" /><EyeIcon v-else class="h-4 w-4" />
-                </button>
-                <button type="button" class="text-accent" title="Copiar senha" @click="copiar(item.senha, item.id + ':s')">
-                  <ClipboardDocumentIcon class="h-4 w-4" />
-                </button>
-                <span v-if="copiado === item.id + ':s'" class="text-caption-1 text-success">copiada (some em 30 s)</span>
+              <div class="flex shrink-0 flex-col gap-1">
+                <UiButton variante="plain" icone :aria-label="`Editar ${item.titulo}`" @click="editarItem(item)"><PencilSquareIcon class="h-5 w-5" /></UiButton>
+                <UiButton variante="plain" icone class="!text-danger hover:!bg-danger/10" :aria-label="`Apagar ${item.titulo}`" @click="itemParaApagar = item">
+                  <TrashIcon class="h-5 w-5" />
+                </UiButton>
               </div>
-
-              <div v-if="codigoDe(item)" class="flex items-center gap-2 text-subhead">
-                <span class="w-16 shrink-0 text-label-2">2FA</span>
-                <span class="font-mono text-title-3 tracking-widest text-accent">{{ codigoDe(item)!.codigo }}</span>
-                <span class="text-caption-1 text-label-2">{{ codigoDe(item)!.resta }}s</span>
-                <button type="button" class="text-accent" title="Copiar código" @click="copiar(codigoDe(item)!.codigo, item.id + ':t')">
-                  <ClipboardDocumentIcon class="h-4 w-4" />
-                </button>
-                <span v-if="copiado === item.id + ':t'" class="text-caption-1 text-success">copiado</span>
-              </div>
-
-              <p v-if="item.notas" class="whitespace-pre-wrap text-footnote text-label-2">{{ item.notas }}</p>
             </div>
-            <div class="flex shrink-0 flex-col gap-1">
-              <UiButton variante="plain" icone :aria-label="`Editar ${item.titulo}`" @click="editarItem(item)"><PencilSquareIcon class="h-5 w-5" /></UiButton>
-              <UiButton variante="plain" icone class="!text-danger hover:!bg-danger/10" :aria-label="`Apagar ${item.titulo}`" @click="itemParaApagar = item">
-                <TrashIcon class="h-5 w-5" />
-              </UiButton>
-            </div>
-          </div>
-        </li>
-      </ul>
+          </li>
+        </ul>
+      </div>
     </div>
+
+    <!-- FOLHA: cofres (celular) -->
+    <UiSheet :aberto="mostrarCofres" titulo="Trocar de cofre" largura="sm" @fechar="mostrarCofres = false">
+      <CofreLista :cofres="cofres" :contagem="contagem" :total="itens.length" :atual="cofreAtual" @escolher="escolherCofre" @novo="novoCofre" @editar="editarCofre" @apagar="pedirApagarCofre" />
+    </UiSheet>
 
     <!-- FOLHA: item -->
     <UiSheet :aberto="!!editando" :titulo="editando?.id ? 'Editar item' : 'Novo item'" :subtitulo="editando ? nomeDoCofre(editando.cofreId) : ''" :bloqueado="ocupado" @fechar="editando = null">
       <form v-if="editando" id="form-item" class="space-y-3" @submit.prevent="salvarItem">
+        <!-- Trocar o cofre de um item que já existe move o item: ele é recifrado com a chave do cofre novo. -->
+        <UiSelect v-if="cofres.length > 1" v-model="editando.cofreId" rotulo="Cofre" :opcoes="cofres.map((c) => ({ valor: c.id, rotulo: c.nome }))" />
         <UiTextField v-model="form.titulo" rotulo="Título" placeholder="Ex.: GitHub, Cloudflare, awlsrv sudo" required />
         <UiTextField v-model="form.usuario" rotulo="Usuário / e-mail" autocomplete="off" />
         <div class="space-y-1">
@@ -667,23 +708,8 @@ async function confirmarTrocaSenha() {
       </template>
     </UiSheet>
 
-    <!-- FOLHA: cofre -->
-    <UiSheet :aberto="!!editandoCofre" :titulo="editandoCofre?.id ? 'Renomear cofre' : 'Novo cofre'" largura="sm" :bloqueado="ocupado" @fechar="editandoCofre = null">
-      <form v-if="editandoCofre" id="form-cofre" class="space-y-3" @submit.prevent="salvarCofre">
-        <UiTextField v-model="editandoCofre.nome" rotulo="Nome" placeholder="Ex.: SERVIDORES, Bancos, Sul" required />
-      </form>
-      <template #acoes>
-        <UiButton
-          v-if="editandoCofre?.id"
-          variante="destructive-tinted"
-          @click="(cofreParaApagar = { id: editandoCofre.id, nome: editandoCofre.nome }), (editandoCofre = null)"
-        >
-          Apagar
-        </UiButton>
-        <UiButton variante="gray" @click="editandoCofre = null">Cancelar</UiButton>
-        <UiButton type="submit" form="form-cofre" :carregando="ocupado" :disabled="!editandoCofre?.nome.trim()">Salvar</UiButton>
-      </template>
-    </UiSheet>
+    <!-- FOLHA: cofre (nome, cor e ícone) -->
+    <CofreFolha :cofre="editandoCofre" :ocupado="ocupado" @fechar="editandoCofre = null" @salvar="salvarCofre" />
 
     <!-- FOLHA: trocar palavra-passe -->
     <UiSheet :aberto="trocandoSenha" titulo="Trocar a palavra-passe" largura="sm" :bloqueado="ocupado" @fechar="trocandoSenha = false">

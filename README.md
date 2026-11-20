@@ -1563,6 +1563,16 @@ Pedido do dono em 19/11/2026: a biometria do Escritórios 3D deve morar no **pr�
 - Segundo app: o MoneyAPP (app 3, v0.3.37), com o botão "Entrar pelo cofre do LoginHUB" no login e o card nas Configurações.
 - Teste: `NODE_PATH=cli/hub-pass/node_modules npx tsx scripts/teste-cofre-entrada.ts` (a assinatura da UI confere do jeito do hub; outro app, conta, desafio ou chave não conferem).
 
+#### Cofres no molde do Proton Pass (v1.7.0)
+
+Pedido do dono em 20/11/2026: criar e organizar cofres como no Proton Pass. Só a interface mudou; o servidor continua guardando o mesmo texto cifrado.
+
+- **Lista de cofres** (`apps/ui/src/components/cofre/CofreLista.vue`): "Todos os itens" em cima (é como o cofre abre) e um cofre por linha, com ícone, cor e total de itens. O **+** cria um cofre; o menu **⋮** de cada um edita ou apaga. No computador é a coluna da esquerda; no celular abre numa folha, pelo botão do cofre atual.
+- **Novo cofre / Editar cofre** (`CofreFolha.vue`): nome, cor (10) e ícone (26). As tabelas moram em `apps/ui/src/features/cofre/aparencia.ts`.
+- **Onde ficam o ícone e a cor**: como identificadores (`icone`, `cor`) dentro dos dados cifrados do cofre, ao lado do nome e da chave. O servidor não fica sabendo; cofre antigo (ou criado pelo `hub-pass vault create`) não tem os campos e aparece com o padrão (carteira roxa). Identificador desconhecido também cai no padrão.
+- **Mover item de cofre**: a folha do item ganhou o campo **Cofre** (quando há mais de um). Trocar o cofre de um item que já existe recifra o item com a chave do cofre novo e regrava (`PUT /cofre/itens/:id` com o `cofre_id` novo). Em "Todos os itens", o item novo nasce no primeiro cofre e o campo deixa escolher outro.
+- Em "Todos os itens" e na busca, cada item mostra o selo com o nome do cofre dele.
+
 ## 🔑 Sessão master e a master key
 
 O painel do hub tem uma credencial só: a `MASTER_API_KEY`. Ela **não** muda de

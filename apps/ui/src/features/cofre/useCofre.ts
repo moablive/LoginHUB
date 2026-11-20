@@ -2,6 +2,7 @@ import { computed, ref, shallowRef } from 'vue';
 import { cofreApi } from '@loginhub/api-client';
 import type { CofreDigital, CofreEntradaPedido, CofreEstado } from '@loginhub/schema';
 import { randomBytes } from '@noble/ciphers/utils.js';
+import type { AparenciaCofre } from './aparencia';
 import { criarDigital, pedirSegredo } from './digital';
 import { assinarEntrada, desafioDoPasse, mensagemDaEntrada, novaChaveDeEntrada, type EntradaDoItem } from './entrada';
 import {
@@ -35,6 +36,9 @@ export interface CofreAberto {
   id: string;
   nome: string;
   chave: Uint8Array;
+  /** Identificadores de `aparencia.ts`; cofre antigo não tem e cai no padrão. */
+  icone?: string;
+  cor?: string;
 }
 
 export interface ItemCofre {
@@ -88,8 +92,8 @@ function abrirTudo(): void {
   const abertos: CofreAberto[] = [];
   for (const c of estado.cofres) {
     try {
-      const d = decifrarJson<{ nome: string; chave: string }>(conta, c.dados, adCofre(dono(), c.id));
-      abertos.push({ id: c.id, nome: d.nome, chave: deB64(d.chave) });
+      const d = decifrarJson<{ nome: string; chave: string; icone?: string; cor?: string }>(conta, c.dados, adCofre(dono(), c.id));
+      abertos.push({ id: c.id, nome: d.nome, chave: deB64(d.chave), icone: d.icone, cor: d.cor });
     } catch {
       falhas++;
     }
@@ -240,15 +244,23 @@ function trancar(): void {
   ilegiveis.value = 0;
 }
 
-async function salvarCofre(nome: string, id?: string): Promise<void> {
+/**
+ * Cria (sem `id`) ou regrava um cofre e devolve o id dele. Ícone e cor vão
+ * cifrados junto do nome; sem `aparencia`, o cofre fica com a que já tinha.
+ */
+async function salvarCofre(nome: string, id?: string, aparencia?: Partial<AparenciaCofre>): Promise<string> {
   const conta = chaveConta.value;
   if (!conta) throw new Error('TRANCADO');
   const existente = id ? cofres.value.find((c) => c.id === id) : undefined;
   const cofreId = existente?.id ?? novoId();
   const chave = existente?.chave ?? novaChave();
-  await cofreApi.salvarCofre(cofreId, cifrarJson(conta, { nome: nome.trim(), chave: b64(chave) }, adCofre(dono(), cofreId)));
+  const icone = aparencia?.icone ?? existente?.icone;
+  const cor = aparencia?.cor ?? existente?.cor;
+  const dados = { nome: nome.trim(), chave: b64(chave), ...(icone ? { icone } : {}), ...(cor ? { cor } : {}) };
+  await cofreApi.salvarCofre(cofreId, cifrarJson(conta, dados, adCofre(dono(), cofreId)));
   await carregar();
   abrirTudo();
+  return cofreId;
 }
 
 async function apagarCofre(id: string): Promise<void> {
