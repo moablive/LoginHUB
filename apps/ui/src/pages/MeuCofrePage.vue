@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import axios from 'axios';
-import { EnvelopeIcon, LockClosedIcon } from '@heroicons/vue/24/outline';
+import { EnvelopeIcon } from '@heroicons/vue/24/outline';
 import { authApi, cofreApi } from '@loginhub/api-client';
 import AuthShell from '@/components/AuthShell.vue';
 import UiButton from '@/components/ui/UiButton.vue';
 import UiTextField from '@/components/ui/UiTextField.vue';
+import UiSegmented from '@/components/ui/UiSegmented.vue';
 import TwoFactorChallenge from '@/features/twoFactor/TwoFactorChallenge.vue';
 import CofrePage from './CofrePage.vue';
 
@@ -14,7 +16,21 @@ import CofrePage from './CofrePage.vue';
  * app com o cofre liberado (um DJ da Astral Wave, por exemplo). Entra com a
  * MESMA conta do app (e-mail + senha + Google Authenticator); depois o cofre
  * pede a palavra-passe dele, que só ele sabe. Cada pessoa tem o seu.
+ *
+ * 21/11/2026: é a aba "Meu cofre" da tela de login (mesmo controle segmentado
+ * do /login), para quem entra pelo endereço do hub achar o próprio cofre.
  */
+const router = useRouter();
+const aba = ref<'admin' | 'cofre' | 'master'>('cofre');
+const ABAS = [
+  { valor: 'admin' as const, rotulo: 'Admin' },
+  { valor: 'cofre' as const, rotulo: 'Meu cofre' },
+  { valor: 'master' as const, rotulo: 'Master Key' },
+];
+function trocarAba(v: 'admin' | 'cofre' | 'master') {
+  if (v === 'cofre') return;
+  void router.push(v === 'master' ? { path: '/login', query: { modo: 'master' } } : '/login');
+}
 const etapa = ref<'carregando' | 'login' | 'desafio' | 'cofre'>('carregando');
 const email = ref('');
 const senha = ref('');
@@ -103,10 +119,10 @@ function sair() {
 
   <AuthShell
     v-else-if="etapa === 'login'"
-    titulo="Meu cofre"
-    :icone="LockClosedIcon"
+    titulo="LoginHub"
     texto="Entre com a conta do seu aplicativo. Depois, o cofre pede a sua palavra-passe — só você a sabe."
   >
+    <UiSegmented v-model="aba" :opcoes="ABAS" rotulo="Tipo de acesso" class="mb-5" @update:model-value="trocarAba" />
     <form class="space-y-4" @submit.prevent="entrar()">
       <UiTextField v-model="email" rotulo="E-mail" type="email" inputmode="email" autocomplete="username" required>
         <template #icone><EnvelopeIcon /></template>

@@ -28,11 +28,21 @@ const volta = (): string | null => {
   const v = typeof route.query.volta === 'string' ? route.query.volta : '';
   return v.startsWith('/cofre/entrada?') ? v : null;
 };
-const modo = ref<'admin' | 'master'>('admin');
+const modo = ref<'admin' | 'cofre' | 'master'>(route.query.modo === 'master' ? 'master' : 'admin');
+/**
+ * "Meu cofre" (21/11/2026, pedido do dono): qualquer pessoa com conta num app
+ * de cofre liberado entra por aqui com a PRÓPRIA conta e a própria palavra-passe.
+ * A tela é a /meu-cofre — a aba só leva até ela, sem misturar com o login do painel.
+ */
 const MODOS = [
-  { valor: 'admin' as const, rotulo: 'Administrador' },
+  { valor: 'admin' as const, rotulo: 'Admin' },
+  { valor: 'cofre' as const, rotulo: 'Meu cofre' },
   { valor: 'master' as const, rotulo: 'Master Key' },
 ];
+function trocarModo(v: 'admin' | 'cofre' | 'master') {
+  erro.value = null;
+  if (v === 'cofre') void router.push('/meu-cofre');
+}
 
 const email = ref('');
 const senha = ref('');
@@ -114,7 +124,7 @@ function cancelarDesafio() {
     titulo="LoginHub"
     :texto="modo === 'admin' ? 'Entre com a conta de administrador da sua organização.' : 'Acesso total com a Master Key.'"
   >
-    <UiSegmented v-model="modo" :opcoes="MODOS" rotulo="Tipo de acesso" class="mb-5" @update:model-value="erro = null" />
+    <UiSegmented v-model="modo" :opcoes="MODOS" rotulo="Tipo de acesso" class="mb-5" @update:model-value="trocarModo" />
 
     <form v-if="modo === 'admin'" class="space-y-4" @submit.prevent="entrarAdmin">
       <UiTextField v-model="email" rotulo="E-mail" type="email" placeholder="voce@empresa.com" autocomplete="username" inputmode="email" required>

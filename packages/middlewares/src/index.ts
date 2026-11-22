@@ -277,7 +277,7 @@ export const exigirOrganizacaoNoEscopo = (param = 'categoriaId'): RequestHandler
  *   sessão master (Master Key ou `x-api-key`) → dono 'master';
  *   sessão de usuário do hub (mesmas checagens do `authMiddleware`: app ativo,
  *        piso de sessão, vaga de aparelho do CPF) cujo app tem
- *        `cofre_liberado` → dono 'u:<id>'.
+ *        `cofre_liberado` → dono `p:<sha256 do e-mail>` (a pessoa, não a conta do app).
  *
  * O cofre é cifrado no navegador/CLI: o dono só decide QUAIS textos cifrados
  * a pessoa recebe e grava — abrir, só com a palavra-passe ou a chave do aparelho.
@@ -291,6 +291,10 @@ export interface DonoDoCofre {
 export const donoDoCofre = (req: unknown): DonoDoCofre | undefined => (req as { cofre?: DonoDoCofre }).cofre;
 
 const UUID_COFRE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Dono do cofre de uma pessoa: o mesmo para todas as contas dela (mesmo e-mail) nos apps. */
+export const donoDaPessoa = (email: string): string =>
+    `p:${createHash('sha256').update(email.trim().toLowerCase()).digest('base64url')}`;
 
 export const cofreAuth: RequestHandler = async (req, res, next) => {
     const negar = () => res.status(401).json({ error: 'COFRE_SEM_CREDENCIAL', message: 'Entre de novo para usar o cofre.' });
@@ -350,17 +354,21 @@ export const cofreAuth: RequestHandler = async (req, res, next) => {
     }
 
     // 3. Usuário de app liberado: as checagens da sessão são as do authMiddleware.
+    //    Dono = a PESSOA, não a conta do app (21/11/2026, pedido do dono): 'p:' + sha256 do e-mail
+    //    normalizado. Quem tem conta em vários apps liberados abre o MESMO cofre por qualquer um deles.
+    //    O e-mail vem do banco (não do JWT), e o hash não expõe o e-mail no dump do cofre.
     return authMiddleware(req, res, async () => {
         try {
-            const app = await db
-                .select({ liberado: aplicativos.cofreLiberado })
-                .from(aplicativos)
-                .where(eq(aplicativos.id, Number(decoded!.app_id)))
+            const linha = await db
+                .select({ liberado: aplicativos.cofreLiberado, email: usuarios.email })
+                .from(usuarios)
+                .innerJoin(aplicativos, eq(aplicativos.id, usuarios.appId))
+                .where(and(eq(usuarios.id, Number(decoded!.sub)), eq(aplicativos.id, Number(decoded!.app_id))))
                 .limit(1);
-            if (!app[0]?.liberado) {
+            if (!linha[0]?.liberado) {
                 return res.status(403).json({ error: 'COFRE_NAO_LIBERADO', message: 'O cofre não está liberado para o seu aplicativo. Fale com o administrador.' });
             }
-            (req as any).cofre = { dono: `u:${Number(decoded!.sub)}` } satisfies DonoDoCofre;
+            (req as any).cofre = { dono: donoDaPessoa(linha[0].email) } satisfies DonoDoCofre;
             return next();
         } catch (err) {
             console.error('[cofreAuth] app:', (err as Error).message);

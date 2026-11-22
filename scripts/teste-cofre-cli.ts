@@ -2,6 +2,7 @@
 // Rodar (no servidor, com a API em localhost:3005):
 //   LOGINHUB_MASTER_KEY=… npx tsx scripts/teste-cofre-cli.ts   (depois de cli/hub-pass/build.sh)
 import { execFileSync, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -36,6 +37,8 @@ const esperarProximoCodigo = () => new Promise((r) => setTimeout(r, (30 - (Math.
   const palavra = 'teste-cavalo-azul-pavilhao';
   const dir = mkdtempSync(join(tmpdir(), 'hub-pass-'));
   let usuarioId = '';
+  let donoEsperado = '';
+  let app2Id = '';
   const liberadoAntes = painel.cofreLiberado === true;
 
   try {
@@ -49,7 +52,8 @@ const esperarProximoCodigo = () => new Promise((r) => setTimeout(r, (30 - (Math.
     ok('cofre fechado enquanto o app não libera', (await http('GET', '/cofre', undefined, B)).status === 403);
     await http('PUT', `/admin/apps/${painel.id}`, { nome: painel.nome, email: painel.email, documento: painel.documento, cofre_liberado: true }, M);
     const est = (await http('GET', '/cofre', undefined, B)).dados;
-    ok('app liberado: o dono é u:<id>', est.dono === `u:${usuarioId}` && est.conta === null, est.dono);
+    donoEsperado = `p:${createHash('sha256').update(email.trim().toLowerCase()).digest('base64url')}`;
+    ok('app liberado: o dono é a pessoa (p:<sha256 do e-mail>)', est.dono === donoEsperado && est.conta === null, est.dono);
 
     // cria o cofre como a tela faria
     const kdf = c.novosParametrosKdf();
@@ -105,13 +109,26 @@ const esperarProximoCodigo = () => new Promise((r) => setTimeout(r, (30 - (Math.
     const aps2 = (await http('GET', '/cofre/aparelhos', undefined, B)).dados;
     ok('logout revoga no servidor', aps2.every((a: any) => a.revogado));
     ok('credencial revogada é recusada', (await http('GET', '/cofre', undefined, { 'x-cofre-aparelho': `${aps2[0].id}.xxxxxxxxxxxxxxxxxxxxxxxx` })).status === 401);
+
+    // Cofre por PESSOA (21/11/2026): a mesma pessoa, com conta em OUTRO app liberado, abre o MESMO cofre.
+    const app2 = (await http('POST', '/admin/apps', { nome: `Teste Cofre ${Date.now()}`, email: `app-${Date.now()}@teste.local`, documento: '00000000000' }, M)).dados;
+    app2Id = String(app2.appId ?? app2.id ?? '');
+    ok('app de teste criado', !!app2Id, JSON.stringify(app2).slice(0, 120));
+    await http('PUT', `/admin/apps/${app2Id}`, { nome: app2.nome, email: app2.email, documento: '00000000000', cofre_liberado: true }, M);
+    await http('POST', '/admin/users', { app_id: app2Id, nome: 'Teste Cofre 2', email, password: senha, role: 'admin' }, M);
+    const setup2 = (await http('POST', '/auth/login', { email, password: senha, app_id: app2Id })).dados.setupToken;
+    const segredo2 = (await http('POST', '/auth/2fa/setup', {}, { Authorization: `Bearer ${setup2}` })).dados.secret;
+    const sessao2 = (await http('POST', '/auth/2fa/verify-setup', { codigo: totpDe(segredo2) }, { Authorization: `Bearer ${setup2}` })).dados.token;
+    const est2 = (await http('GET', '/cofre', undefined, { Authorization: `Bearer ${sessao2}` })).dados;
+    ok('outro app, mesma pessoa: o mesmo cofre', est2.dono === donoEsperado && est2.conta !== null && est2.cofres?.length === 2, `${est2.dono} cofres=${est2.cofres?.length}`);
     sessao = '';
   } finally {
     if (usuarioId) {
-      execFileSync('docker', ['exec', 'server_db_postgres', 'psql', '-U', 'admin_root', '-d', 'login_hub', '-qc', `delete from cofre_contas where dono = 'u:${Number(usuarioId)}'`]);
+      if (donoEsperado) execFileSync('docker', ['exec', 'server_db_postgres', 'psql', '-U', 'admin_root', '-d', 'login_hub', '-qc', `delete from cofre_contas where dono = '${donoEsperado.replace(/'/g, '')}'`]);
       const d = await http('DELETE', `/admin/users/${usuarioId}`, undefined, M);
       console.log(`limpeza: cofre e conta de teste apagados (${d.status})`);
     }
+    if (app2Id) console.log(`limpeza: app de teste apagado (${(await http('DELETE', `/admin/apps/${app2Id}`, undefined, M)).status})`);
     await http('PUT', `/admin/apps/${painel.id}`, { nome: painel.nome, email: painel.email, documento: painel.documento, cofre_liberado: liberadoAntes }, M);
     rmSync(dir, { recursive: true, force: true });
   }
