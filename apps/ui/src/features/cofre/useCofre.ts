@@ -1,9 +1,10 @@
 import { computed, ref, shallowRef } from 'vue';
 import { cofreApi } from '@loginhub/api-client';
-import type { CofreDigital, CofreEntradaPedido, CofreEstado } from '@loginhub/schema';
+import type { CofreAparelho, CofreAparelhoAcesso, CofreAparelhoPedido, CofreDigital, CofreEntradaPedido, CofreEstado } from '@loginhub/schema';
 import { randomBytes } from '@noble/ciphers/utils.js';
 import type { AparenciaCofre } from './aparencia';
 import { criarDigital, pedirSegredo } from './digital';
+import { adSelo, codigoDoPedido, limparCodigo, provaDoAparelho, selar } from './pareamento';
 import { assinarEntrada, desafioDoPasse, mensagemDaEntrada, novaChaveDeEntrada, type EntradaDoItem } from './entrada';
 import {
   adCofre,
@@ -293,6 +294,52 @@ async function apagarItem(id: string): Promise<void> {
   abrirTudo();
 }
 
+// ------------------------------------------------ máquinas do CLI aprovadas pelo navegador (db/017)
+
+/**
+ * Busca o pedido que o `hub-pass login` deixou e CONFERE o código com a chave
+ * pública que o servidor entregou: se ela tivesse sido trocada no caminho, o
+ * código refeito aqui não bateria com o que a máquina mostrou (`PEDIDO_ADULTERADO`).
+ */
+async function buscarPedidoDeAparelho(codigoDigitado: string): Promise<CofreAparelhoPedido> {
+  const codigo = limparCodigo(codigoDigitado);
+  const pedido = await cofreApi.pedidoDeAparelho(codigo);
+  if (codigoDoPedido(pedido.id, pedido.chave_publica) !== codigo) throw new Error('PEDIDO_ADULTERADO');
+  return pedido;
+}
+
+/** O selo da máquina: a chave da conta (`cofreIds` nulo) ou só as chaves (e os nomes) dos cofres escolhidos. */
+async function acessoPara(aparelhoId: string, chavePublica: string, cofreIds: string[] | null): Promise<CofreAparelhoAcesso> {
+  const conta = chaveConta.value;
+  if (!conta) throw new Error('TRANCADO');
+  const ad = adSelo(dono(), aparelhoId);
+  if (cofreIds === null) return { selo: await selar(chavePublica, { tipo: 'conta', chave: b64(conta) }, ad), cofres: null };
+  const escolhidos = cofreIds.map((id) => {
+    const c = cofres.value.find((x) => x.id === id);
+    if (!c) throw new Error('COFRE_NAO_ENCONTRADO');
+    return { id: c.id, nome: c.nome, chave: b64(c.chave) };
+  });
+  return { selo: await selar(chavePublica, { tipo: 'cofres', cofres: escolhidos }, ad), cofres: escolhidos.map((c) => c.id) };
+}
+
+/** Aprova a máquina do pedido para os cofres escolhidos (`null` = a conta inteira). Só com o cofre aberto. */
+async function aprovarAparelho(pedido: CofreAparelhoPedido, cofreIds: string[] | null): Promise<void> {
+  const conta = chaveConta.value;
+  if (!conta) throw new Error('TRANCADO');
+  const acesso = await acessoPara(pedido.id, pedido.chave_publica, cofreIds);
+  await cofreApi.aprovarPedido(pedido.id, { ...acesso, prova: provaDoAparelho(conta, dono(), pedido.id, pedido.chave_publica) });
+}
+
+/** Muda os cofres de uma máquina aprovada pelo navegador (refaz o selo com os nomes e as chaves de agora). */
+async function alterarAcessoDoAparelho(aparelho: CofreAparelho, cofreIds: string[] | null): Promise<void> {
+  const conta = chaveConta.value;
+  if (!conta) throw new Error('TRANCADO');
+  if (!aparelho.chave_publica) throw new Error('APARELHO_ANTIGO');
+  // A chave pública vem da lista do servidor: só vale se a prova feita na aprovação conferir (`APARELHO_ADULTERADO`).
+  if (aparelho.prova !== provaDoAparelho(conta, dono(), aparelho.id, aparelho.chave_publica)) throw new Error('APARELHO_ADULTERADO');
+  await cofreApi.alterarAcesso(aparelho.id, await acessoPara(aparelho.id, aparelho.chave_publica, cofreIds));
+}
+
 // ------------------------------------------------ entrada pelo cofre (db/016)
 
 /**
@@ -365,6 +412,9 @@ export function useCofre() {
     apagarCofre,
     salvarItem,
     apagarItem,
+    buscarPedidoDeAparelho,
+    aprovarAparelho,
+    alterarAcessoDoAparelho,
     guardarEntrada,
     entradasDoApp,
     assinarParaEntrar,

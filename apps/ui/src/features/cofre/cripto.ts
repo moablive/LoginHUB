@@ -45,7 +45,7 @@ export function deB64(s: string): Uint8Array {
 
 const ALFABETO32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
-function paraBase32(bytes: Uint8Array): string {
+export function paraBase32(bytes: Uint8Array): string {
   let bits = 0;
   let valor = 0;
   let out = '';

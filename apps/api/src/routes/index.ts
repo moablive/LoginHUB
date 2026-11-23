@@ -223,6 +223,8 @@ mainRouter.use('/admin', adminRouter);
 // liberado e as máquinas aprovadas do CLI hub-pass. O `cofreAuth` decide o dono;
 // tudo o que entra e sai aqui é texto cifrado no navegador/CLI.
 const cofreRouter = Router();
+// db/017: o pedido de uma máquina nova é público (ela ainda não tem credencial) e não abre nada sozinho.
+cofreRouter.post('/aparelhos/pedidos', rateLimitPasskey as any, CofreController.pedirAparelho as any);
 cofreRouter.use(cofreAuth as any);
 cofreRouter.get('/', CofreController.estado as any);
 cofreRouter.post('/conta', CofreController.criarConta as any);
@@ -234,6 +236,10 @@ cofreRouter.delete('/itens/:id', CofreController.apagarItem as any);
 cofreRouter.get('/aparelhos', CofreController.listarAparelhos as any);
 cofreRouter.post('/aparelhos', CofreController.registrarAparelho as any);
 cofreRouter.delete('/aparelhos/:id', CofreController.revogarAparelho as any);
+// Aprovar a máquina pelo navegador, com o cofre aberto (digital ou palavra-passe), e escolher os cofres dela.
+cofreRouter.get('/aparelhos/pedidos/:codigo', CofreController.pedidoDeAparelho as any);
+cofreRouter.post('/aparelhos/pedidos/:id/aprovar', CofreController.aprovarPedido as any);
+cofreRouter.put('/aparelhos/:id/acesso', CofreController.alterarAcesso as any);
 // Digital que abre o cofre (db/015): passkey com PRF; o segredo dela nunca vem para cá.
 cofreRouter.get('/digitais', CofreController.listarDigitais as any);
 cofreRouter.post('/digitais', CofreController.registrarDigital as any);

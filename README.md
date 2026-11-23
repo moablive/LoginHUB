@@ -1582,6 +1582,34 @@ Pedido do dono em 20/11/2026: títulos como `SRV => Jellyfin` devem mostrar a se
 - O resto do texto continua na fonte do sistema (HIG), e o arquivo (1 MB por peso) só é baixado na tela que tiver um desses caracteres.
 - Campos em `font-mono` (usuário, senha, 2FA) ficam fora de propósito: senha nunca aparece com ligadura.
 
+#### Máquina do CLI aprovada pelo navegador, por cofre (v1.9.0)
+
+Pedido do dono em 23/11/2026: os outros servidores (bf, PDV, Mac) usam o cofre sem ninguém digitar a Master Key nem a palavra-passe neles; quem aprova é o cofre aberto no navegador (com a digital, se ela estiver cadastrada), e cada máquina só recebe os cofres escolhidos.
+
+**Como se usa**
+
+1. Na máquina: `hub-pass login`. Ela mostra um **código de 12 letras** (`XXXX-XXXX-XXXX`) e um link, e fica esperando (10 minutos).
+2. No navegador: abrir o cofre (`/cofre`, ou `/meu-cofre` para conta de app; o link `?aprovar=<código>` já leva o código), tocar no ícone do terminal, digitar o código, marcar os cofres da máquina (ou "Todos os cofres") e **Aprovar a máquina**.
+3. A máquina termina o `login` sozinha e passa a ler o cofre. O botão **Cofres** da lista muda o alcance depois; **Revogar** desliga na hora.
+
+**Como funciona**
+
+| Peça | O que faz |
+|---|---|
+| `db/017_cofre_aparelho_pedidos.sql` | `cofre_aparelho_pedidos` (pedido sem dono, 10 min: chave pública X25519, hash do token, código) e, em `cofre_aparelhos`, `chave_publica`, `selo` e `cofres` (ids liberados; `NULL` = a conta inteira) |
+| `apps/ui/src/features/cofre/pareamento.ts` | A mesma cripto para a tela e para o CLI: par X25519 (WebCrypto), código do pedido e o **selo** — X25519 efêmero → HKDF-SHA256 → XChaCha20-Poly1305, com dados associados (dono + id da máquina), formato `x1.<pública efêmera>.<nonce>.<cifra>` |
+| Código | 12 letras base32 (60 bits) do sha256 do id do pedido e da chave pública. O hub usa para achar o pedido; a tela refaz a conta com a chave que recebeu. Se o servidor trocasse a chave pública no caminho, o código não bateria e a tela recusa (`PEDIDO_ADULTERADO`) |
+| Selo | O que a máquina pode abrir, cifrado **para a chave pública dela**: a chave da conta (todos os cofres) ou só as chaves e os nomes dos cofres escolhidos. A privada nunca sai da máquina (`~/.config/hub-pass/sessao.json`, 600); o token de acesso também é sorteado nela, e o hub só guarda o hash |
+| `components/cofre/CofreAparelhos.vue` | A folha "Aparelhos do CLI": código, escolha dos cofres, aprovar, **Cofres** (mudar o alcance) e revogar |
+| Rotas | `POST /cofre/aparelhos/pedidos` (**pública**, com rate limit: a máquina ainda não tem credencial; o pedido sozinho não abre nada), `GET /cofre/aparelhos/pedidos/:codigo`, `POST /cofre/aparelhos/pedidos/:id/aprovar`, `PUT /cofre/aparelhos/:id/acesso` (as três só com sessão de pessoa: uma máquina não aprova nem muda alcance) |
+
+- **Alcance por cofre no servidor também**: para máquina com `cofres` preenchido, o `GET /cofre` só entrega os cofres e itens liberados, sem os embrulhos da conta (palavra-passe, kit) nem as digitais; gravar ou apagar item fora deles dá 404, e criar, alterar ou apagar cofre dá 403. A máquina não leria os outros de qualquer jeito (não tem as chaves): o filtro evita entregar até o texto cifrado.
+- **Prova da chave pública**: na aprovação a tela grava também um HMAC da chave pública da máquina, feito com uma chave derivada da chave da conta (`cofre_aparelhos.prova`). Ao mudar o alcance, a tela só cifra de novo para uma chave pública cuja prova confere (`APARELHO_ADULTERADO` se não): o servidor não consegue trocar a chave de uma máquina já aprovada.
+- **Máquina não troca a palavra-passe**: `PUT /cofre/conta` passou a recusar credencial de máquina (403).
+- **Limite conhecido**: no alcance por cofre o nome do cofre vai dentro do selo. Cofre renomeado ou criado depois só chega à máquina quando se salva de novo em **Cofres**.
+- **Forma antiga**: `hub-pass login --email <e-mail ou "master">` continua valendo (senha, 2FA e palavra-passe digitados na máquina; sempre a conta inteira). Máquinas aprovadas assim seguem funcionando e aparecem sem o botão **Cofres**.
+- Testes: `NODE_PATH=cli/hub-pass/node_modules npx tsx scripts/teste-cofre-pareamento.ts` (selo e código, sem servidor) e o ponta a ponta `scripts/teste-cofre-cli.ts`, que agora faz o papel da tela na aprovação e confere o alcance.
+
 ## 🔑 Sessão master e a master key
 
 O painel do hub tem uma credencial só: a `MASTER_API_KEY`. Ela **não** muda de

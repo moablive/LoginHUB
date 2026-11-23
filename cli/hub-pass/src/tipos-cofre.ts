@@ -14,7 +14,7 @@ export interface CofreKdf {
 export interface CofreEstado {
   dono: string;
   conta: { kdf: CofreKdf; chave_por_senha: string; chave_por_kit: string } | null;
-  aparelho?: { id: string; chave_por_aparelho: string };
+  aparelho?: { id: string; chave_por_aparelho?: string; selo?: string; cofres?: string[] | null };
   cofres: Array<{ id: string; dados: string; atualizado_em: string | Date }>;
   itens: Array<{ id: string; cofre_id: string; dados: string; atualizado_em: string | Date }>;
 }

@@ -1,17 +1,26 @@
 /**
  * hub-pass — CLI do cofre de senhas do LoginHUB (19/11/2026, db/013 e db/014).
  *
- * No molde do `pass-cli` do Proton Pass: `login` aprova ESTA máquina uma vez
- * (e-mail + senha + código do 2FA + palavra-passe do cofre) e daí em diante os
- * comandos funcionam sem perguntar nada — é o que os scripts dos servidores
- * precisam. A máquina guarda em ~/.config/hub-pass/sessao.json (600) o token de
- * acesso e a CHAVE DO APARELHO; o servidor guarda só a chave da conta
- * embrulhada por ela. Revogar o aparelho no navegador desliga a máquina na hora.
+ * No molde do `pass-cli` do Proton Pass: `login` aprova ESTA máquina uma vez e
+ * daí em diante os comandos funcionam sem perguntar nada — é o que os scripts
+ * dos servidores precisam. Revogar o aparelho no navegador desliga a máquina na hora.
+ *
+ * Duas formas de aprovar:
+ *   `hub-pass login` (23/11/2026, db/017): a máquina sorteia um par X25519 e um
+ *       token, mostra um CÓDIGO e espera; a pessoa digita o código no cofre
+ *       aberto no navegador (digital ou palavra-passe) e escolhe os cofres.
+ *       Nada é digitado aqui. A sessão guarda a chave PRIVADA; o servidor guarda
+ *       o selo cifrado para a pública (a conta inteira ou só os cofres escolhidos).
+ *   `hub-pass login --email …` (a primeira, db/014): e-mail + senha + código do
+ *       2FA + palavra-passe do cofre digitados na máquina. A sessão guarda a chave
+ *       simétrica do aparelho; o servidor, a chave da conta embrulhada por ela.
+ * Nos dois casos a sessão mora em ~/.config/hub-pass/sessao.json (600).
  *
  * A criptografia é a MESMA da tela (apps/ui/src/features/cofre/cripto.ts):
  * o servidor nunca vê palavra-passe, chave nem senha guardada.
  */
 import { spawn } from 'node:child_process';
+import { createHash, randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, hostname, userInfo } from 'node:os';
 import { join } from 'node:path';
@@ -35,9 +44,10 @@ import {
   novoId,
   segundosRestantes,
 } from '../../../apps/ui/src/features/cofre/cripto';
+import { abrirSelo, adSelo, codigoDoPedido, formatarCodigo, novoParDoAparelho } from '../../../apps/ui/src/features/cofre/pareamento';
 import type { CofreEstado } from '@loginhub/schema';
 
-const VERSAO = '1.0.0';
+const VERSAO = '1.1.0';
 const API_PADRAO = 'https://loginhub.astralwavelabel.com/api';
 const MASTER_LOGIN_EMAIL = 'master@infra.local';
 const DIR = process.env.HUB_PASS_CONFIG || join(homedir(), '.config', 'hub-pass');
@@ -47,8 +57,11 @@ interface Sessao {
   api: string;
   aparelho_id: string;
   token: string;
-  /** Chave do aparelho (base64). Sem o embrulho que está no servidor, não abre nada. */
-  chave: string;
+  /** Aprovação com `--email`: chave simétrica do aparelho (base64). Sem o embrulho que está no servidor, não abre nada. */
+  chave?: string;
+  /** Aprovação pelo navegador: par X25519 da máquina (base64). A privada nunca sai daqui. */
+  publica?: string;
+  privada?: string;
   dono: string;
   conta: string;
   nome: string;
@@ -192,30 +205,36 @@ async function chamar<T>(api: string, metodo: string, caminho: string, opcoes: {
 
 // ------------------------------------------------------------ cofre aberto pelo aparelho
 
-async function abrir(): Promise<{ s: Sessao; conta: Uint8Array; cofres: CofreAberto[]; itens: ItemAberto[] }> {
-  const s = lerSessao();
-  const cred = `${s.aparelho_id}.${s.token}`;
-  let estado: CofreEstado;
-  try {
-    estado = await chamar<CofreEstado>(s.api, 'GET', '/cofre', { aparelho: cred });
-  } catch (e) {
-    if ((e as { status?: number }).status === 401) throw new ErroCli('Esta máquina não está mais aprovada (revogada?). Rode: hub-pass login');
-    throw e;
-  }
+/** O estado que o servidor devolveu, aberto com a chave desta máquina. `conta` nula = alcance só de alguns cofres. */
+async function abrirEstado(s: Sessao, estado: CofreEstado): Promise<{ conta: Uint8Array | null; cofres: CofreAberto[]; itens: ItemAberto[] }> {
   if (!estado.aparelho) throw new ErroCli('O servidor não devolveu a chave deste aparelho. Rode: hub-pass login');
-  let conta: Uint8Array;
-  try {
-    conta = decifrar(deB64(s.chave), estado.aparelho.chave_por_aparelho, adAparelho(estado.dono, s.aparelho_id));
-  } catch {
-    throw new ErroCli('A chave deste aparelho não abre o cofre. Rode: hub-pass login');
-  }
+  let conta: Uint8Array | null = null;
   const cofres: CofreAberto[] = [];
-  for (const c of estado.cofres) {
+  if (estado.aparelho.selo && s.privada && s.publica) {
+    let conteudo: Awaited<ReturnType<typeof abrirSelo>>;
     try {
-      const d = decifrarJson<{ nome: string; chave: string }>(conta, c.dados, adCofre(estado.dono, c.id));
-      cofres.push({ id: c.id, nome: d.nome, chave: deB64(d.chave) });
+      conteudo = await abrirSelo({ publica: s.publica, privada: s.privada }, estado.aparelho.selo, adSelo(estado.dono, s.aparelho_id));
     } catch {
-      process.stderr.write(`aviso: cofre ${c.id} não abriu (alterado fora do cofre?)\n`);
+      throw new ErroCli('A chave desta máquina não abre o cofre. Rode: hub-pass login');
+    }
+    if (conteudo.tipo === 'conta') conta = deB64(conteudo.chave);
+    // Alcance por cofre: o nome e a chave vêm no selo; o registro do cofre a máquina não consegue ler.
+    else for (const c of conteudo.cofres) if (estado.cofres.some((x) => x.id === c.id)) cofres.push({ id: c.id, nome: c.nome, chave: deB64(c.chave) });
+  } else if (estado.aparelho.chave_por_aparelho && s.chave) {
+    try {
+      conta = decifrar(deB64(s.chave), estado.aparelho.chave_por_aparelho, adAparelho(estado.dono, s.aparelho_id));
+    } catch {
+      throw new ErroCli('A chave deste aparelho não abre o cofre. Rode: hub-pass login');
+    }
+  } else throw new ErroCli('A sessão desta máquina não combina com a aprovação dela. Rode: hub-pass login');
+  if (conta) {
+    for (const c of estado.cofres) {
+      try {
+        const d = decifrarJson<{ nome: string; chave: string }>(conta, c.dados, adCofre(estado.dono, c.id));
+        cofres.push({ id: c.id, nome: d.nome, chave: deB64(d.chave) });
+      } catch {
+        process.stderr.write(`aviso: cofre ${c.id} não abriu (alterado fora do cofre?)\n`);
+      }
     }
   }
   const itens: ItemAberto[] = [];
@@ -230,7 +249,20 @@ async function abrir(): Promise<{ s: Sessao; conta: Uint8Array; cofres: CofreAbe
   }
   cofres.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   itens.sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR'));
-  return { s, conta, cofres, itens };
+  return { conta, cofres, itens };
+}
+
+async function abrir(): Promise<{ s: Sessao; conta: Uint8Array | null; cofres: CofreAberto[]; itens: ItemAberto[] }> {
+  const s = lerSessao();
+  const cred = `${s.aparelho_id}.${s.token}`;
+  let estado: CofreEstado;
+  try {
+    estado = await chamar<CofreEstado>(s.api, 'GET', '/cofre', { aparelho: cred });
+  } catch (e) {
+    if ((e as { status?: number }).status === 401) throw new ErroCli('Esta máquina não está mais aprovada (revogada?). Rode: hub-pass login');
+    throw e;
+  }
+  return { s, ...(await abrirEstado(s, estado)) };
 }
 
 const igual = (a: string, b: string) => a.localeCompare(b, 'pt-BR', { sensitivity: 'accent' }) === 0;
@@ -303,9 +335,67 @@ function dadosDasOpcoes(op: Record<string, string | true>, base: ItemCofre): Ite
 
 // ------------------------------------------------------------ comandos
 
+const PEDIDO_MS = 10 * 60 * 1000;
+const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** A aprovação antiga desta máquina deixa de valer (best effort). */
+async function revogarAnterior(anterior: Sessao | null, idNovo: string): Promise<void> {
+  if (!anterior || anterior.aparelho_id === idNovo) return;
+  await chamar(anterior.api, 'DELETE', `/cofre/aparelhos/${anterior.aparelho_id}`, { aparelho: `${anterior.aparelho_id}.${anterior.token}` }).catch(() => undefined);
+}
+
+/**
+ * Aprovação pelo navegador (db/017): deixa o pedido no hub, mostra o código e
+ * espera a pessoa aprovar com o cofre aberto. Nada secreto é digitado aqui.
+ */
+async function loginPorAprovacao(api: string, op: Record<string, string | true>): Promise<void> {
+  const anterior = existsSync(ARQ) ? (JSON.parse(readFileSync(ARQ, 'utf8')) as Sessao) : null;
+  const id = novoId();
+  const nome = opcao(op, 'nome', 'name') || `${hostname()} (${userInfo().username})`;
+  const par = await novoParDoAparelho();
+  const token = randomBytes(32).toString('base64url');
+  const cred = `${id}.${token}`;
+  const { codigo } = await chamar<{ codigo: string }>(api, 'POST', '/cofre/aparelhos/pedidos', {
+    corpo: { id, nome, chave_publica: par.publica, token_hash: createHash('sha256').update(token).digest('hex') },
+  });
+  // O código é a mesma conta do hub; se ele devolvesse outro, alguém mexeu no pedido.
+  if (codigo !== codigoDoPedido(id, par.publica)) throw new ErroCli('O servidor devolveu um código que não é o desta máquina. Não aprove nada.');
+  const ui = api.replace(/\/api\/?$/, '');
+  const visivel = formatarCodigo(codigo);
+  process.stderr.write(
+    `\nPedido de aprovação de "${nome}".\n\n    Código:  ${visivel}\n\n` +
+      `Abra o cofre no navegador (pela digital ou pela palavra-passe), toque no ícone do terminal e digite o código:\n` +
+      `    ${ui}/cofre?aprovar=${visivel}\n` +
+      `    (conta de aplicativo: ${ui}/meu-cofre?aprovar=${visivel})\n\n` +
+      `Esperando a aprovação (vale 10 minutos; Ctrl+C desiste)…\n`,
+  );
+  const fim = Date.now() + PEDIDO_MS;
+  for (;;) {
+    await dormir(3000);
+    let estado: CofreEstado;
+    try {
+      estado = await chamar<CofreEstado>(api, 'GET', '/cofre', { aparelho: cred });
+    } catch (e) {
+      // 401 = ainda não aprovado. Qualquer outra coisa (rede, 5xx) também espera, até o prazo.
+      if (Date.now() > fim) throw new ErroCli((e as { status?: number }).status === 401 ? 'O pedido venceu sem aprovação. Rode hub-pass login de novo.' : `Sem resposta do servidor: ${(e as Error).message}`);
+      continue;
+    }
+    const s: Sessao = { api, aparelho_id: id, token, publica: par.publica, privada: par.privada, dono: estado.dono, conta: estado.dono, nome };
+    const { conta, cofres } = await abrirEstado(s, estado);
+    conta?.fill(0);
+    gravarSessao(s);
+    await revogarAnterior(anterior, id);
+    const alcance = estado.aparelho?.cofres ? `${cofres.length} cofre(s): ${cofres.map((c) => c.nome).join(', ')}` : 'todos os cofres (a conta inteira)';
+    process.stderr.write(`Máquina aprovada: ${nome}, pelo cofre de ${estado.dono}. Abre ${alcance}. Sessão em ${ARQ} (600).\n`);
+    return;
+  }
+}
+
 async function login(op: Record<string, string | true>): Promise<void> {
   const api = opcao(op, 'api') || process.env.HUB_PASS_API || API_PADRAO;
-  const email = opcao(op, 'email') || (await perguntar('E-mail (ou "master"): '));
+  // Sem --email: aprovação pelo navegador. Com --email: a forma antiga, tudo digitado aqui.
+  const email = opcao(op, 'email');
+  if (!email) return loginPorAprovacao(api, op);
   let bearer: string;
 
   if (email.toLowerCase() === 'master') {
@@ -364,10 +454,7 @@ async function login(op: Record<string, string | true>): Promise<void> {
   });
   conta.fill(0);
   gravarSessao({ api, aparelho_id: id, token, chave: b64(chaveAparelho), dono: estado.dono, conta: email, nome });
-  // A aprovação antiga desta máquina deixa de valer (best effort).
-  if (anterior && anterior.aparelho_id !== id) {
-    await chamar(anterior.api, 'DELETE', `/cofre/aparelhos/${anterior.aparelho_id}`, { aparelho: `${anterior.aparelho_id}.${anterior.token}` }).catch(() => undefined);
-  }
+  await revogarAnterior(anterior, id);
   process.stderr.write(`Máquina aprovada: ${nome}. Sessão em ${ARQ} (600).\n`);
 }
 
@@ -380,11 +467,11 @@ async function logout(): Promise<void> {
 }
 
 async function info(): Promise<void> {
-  const s = lerSessao();
-  const { cofres, itens } = await abrir();
+  const { s, conta, cofres, itens } = await abrir();
   console.log(`conta:    ${s.conta} (${s.dono})`);
   console.log(`máquina:  ${s.nome} (${s.aparelho_id})`);
   console.log(`servidor: ${s.api}`);
+  console.log(`alcance:  ${conta ? 'todos os cofres (a conta inteira)' : 'só os cofres escolhidos na aprovação'}`);
   console.log(`cofres:   ${cofres.length} · itens: ${itens.length}`);
 }
 
@@ -398,6 +485,7 @@ async function vault(sub: string | undefined, pos: string[], op: Record<string, 
   if (sub === 'create') {
     const nome = (pos[0] || opcao(op, 'name', 'nome', 'vault-name') || '').trim();
     if (!nome) throw new ErroCli('Uso: hub-pass vault create <nome>');
+    if (!conta) throw new ErroCli('Esta máquina só tem acesso a cofres escolhidos: crie o cofre no navegador e libere-o para ela (Cofre → ícone do terminal → Cofres).');
     if (cofres.some((c) => igual(c.nome, nome))) throw new ErroCli(`Já existe o cofre "${nome}".`);
     const id = novoId();
     await chamar(s.api, 'PUT', `/cofre/cofres/${id}`, {
@@ -488,7 +576,9 @@ async function run(resto: string[]): Promise<void> {
 
 const AJUDA = `hub-pass ${VERSAO} — cofre de senhas do LoginHUB (cifrado de ponta a ponta)
 
-  hub-pass login [--api URL] [--email E] [--nome "nome da máquina"]
+  hub-pass login [--api URL] [--nome "nome da máquina"]
+                                                 mostra um código; aprove no navegador, com o cofre aberto
+  hub-pass login --email E [--api URL] [--nome N]  forma antiga: e-mail (ou "master"), senha, 2FA e palavra-passe aqui
   hub-pass logout                                revoga esta máquina e apaga a sessão
   hub-pass info
   hub-pass vault list | create <nome>

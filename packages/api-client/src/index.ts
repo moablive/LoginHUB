@@ -34,6 +34,8 @@ import type {
   CofreEstado,
   CofreConta,
   CofreAparelho,
+  CofreAparelhoAcesso,
+  CofreAparelhoPedido,
   CofreDigital,
   CofreDigitalNova,
   CofreEntradaNova,
@@ -753,6 +755,17 @@ export const cofreApi = {
   },
   revogarAparelho: async (id: string): Promise<void> => {
     await api.delete(`/cofre/aparelhos/${id}`);
+  },
+  /** Aprovação pelo navegador (db/017): o pedido que o `hub-pass login` deixou, pelo código. */
+  pedidoDeAparelho: async (codigo: string): Promise<CofreAparelhoPedido> => {
+    const { data } = await api.get<CofreAparelhoPedido>(`/cofre/aparelhos/pedidos/${encodeURIComponent(codigo)}`);
+    return data;
+  },
+  aprovarPedido: async (id: string, acesso: CofreAparelhoAcesso): Promise<void> => {
+    await api.post(`/cofre/aparelhos/pedidos/${id}/aprovar`, acesso);
+  },
+  alterarAcesso: async (id: string, acesso: CofreAparelhoAcesso): Promise<void> => {
+    await api.put(`/cofre/aparelhos/${id}/acesso`, acesso);
   },
   /** Digitais que abrem o cofre (passkey com PRF, db/015). */
   digitais: async (): Promise<CofreDigital[]> => {

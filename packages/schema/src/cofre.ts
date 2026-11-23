@@ -43,10 +43,32 @@ export const cofreAparelhos = pgTable('cofre_aparelhos', {
     nome: varchar('nome', { length: 120 }).notNull(),
     tokenHash: varchar('token_hash', { length: 64 }).notNull(),
     chavePorAparelho: text('chave_por_aparelho'),
+    // db/017: máquina aprovada pelo navegador. `selo` = o que ela abre, cifrado para a `chavePublica`
+    // dela; `cofres` = ids dos cofres liberados (null = a conta inteira).
+    chavePublica: varchar('chave_publica', { length: 64 }),
+    selo: text('selo'),
+    cofres: jsonb('cofres').$type<string[] | null>(),
+    // HMAC (chave da conta) do id + chave pública: a tela confere antes de cifrar de novo para a máquina.
+    prova: varchar('prova', { length: 64 }),
     ip: varchar('ip', { length: 64 }),
     criadoEm: timestamp('criado_em').notNull().defaultNow(),
     ultimoUso: timestamp('ultimo_uso'),
     revogadoEm: timestamp('revogado_em'),
+});
+
+/**
+ * Pedido de aprovação de uma máquina do CLI (db/017): nasce no `hub-pass login`,
+ * sem dono, e vale 10 minutos. Quem digita o `codigo` com o cofre aberto aprova.
+ */
+export const cofreAparelhoPedidos = pgTable('cofre_aparelho_pedidos', {
+    id: uuid('id').primaryKey(),
+    nome: varchar('nome', { length: 120 }).notNull(),
+    chavePublica: varchar('chave_publica', { length: 64 }).notNull(),
+    tokenHash: varchar('token_hash', { length: 64 }).notNull(),
+    codigo: varchar('codigo', { length: 12 }).notNull().unique(),
+    ip: varchar('ip', { length: 64 }),
+    criadoEm: timestamp('criado_em').notNull().defaultNow(),
+    expiraEm: timestamp('expira_em').notNull(),
 });
 
 /**
@@ -139,6 +161,39 @@ export interface CofreAparelho {
     criado_em: string | Date;
     ultimo_uso: string | Date | null;
     revogado: boolean;
+    /** Ids dos cofres liberados para a máquina; `null` = a conta inteira. */
+    cofres: string[] | null;
+    /** Chave pública X25519 (base64) da máquina aprovada pelo navegador; `null` na aprovação antiga. */
+    chave_publica: string | null;
+    /** HMAC da chave pública, feito na aprovação com a chave da conta (a tela confere antes de mudar o alcance). */
+    prova: string | null;
+}
+
+/** Pedido de aprovação de uma máquina, como o navegador o recebe pelo código (db/017). */
+export interface CofreAparelhoPedido {
+    id: string;
+    nome: string;
+    chave_publica: string;
+    ip: string | null;
+    criado_em: string | Date;
+}
+
+/** POST /cofre/aparelhos/pedidos (público): o que o `hub-pass login` manda. */
+export interface CofreAparelhoPedidoNovo {
+    id: string;
+    nome: string;
+    chave_publica: string;
+    /** sha256 (hex) do token que a máquina sorteou e guarda. */
+    token_hash: string;
+}
+
+/** Aprovar um pedido ou mudar o alcance de uma máquina: o selo novo e os cofres que ele abre. */
+export interface CofreAparelhoAcesso {
+    selo: string;
+    /** `null` = a conta inteira (o selo leva a chave da conta). */
+    cofres: string[] | null;
+    /** Só na aprovação: HMAC-SHA256 (base64) do dono, id e chave pública da máquina, com a chave da conta. */
+    prova?: string;
 }
 
 /** Parâmetros do Argon2id da palavra-passe. Públicos: sem a palavra-passe não servem. */
@@ -175,8 +230,12 @@ export interface CofreEstado {
     /** 'master' ou 'u:<id>': entra nos dados associados da cifra. */
     dono: string;
     conta: CofreConta | null;
-    /** Só quando quem pede é um aparelho aprovado: a chave da conta embrulhada pela chave dele. */
-    aparelho?: { id: string; chave_por_aparelho: string };
+    /**
+     * Só quando quem pede é um aparelho aprovado. Aprovação antiga: `chave_por_aparelho` (a chave da
+     * conta embrulhada pela chave simétrica dele). Aprovação pelo navegador (db/017): `selo`, cifrado
+     * para a chave pública dele, e `cofres` (null = a conta inteira).
+     */
+    aparelho?: { id: string; chave_por_aparelho?: string; selo?: string; cofres?: string[] | null };
     /** Digitais ativas (db/015): abrem o cofre com Touch ID/Face ID neste ou noutro aparelho. */
     digitais?: CofreDigitalEmbrulho[];
     cofres: CofreRegistro[];

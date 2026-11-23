@@ -286,6 +286,8 @@ export interface DonoDoCofre {
     dono: string;
     /** Preenchido quando a credencial é um aparelho aprovado. */
     aparelhoId?: string;
+    /** Aparelho com alcance por cofre (db/017): os ids liberados. Ausente = a conta inteira. */
+    cofresPermitidos?: string[];
 }
 
 export const donoDoCofre = (req: unknown): DonoDoCofre | undefined => (req as { cofre?: DonoDoCofre }).cofre;
@@ -309,7 +311,7 @@ export const cofreAuth: RequestHandler = async (req, res, next) => {
         if (ponto < 0 || !UUID_COFRE.test(id) || token.length < 20) return negar();
         try {
             const linhas = await db
-                .select({ dono: cofreAparelhos.dono, hash: cofreAparelhos.tokenHash })
+                .select({ dono: cofreAparelhos.dono, hash: cofreAparelhos.tokenHash, selo: cofreAparelhos.selo, cofres: cofreAparelhos.cofres })
                 .from(cofreAparelhos)
                 .where(and(eq(cofreAparelhos.id, id), isNull(cofreAparelhos.revogadoEm)))
                 .limit(1);
@@ -319,7 +321,9 @@ export const cofreAuth: RequestHandler = async (req, res, next) => {
                 return res.status(401).json({ error: 'APARELHO_REVOGADO', message: 'Este aparelho não está mais aprovado. Rode hub-pass login.' });
             }
             db.update(cofreAparelhos).set({ ultimoUso: new Date(), ip: ipDoCliente(req).slice(0, 64) }).where(eq(cofreAparelhos.id, id)).execute().catch(() => undefined);
-            (req as any).cofre = { dono: a.dono, aparelhoId: id.toLowerCase() } satisfies DonoDoCofre;
+            // O alcance só vale junto do selo (aprovação pelo navegador); a antiga é sempre a conta inteira.
+            const permitidos = a.selo && Array.isArray(a.cofres) ? (a.cofres as string[]) : undefined;
+            (req as any).cofre = { dono: a.dono, aparelhoId: id.toLowerCase(), ...(permitidos ? { cofresPermitidos: permitidos } : {}) } satisfies DonoDoCofre;
             return next();
         } catch (err) {
             console.error('[cofreAuth] aparelho:', (err as Error).message);

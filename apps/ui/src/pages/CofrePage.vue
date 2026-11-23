@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import axios from 'axios';
-import { appApi, cofreApi } from '@loginhub/api-client';
-import type { CofreAparelho, CofreDigital } from '@loginhub/schema';
+import { useRoute } from 'vue-router';
+import { appApi } from '@loginhub/api-client';
+import type { CofreDigital } from '@loginhub/schema';
 import {
   ArrowPathIcon,
   ChevronDownIcon,
@@ -31,6 +32,7 @@ import UiBadge from '@/components/ui/UiBadge.vue';
 import UiSpinner from '@/components/ui/UiSpinner.vue';
 import UiEmpty from '@/components/ui/UiEmpty.vue';
 import CofreItemIcone, { type LogoDeApp } from '@/components/CofreItemIcone.vue';
+import CofreAparelhos from '@/components/cofre/CofreAparelhos.vue';
 import CofreFolha from '@/components/cofre/CofreFolha.vue';
 import CofreLista from '@/components/cofre/CofreLista.vue';
 import { estiloDoCofre, iconeDoCofre, type AparenciaCofre } from '@/features/cofre/aparencia';
@@ -239,35 +241,18 @@ function trancar() {
   revelados.value = new Set();
 }
 
-// --- máquinas aprovadas do CLI hub-pass (db/014)
-const aparelhos = ref<CofreAparelho[]>([]);
+// --- máquinas do CLI hub-pass (db/014 e db/017): a folha é o CofreAparelhos. O link `?aprovar=<código>` do
+// `hub-pass login` abre a folha com o código assim que o cofre abrir.
+const route = useRoute();
+const codigoParaAprovar = typeof route.query.aprovar === 'string' ? route.query.aprovar : '';
 const mostrarAparelhos = ref(false);
-const aparelhoParaRevogar = ref<CofreAparelho | null>(null);
-async function carregarAparelhos() {
-  try {
-    aparelhos.value = await cofreApi.aparelhos();
-  } catch (e) {
-    erro.value = mensagemDe(e, 'Não foi possível listar os aparelhos.');
-  }
-}
-async function abrirAparelhos() {
-  mostrarAparelhos.value = true;
-  await carregarAparelhos();
-}
-async function revogarAparelho() {
-  const alvo = aparelhoParaRevogar.value;
-  if (!alvo) return;
-  ocupado.value = true;
-  try {
-    await cofreApi.revogarAparelho(alvo.id);
-    await carregarAparelhos();
-  } catch (e) {
-    erro.value = mensagemDe(e, 'Não foi possível revogar.');
-  } finally {
-    ocupado.value = false;
-    aparelhoParaRevogar.value = null;
-  }
-}
+watch(
+  aberto,
+  (abriu) => {
+    if (abriu && codigoParaAprovar && !pedirNovaSenha.value) mostrarAparelhos.value = true;
+  },
+  { immediate: true },
+);
 const dataHora = (d: string | Date | null) =>
   d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
 
@@ -477,7 +462,7 @@ async function confirmarTrocaSenha() {
           <UiButton variante="plain" icone aria-label="Digitais" title="Abrir o cofre com a digital (Touch ID, Face ID)" @click="abrirDigitais">
             <FingerPrintIcon class="h-6 w-6" />
           </UiButton>
-          <UiButton variante="plain" icone aria-label="Aparelhos do CLI" title="Máquinas aprovadas do CLI hub-pass" @click="abrirAparelhos">
+          <UiButton variante="plain" icone aria-label="Aparelhos do CLI" title="Máquinas aprovadas do CLI hub-pass" @click="mostrarAparelhos = true">
             <CommandLineIcon class="h-6 w-6" />
           </UiButton>
           <UiButton variante="plain" icone aria-label="Trocar palavra-passe" title="Trocar a palavra-passe" @click="abrirTrocaSenha">
@@ -768,42 +753,8 @@ async function confirmarTrocaSenha() {
       Este aparelho deixa de abrir o cofre com a digital. A palavra-passe continua valendo.
     </UiAlert>
 
-    <!-- FOLHA: aparelhos do CLI -->
-    <UiSheet :aberto="mostrarAparelhos" titulo="Aparelhos do CLI" subtitulo="Máquinas aprovadas para o hub-pass" largura="md" @fechar="mostrarAparelhos = false">
-      <div class="space-y-4">
-        <div class="rounded-celula bg-fill-2 p-3 text-footnote text-label-2">
-          Para aprovar uma máquina, rode nela <code class="font-mono text-label">hub-pass login</code> (e-mail, senha, código do
-          2FA e a palavra-passe do cofre). Revogar aqui desliga a máquina na hora: a chave que ficou nela não abre mais nada.
-        </div>
-        <p v-if="aparelhos.length === 0" class="py-3 text-subhead italic text-label-2">Nenhuma máquina aprovada ainda.</p>
-        <ul v-else class="divide-y rounded-celula bg-surface [&>*]:border-separator">
-          <li v-for="a in aparelhos" :key="a.id" class="flex items-center gap-3 px-3 py-3">
-            <div class="min-w-0 flex-1">
-              <p class="flex items-center gap-2 text-subhead font-semibold">
-                <span class="truncate">{{ a.nome }}</span>
-                <UiBadge v-if="a.revogado" tom="danger">revogado</UiBadge>
-                <UiBadge v-else tom="success">ativo</UiBadge>
-              </p>
-              <p class="text-caption-1 text-label-2">aprovado {{ dataHora(a.criado_em) }} · último uso {{ dataHora(a.ultimo_uso) }}{{ a.ip ? ` · ${a.ip}` : '' }}</p>
-            </div>
-            <UiButton v-if="!a.revogado" variante="destructive-tinted" tamanho="small" @click="aparelhoParaRevogar = a">Revogar</UiButton>
-          </li>
-        </ul>
-      </div>
-    </UiSheet>
-
-    <UiAlert
-      :aberto="!!aparelhoParaRevogar"
-      tom="danger"
-      titulo="Revogar esta máquina?"
-      :destaque="aparelhoParaRevogar?.nome"
-      confirmar="Revogar"
-      :carregando="ocupado"
-      @fechar="aparelhoParaRevogar = null"
-      @confirmar="revogarAparelho"
-    >
-      O hub-pass dela para de funcionar na hora. Para voltar, rode <code>hub-pass login</code> nela de novo.
-    </UiAlert>
+    <!-- FOLHA: aparelhos do CLI (lista, revoga e aprova máquina nova pelo código do hub-pass login) -->
+    <CofreAparelhos :aberto="mostrarAparelhos" :codigo-inicial="codigoParaAprovar" @fechar="mostrarAparelhos = false" />
 
     <UiAlert
       :aberto="!!itemParaApagar"

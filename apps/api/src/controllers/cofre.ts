@@ -9,11 +9,14 @@ import { donoDoCofre, ipDoCliente } from '@loginhub/middlewares';
  * navegador/CLI; aqui só se guarda e devolve.
  */
 const donoDe = (req: Request): string | null => donoDoCofre(req)?.dono ?? null;
+/** Máquina com alcance por cofre (db/017): os cofres dela; `null` para as outras credenciais. */
+const permitidosDe = (req: Request): string[] | null => donoDoCofre(req)?.cofresPermitidos ?? null;
 
 function responder(res: Response, err: unknown, acao: string) {
     const e = err as Error & { code?: string };
     if (e.code === 'VALIDATION') return res.status(400).json({ error: 'Dados Inválidos', message: e.message });
     if (e.code === 'NOT_FOUND') return res.status(404).json({ message: e.message });
+    if (e.code === 'FORBIDDEN') return res.status(403).json({ error: 'APARELHO_SEM_ALCANCE', message: e.message });
     if (e.code === 'DUPLICATE_ENTRY') return res.status(409).json({ message: e.message });
     console.error(`[CofreController] ${acao}:`, e.message);
     return res.status(500).json({ error: 'Erro Interno' });
@@ -48,6 +51,8 @@ export class CofreController {
     static async trocarSenha(req: Request, res: Response) {
         const dono = donoDe(req);
         if (!dono) return res.status(403).json({ error: 'SO_MASTER' });
+        // Máquina do CLI não troca a palavra-passe: regravar o embrulho trancaria o dono do lado de fora.
+        if (donoDoCofre(req)?.aparelhoId) return res.status(403).json({ error: 'APARELHO_NAO_TROCA_SENHA', message: 'Troque a palavra-passe pelo navegador.' });
         try {
             await cofreService.trocarSenha(dono, req.body ?? {});
             return res.status(200).json({ ok: true });
@@ -61,7 +66,7 @@ export class CofreController {
         const dono = donoDe(req);
         if (!dono) return res.status(403).json({ error: 'SO_MASTER' });
         try {
-            await cofreService.salvarCofre(dono, req.params.id, req.body?.dados);
+            await cofreService.salvarCofre(dono, req.params.id, req.body?.dados, permitidosDe(req));
             return res.status(200).json({ ok: true });
         } catch (err) {
             return responder(res, err, 'salvarCofre');
@@ -73,7 +78,7 @@ export class CofreController {
         const dono = donoDe(req);
         if (!dono) return res.status(403).json({ error: 'SO_MASTER' });
         try {
-            await cofreService.apagarCofre(dono, req.params.id);
+            await cofreService.apagarCofre(dono, req.params.id, permitidosDe(req));
             return res.status(200).json({ ok: true });
         } catch (err) {
             return responder(res, err, 'apagarCofre');
@@ -85,7 +90,7 @@ export class CofreController {
         const dono = donoDe(req);
         if (!dono) return res.status(403).json({ error: 'SO_MASTER' });
         try {
-            await cofreService.salvarItem(dono, req.params.id, req.body?.cofre_id, req.body?.dados);
+            await cofreService.salvarItem(dono, req.params.id, req.body?.cofre_id, req.body?.dados, permitidosDe(req));
             return res.status(200).json({ ok: true });
         } catch (err) {
             return responder(res, err, 'salvarItem');
@@ -97,7 +102,7 @@ export class CofreController {
         const dono = donoDe(req);
         if (!dono) return res.status(403).json({ error: 'SO_MASTER' });
         try {
-            await cofreService.apagarItem(dono, req.params.id);
+            await cofreService.apagarItem(dono, req.params.id, permitidosDe(req));
             return res.status(200).json({ ok: true });
         } catch (err) {
             return responder(res, err, 'apagarItem');
@@ -128,6 +133,62 @@ export class CofreController {
             return res.status(200).json(await cofreService.listarAparelhos(dono));
         } catch (err) {
             return responder(res, err, 'listarAparelhos');
+        }
+    }
+
+    // ------------------------------------------------------------ aprovação pelo navegador (db/017)
+
+    /**
+     * POST /cofre/aparelhos/pedidos `{ id, nome, chave_publica, token_hash }` → `{ codigo, expira_em }`.
+     * PÚBLICA (com rate limit): é o `hub-pass login` de uma máquina que ainda não tem credencial.
+     * O pedido sozinho não abre nada; vale 10 minutos e espera alguém aprovar com o cofre aberto.
+     */
+    static async pedirAparelho(req: Request, res: Response) {
+        try {
+            const r = await cofreService.pedirAparelho((req.body ?? {}) as Record<string, unknown>, ipDoCliente(req));
+            res.setHeader('Cache-Control', 'no-store');
+            return res.status(201).json(r);
+        } catch (err) {
+            return responder(res, err, 'pedirAparelho');
+        }
+    }
+
+    /** GET /cofre/aparelhos/pedidos/:codigo — o pedido que a pessoa digitou. Só com login de verdade. */
+    static async pedidoDeAparelho(req: Request<{ codigo: string }>, res: Response) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SEM_DONO' });
+        if (donoDoCofre(req)?.aparelhoId) return res.status(403).json({ error: 'APARELHO_NAO_APROVA', message: 'Um aparelho não aprova outro: abra o cofre no navegador.' });
+        try {
+            res.setHeader('Cache-Control', 'no-store');
+            return res.status(200).json(await cofreService.pedidoPorCodigo(req.params.codigo));
+        } catch (err) {
+            return responder(res, err, 'pedidoDeAparelho');
+        }
+    }
+
+    /** POST /cofre/aparelhos/pedidos/:id/aprovar `{ selo, cofres }` — o pedido vira máquina aprovada do dono. */
+    static async aprovarPedido(req: Request<{ id: string }>, res: Response) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SEM_DONO' });
+        if (donoDoCofre(req)?.aparelhoId) return res.status(403).json({ error: 'APARELHO_NAO_APROVA', message: 'Um aparelho não aprova outro: abra o cofre no navegador.' });
+        try {
+            await cofreService.aprovarPedido(dono, req.params.id, req.body ?? {});
+            return res.status(201).json({ ok: true });
+        } catch (err) {
+            return responder(res, err, 'aprovarPedido');
+        }
+    }
+
+    /** PUT /cofre/aparelhos/:id/acesso `{ selo, cofres }` — muda os cofres de uma máquina. Só pelo navegador. */
+    static async alterarAcesso(req: Request<{ id: string }>, res: Response) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SEM_DONO' });
+        if (donoDoCofre(req)?.aparelhoId) return res.status(403).json({ error: 'APARELHO_NAO_APROVA', message: 'Mude o acesso das máquinas pelo navegador.' });
+        try {
+            await cofreService.alterarAcesso(dono, req.params.id, req.body ?? {});
+            return res.status(200).json({ ok: true });
+        } catch (err) {
+            return responder(res, err, 'alterarAcesso');
         }
     }
 
