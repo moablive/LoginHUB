@@ -1572,6 +1572,8 @@ Pedido do dono em 20/11/2026: criar e organizar cofres como no Proton Pass. Só 
 - **Onde ficam o ícone e a cor**: como identificadores (`icone`, `cor`) dentro dos dados cifrados do cofre, ao lado do nome e da chave. O servidor não fica sabendo; cofre antigo (ou criado pelo `hub-pass vault create`) não tem os campos e aparece com o padrão (carteira roxa). Identificador desconhecido também cai no padrão.
 - **Mover item de cofre**: a folha do item ganhou o campo **Cofre** (quando há mais de um). Trocar o cofre de um item que já existe recifra o item com a chave do cofre novo e regrava (`PUT /cofre/itens/:id` com o `cofre_id` novo). Em "Todos os itens", o item novo nasce no primeiro cofre e o campo deixa escolher outro.
 - Em "Todos os itens" e na busca, cada item mostra o selo com o nome do cofre dele.
+- **Ordem dos cofres (v1.9.1, 23/11/2026, pedido do dono, que tem muitos cofres)**: o botão das setas no topo da lista (ou "Mover" no menu ⋮) entra no modo **Ordenar**: cada cofre ganha subir, descer e ir para o topo, e **Salvar ordem** grava tudo de uma vez. A posição vai como `ordem` (número) dentro dos dados cifrados do cofre; só os cofres que mudaram de posição são regravados (`reordenarCofres` em `useCofre.ts`). Cofre sem `ordem` (antigo, ou criado pelo `hub-pass`) fica depois dos ordenados, por nome; cofre novo criado na tela entra no fim. O CLI continua listando por nome.
+- **Ícone como atalho (v1.9.1)**: tocar no ícone do cofre na lista abre direto a folha de nome, ícone e cor (o mesmo do menu ⋮ → "Nome, ícone e cor").
 
 #### Ligaduras e ícones da Nerd Font (v1.8.0)
 
@@ -1581,6 +1583,7 @@ Pedido do dono em 20/11/2026: títulos como `SRV => Jellyfin` devem mostrar a se
 - Ícones da Nerd Font colados num título ou numa nota aparecem.
 - O resto do texto continua na fonte do sistema (HIG), e o arquivo (1 MB por peso) só é baixado na tela que tiver um desses caracteres.
 - Campos em `font-mono` (usuário, senha, 2FA) ficam fora de propósito: senha nunca aparece com ligadura.
+- **Correção na v1.9.1**: a ligadura não aparecia em quase nenhum texto, porque a escala tipográfica da HIG usa `letter-spacing` negativo e o navegador desliga as ligaduras sempre que há `letter-spacing`. O `body` passou a pedir o `calt` por nome (`font-feature-settings: 'calt' 1`), que continua valendo; o `.font-mono` desliga de volta (`font-feature-settings: normal; font-variant-ligatures: none`).
 
 #### Máquina do CLI aprovada pelo navegador, por cofre (v1.9.0)
 

@@ -109,6 +109,9 @@
 
   body {
     @apply bg-canvas font-sans text-body text-label antialiased;
+    /* A escala da HIG aperta as letras (letter-spacing negativo), e o navegador desliga as ligaduras sempre que há
+       letter-spacing. O `calt` pedido por nome continua valendo: é ele que faz o `=>` virar a seta (23/11/2026). */
+    font-feature-settings: 'calt' 1;
     /* O painel tem tabela larga; sem isto um `whitespace-nowrap` estoura a
        viewport e o celular fica com scroll horizontal na página inteira. */
     overflow-x: hidden;
@@ -167,5 +170,13 @@
   /* Rodapé que não fica atrás da barra de gestos. */
   .pb-seguro {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+}
+
+/* Senha, usuário e 2FA nunca com ligadura, mesmo que a fonte monoespaçada do aparelho tenha (Cascadia, Fira Code). */
+@layer utilities {
+  .font-mono {
+    font-feature-settings: normal;
+    font-variant-ligatures: none;
   }
 }

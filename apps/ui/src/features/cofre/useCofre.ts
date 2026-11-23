@@ -40,6 +40,8 @@ export interface CofreAberto {
   /** Identificadores de `aparencia.ts`; cofre antigo não tem e cai no padrão. */
   icone?: string;
   cor?: string;
+  /** Posição na lista, escolhida pelo dono (23/11/2026). Sem ela, o cofre vai depois dos ordenados, por nome. */
+  ordem?: number;
 }
 
 export interface ItemCofre {
@@ -93,8 +95,8 @@ function abrirTudo(): void {
   const abertos: CofreAberto[] = [];
   for (const c of estado.cofres) {
     try {
-      const d = decifrarJson<{ nome: string; chave: string; icone?: string; cor?: string }>(conta, c.dados, adCofre(dono(), c.id));
-      abertos.push({ id: c.id, nome: d.nome, chave: deB64(d.chave), icone: d.icone, cor: d.cor });
+      const d = decifrarJson<{ nome: string; chave: string; icone?: string; cor?: string; ordem?: number }>(conta, c.dados, adCofre(dono(), c.id));
+      abertos.push({ id: c.id, nome: d.nome, chave: deB64(d.chave), icone: d.icone, cor: d.cor, ordem: typeof d.ordem === 'number' ? d.ordem : undefined });
     } catch {
       falhas++;
     }
@@ -113,7 +115,8 @@ function abrirTudo(): void {
       falhas++;
     }
   }
-  abertos.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  // Primeiro os que o dono pôs em ordem; os outros (cofre antigo, criado pelo CLI) depois, por nome.
+  abertos.sort((a, b) => (a.ordem ?? Infinity) - (b.ordem ?? Infinity) || a.nome.localeCompare(b.nome, 'pt-BR'));
   lista.sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR'));
   cofres.value = abertos;
   itens.value = lista;
@@ -257,11 +260,46 @@ async function salvarCofre(nome: string, id?: string, aparencia?: Partial<Aparen
   const chave = existente?.chave ?? novaChave();
   const icone = aparencia?.icone ?? existente?.icone;
   const cor = aparencia?.cor ?? existente?.cor;
-  const dados = { nome: nome.trim(), chave: b64(chave), ...(icone ? { icone } : {}), ...(cor ? { cor } : {}) };
-  await cofreApi.salvarCofre(cofreId, cifrarJson(conta, dados, adCofre(dono(), cofreId)));
+  // Cofre novo entra no fim da ordem do dono (se ele já ordenou algum); o que existe fica onde está.
+  const ordens = cofres.value.flatMap((c) => (c.ordem === undefined ? [] : [c.ordem]));
+  const ordem = existente ? existente.ordem : ordens.length ? Math.max(...ordens) + 1 : undefined;
+  await cofreApi.salvarCofre(cofreId, cifrarJson(conta, dadosDoCofre({ nome: nome.trim(), chave, icone, cor, ordem }), adCofre(dono(), cofreId)));
   await carregar();
   abrirTudo();
   return cofreId;
+}
+
+/** O que vai cifrado no registro do cofre: nome, chave e, quando existem, ícone, cor e ordem. */
+function dadosDoCofre(c: Omit<CofreAberto, 'id'>): Record<string, string | number> {
+  return {
+    nome: c.nome,
+    chave: b64(c.chave),
+    ...(c.icone ? { icone: c.icone } : {}),
+    ...(c.cor ? { cor: c.cor } : {}),
+    ...(c.ordem === undefined ? {} : { ordem: c.ordem }),
+  };
+}
+
+/**
+ * Grava a ordem dos cofres escolhida na lista: `ids` na ordem nova, com todos
+ * os cofres. Só regrava os que mudaram de posição.
+ */
+async function reordenarCofres(ids: string[]): Promise<void> {
+  const conta = chaveConta.value;
+  if (!conta) throw new Error('TRANCADO');
+  if (ids.length !== cofres.value.length || new Set(ids).size !== ids.length) throw new Error('ORDEM_INVALIDA');
+  const mudados = ids.flatMap((id, ordem) => {
+    const c = cofres.value.find((x) => x.id === id);
+    if (!c) throw new Error('COFRE_NAO_ENCONTRADO');
+    return c.ordem === ordem ? [] : [{ ...c, ordem }];
+  });
+  try {
+    for (const c of mudados) await cofreApi.salvarCofre(c.id, cifrarJson(conta, dadosDoCofre(c), adCofre(dono(), c.id)));
+  } finally {
+    // Mesmo se uma gravação falhar no meio, a lista volta a mostrar o que ficou gravado.
+    await carregar();
+    abrirTudo();
+  }
 }
 
 async function apagarCofre(id: string): Promise<void> {
@@ -409,6 +447,7 @@ export function useCofre() {
     trocarSenha,
     trancar,
     salvarCofre,
+    reordenarCofres,
     apagarCofre,
     salvarItem,
     apagarItem,

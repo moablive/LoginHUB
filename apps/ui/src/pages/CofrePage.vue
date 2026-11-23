@@ -425,6 +425,17 @@ async function salvarCofre(dados: { nome: string } & AparenciaCofre) {
     ocupado.value = false;
   }
 }
+async function reordenarCofres(ids: string[]) {
+  ocupado.value = true;
+  erro.value = null;
+  try {
+    await cofre.reordenarCofres(ids);
+  } catch (err) {
+    erro.value = mensagemDe(err, 'Não foi possível gravar a ordem dos cofres.');
+  } finally {
+    ocupado.value = false;
+  }
+}
 const cofreParaApagar = ref<{ id: string; nome: string } | null>(null);
 async function apagarCofre() {
   const alvo = cofreParaApagar.value;
@@ -560,7 +571,7 @@ async function confirmarTrocaSenha() {
     <div v-else class="mt-4 lg:grid lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start lg:gap-6">
       <!-- cofres: coluna no computador; no celular, a folha aberta pelo botão do cofre atual -->
       <aside class="hidden lg:sticky lg:top-4 lg:block">
-        <CofreLista :cofres="cofres" :contagem="contagem" :total="itens.length" :atual="cofreAtual" @escolher="escolherCofre" @novo="novoCofre" @editar="editarCofre" @apagar="pedirApagarCofre" />
+        <CofreLista :cofres="cofres" :contagem="contagem" :total="itens.length" :atual="cofreAtual" :ocupado="ocupado" @escolher="escolherCofre" @novo="novoCofre" @editar="editarCofre" @apagar="pedirApagarCofre" @reordenar="reordenarCofres" />
       </aside>
 
       <div class="space-y-4">
@@ -654,7 +665,7 @@ async function confirmarTrocaSenha() {
 
     <!-- FOLHA: cofres (celular) -->
     <UiSheet :aberto="mostrarCofres" titulo="Trocar de cofre" largura="sm" @fechar="mostrarCofres = false">
-      <CofreLista :cofres="cofres" :contagem="contagem" :total="itens.length" :atual="cofreAtual" @escolher="escolherCofre" @novo="novoCofre" @editar="editarCofre" @apagar="pedirApagarCofre" />
+      <CofreLista :cofres="cofres" :contagem="contagem" :total="itens.length" :atual="cofreAtual" :ocupado="ocupado" @escolher="escolherCofre" @novo="novoCofre" @editar="editarCofre" @apagar="pedirApagarCofre" @reordenar="reordenarCofres" />
     </UiSheet>
 
     <!-- FOLHA: item -->

@@ -1,22 +1,46 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
-import { EllipsisVerticalIcon, PencilSquareIcon, PlusIcon, Squares2X2Icon, TrashIcon } from '@heroicons/vue/24/outline';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import {
+  ArrowsUpDownIcon,
+  ChevronDoubleUpIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  EllipsisVerticalIcon,
+  PencilSquareIcon,
+  PlusIcon,
+  Squares2X2Icon,
+  TrashIcon,
+} from '@heroicons/vue/24/outline';
 import UiButton from '@/components/ui/UiButton.vue';
 import { estiloDoCofre, iconeDoCofre } from '@/features/cofre/aparencia';
 
 /**
  * Lista dos cofres no molde do Proton Pass (20/11/2026, pedido do dono):
  * "Todos os itens" em cima, um cofre por linha com ícone, cor e total, o +
- * que cria e o menu ⋮ de cada um (editar, apagar). No computador é a coluna
- * da esquerda do cofre; no celular vem dentro de uma folha.
+ * que cria e o menu ⋮ de cada um. No computador é a coluna da esquerda do
+ * cofre; no celular vem dentro de uma folha.
+ *
+ * 23/11/2026 (pedido do dono, que tem muitos cofres): tocar no ÍCONE abre a
+ * folha de nome, ícone e cor; e o modo ORDENAR (botão das setas, ou "Mover" no
+ * menu) troca o ⋮ por subir, descer e ir para o topo. A ordem só é gravada no
+ * "Salvar ordem", de uma vez.
  */
-defineProps<{
-  cofres: { id: string; nome: string; icone?: string; cor?: string }[];
+interface CofreDaLista {
+  id: string;
+  nome: string;
+  icone?: string;
+  cor?: string;
+}
+
+const props = defineProps<{
+  cofres: CofreDaLista[];
   /** Total de itens por id de cofre. */
   contagem: Record<string, number>;
   total: number;
   /** Cofre escolhido; `null` = todos os itens. */
   atual: string | null;
+  /** Gravando (a ordem, por exemplo): trava os botões. */
+  ocupado?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -24,6 +48,8 @@ const emit = defineEmits<{
   novo: [];
   editar: [id: string];
   apagar: [id: string];
+  /** Os ids de todos os cofres, na ordem nova. */
+  reordenar: [ids: string[]];
 }>();
 
 const quantos = (n: number) => (n === 1 ? '1 item' : `${n} itens`);
@@ -42,24 +68,63 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', aoTeclar);
 });
 
-function acao(tipo: 'editar' | 'apagar', id: string) {
+function acao(tipo: 'editar' | 'apagar' | 'mover', id: string) {
   fecharMenu();
   if (tipo === 'editar') emit('editar', id);
-  else emit('apagar', id);
+  else if (tipo === 'apagar') emit('apagar', id);
+  else ordenar();
+}
+
+// --- ordenar: a ordem nova fica só aqui até o "Salvar ordem"
+const ordem = ref<string[] | null>(null);
+const visiveis = computed<CofreDaLista[]>(() => {
+  const ids = ordem.value;
+  if (!ids) return props.cofres;
+  return ids.flatMap((id) => props.cofres.find((c) => c.id === id) ?? []);
+});
+function ordenar() {
+  ordem.value = props.cofres.map((c) => c.id);
+}
+function mover(de: number, para: number) {
+  const ids = ordem.value;
+  if (!ids || para < 0 || para >= ids.length || de === para) return;
+  const novo = [...ids];
+  const [id] = novo.splice(de, 1);
+  if (id === undefined) return;
+  novo.splice(para, 0, id);
+  ordem.value = novo;
+}
+const mudou = computed(() => !!ordem.value && ordem.value.some((id, i) => props.cofres[i]?.id !== id));
+function salvarOrdem() {
+  const ids = ordem.value;
+  if (ids && mudou.value) emit('reordenar', ids);
+  ordem.value = null;
 }
 </script>
 
 <template>
   <nav aria-label="Cofres" class="rounded-celula bg-surface p-2">
-    <div class="flex items-center justify-between pl-2">
+    <div v-if="ordem" class="flex items-center justify-between gap-2 pb-1 pl-2">
+      <h2 class="text-subhead font-semibold text-label-2">Ordenar</h2>
+      <div class="flex gap-1">
+        <UiButton variante="plain" tamanho="small" @click="ordem = null">Cancelar</UiButton>
+        <UiButton variante="tinted" tamanho="small" :disabled="!mudou" @click="salvarOrdem">Salvar ordem</UiButton>
+      </div>
+    </div>
+    <div v-else class="flex items-center justify-between pl-2">
       <h2 class="text-subhead font-semibold text-label-2">Cofres</h2>
-      <UiButton variante="plain" icone aria-label="Novo cofre" title="Novo cofre" @click="emit('novo')">
-        <PlusIcon class="h-6 w-6" />
-      </UiButton>
+      <div class="flex">
+        <UiButton v-if="cofres.length > 1" variante="plain" icone aria-label="Ordenar os cofres" title="Ordenar os cofres" :disabled="ocupado" @click="ordenar">
+          <ArrowsUpDownIcon class="h-6 w-6" />
+        </UiButton>
+        <UiButton variante="plain" icone aria-label="Novo cofre" title="Novo cofre" @click="emit('novo')">
+          <PlusIcon class="h-6 w-6" />
+        </UiButton>
+      </div>
     </div>
 
     <ul class="space-y-1">
-      <li>
+      <li v-if="!ordem">
         <button
           type="button"
           class="flex w-full items-center gap-3 rounded-controle px-2 py-2 text-left"
@@ -77,48 +142,78 @@ function acao(tipo: 'editar' | 'apagar', id: string) {
         </button>
       </li>
 
-      <li v-for="c in cofres" :key="c.id" class="relative">
-        <div class="flex items-center rounded-controle" :class="c.id === atual ? 'bg-accent/15' : 'hover:bg-fill-2'">
-          <button
-            type="button"
-            class="flex min-w-0 flex-1 items-center gap-3 rounded-controle px-2 py-2 text-left"
-            :aria-current="c.id === atual ? 'true' : undefined"
-            @click="emit('escolher', c.id)"
-          >
-            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full" :style="estiloDoCofre(c.cor)" aria-hidden="true">
-              <component :is="iconeDoCofre(c.icone)" class="h-5 w-5" />
-            </span>
-            <span class="min-w-0">
-              <span class="block truncate text-headline font-semibold">{{ c.nome }}</span>
-              <span class="block text-footnote text-label-2">{{ quantos(contagem[c.id] ?? 0) }}</span>
-            </span>
-          </button>
-          <button
-            type="button"
-            class="flex h-toque w-toque shrink-0 items-center justify-center rounded-full text-label-2 hover:text-label"
-            :aria-label="`Opções do cofre ${c.nome}`"
-            aria-haspopup="menu"
-            :aria-expanded="menuDe === c.id"
-            @pointerdown.stop
-            @click="menuDe = menuDe === c.id ? null : c.id"
-          >
-            <EllipsisVerticalIcon class="h-6 w-6" />
-          </button>
+      <li v-for="(c, i) in visiveis" :key="c.id" class="relative">
+        <!-- ordenar: subir, descer, topo -->
+        <div v-if="ordem" class="flex items-center gap-2 rounded-controle py-1 pl-2">
+          <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full" :style="estiloDoCofre(c.cor)" aria-hidden="true">
+            <component :is="iconeDoCofre(c.icone)" class="h-5 w-5" />
+          </span>
+          <span class="min-w-0 flex-1 truncate text-headline font-semibold">{{ c.nome }}</span>
+          <div class="flex shrink-0">
+            <button type="button" class="flex h-toque w-9 items-center justify-center rounded-full text-label-2 hover:bg-fill-2 hover:text-label disabled:opacity-30" :aria-label="`${c.nome}: para o topo`" title="Para o topo" :disabled="i === 0" @click="mover(i, 0)">
+              <ChevronDoubleUpIcon class="h-5 w-5" />
+            </button>
+            <button type="button" class="flex h-toque w-9 items-center justify-center rounded-full text-accent hover:bg-accent/10 disabled:opacity-30" :aria-label="`${c.nome}: subir`" title="Subir" :disabled="i === 0" @click="mover(i, i - 1)">
+              <ChevronUpIcon class="h-5 w-5" />
+            </button>
+            <button type="button" class="flex h-toque w-9 items-center justify-center rounded-full text-accent hover:bg-accent/10 disabled:opacity-30" :aria-label="`${c.nome}: descer`" title="Descer" :disabled="i === visiveis.length - 1" @click="mover(i, i + 1)">
+              <ChevronDownIcon class="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
-        <div
-          v-if="menuDe === c.id"
-          role="menu"
-          class="absolute right-2 top-12 z-20 w-44 overflow-hidden rounded-controle bg-surface-2 shadow-flutuante ring-1 ring-separator"
-          @pointerdown.stop
-        >
-          <button type="button" role="menuitem" class="flex min-h-toque w-full items-center gap-2 px-3 text-left text-subhead hover:bg-fill-2" @click="acao('editar', c.id)">
-            <PencilSquareIcon class="h-5 w-5 text-label-2" />Editar
-          </button>
-          <button type="button" role="menuitem" class="flex min-h-toque w-full items-center gap-2 px-3 text-left text-subhead text-danger hover:bg-danger/10" @click="acao('apagar', c.id)">
-            <TrashIcon class="h-5 w-5" />Apagar
-          </button>
-        </div>
+        <template v-else>
+          <div class="flex items-center rounded-controle" :class="c.id === atual ? 'bg-accent/15' : 'hover:bg-fill-2'">
+            <!-- o ícone é o atalho para mudar nome, ícone e cor -->
+            <button
+              type="button"
+              class="ml-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-full hover:ring-2 hover:ring-accent/40"
+              :style="estiloDoCofre(c.cor)"
+              :aria-label="`Mudar o nome, o ícone e a cor do cofre ${c.nome}`"
+              title="Mudar o nome, o ícone e a cor"
+              @click="emit('editar', c.id)"
+            >
+              <component :is="iconeDoCofre(c.icone)" class="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              class="min-w-0 flex-1 rounded-controle px-3 py-2 text-left"
+              :aria-current="c.id === atual ? 'true' : undefined"
+              @click="emit('escolher', c.id)"
+            >
+              <span class="block truncate text-headline font-semibold">{{ c.nome }}</span>
+              <span class="block text-footnote text-label-2">{{ quantos(contagem[c.id] ?? 0) }}</span>
+            </button>
+            <button
+              type="button"
+              class="flex h-toque w-toque shrink-0 items-center justify-center rounded-full text-label-2 hover:text-label"
+              :aria-label="`Opções do cofre ${c.nome}`"
+              aria-haspopup="menu"
+              :aria-expanded="menuDe === c.id"
+              @pointerdown.stop
+              @click="menuDe = menuDe === c.id ? null : c.id"
+            >
+              <EllipsisVerticalIcon class="h-6 w-6" />
+            </button>
+          </div>
+
+          <div
+            v-if="menuDe === c.id"
+            role="menu"
+            class="absolute right-2 top-12 z-20 w-56 overflow-hidden rounded-controle bg-surface-2 shadow-flutuante ring-1 ring-separator"
+            @pointerdown.stop
+          >
+            <button type="button" role="menuitem" class="flex min-h-toque w-full items-center gap-2 px-3 text-left text-subhead hover:bg-fill-2" @click="acao('editar', c.id)">
+              <PencilSquareIcon class="h-5 w-5 text-label-2" />Nome, ícone e cor
+            </button>
+            <button v-if="cofres.length > 1" type="button" role="menuitem" class="flex min-h-toque w-full items-center gap-2 px-3 text-left text-subhead hover:bg-fill-2" @click="acao('mover', c.id)">
+              <ArrowsUpDownIcon class="h-5 w-5 text-label-2" />Mover (ordenar os cofres)
+            </button>
+            <button type="button" role="menuitem" class="flex min-h-toque w-full items-center gap-2 px-3 text-left text-subhead text-danger hover:bg-danger/10" @click="acao('apagar', c.id)">
+              <TrashIcon class="h-5 w-5" />Apagar
+            </button>
+          </div>
+        </template>
       </li>
     </ul>
   </nav>
