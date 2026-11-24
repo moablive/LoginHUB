@@ -180,3 +180,22 @@
     font-variant-ligatures: none;
   }
 }
+
+/* Barra de rolagem sempre à vista (24/11/2026, pedido do dono: muitos cofres). O macOS esconde a barra até a pessoa
+   rolar; com o estilo próprio ela fica visível e mostra que há mais cofres embaixo. */
+@layer utilities {
+  .rolagem-visivel {
+    scrollbar-width: thin;
+    scrollbar-color: var(--label-3) transparent;
+  }
+  .rolagem-visivel::-webkit-scrollbar {
+    width: 8px;
+  }
+  .rolagem-visivel::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: var(--label-3);
+  }
+  .rolagem-visivel::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}

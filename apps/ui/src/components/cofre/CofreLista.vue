@@ -123,8 +123,10 @@ function salvarOrdem() {
       </div>
     </div>
 
-    <ul class="space-y-1">
-      <li v-if="!ordem">
+    <!-- Muitos cofres (24/11/2026, pedido do dono): no computador e no app instalado a lista rola dentro da coluna,
+         com a barra sempre à vista, e "Todos os itens" fica preso no topo. No celular quem rola é a folha. -->
+    <ul class="rolagem-visivel space-y-1 lg:max-h-[calc(100dvh-11rem)] lg:overflow-y-auto lg:pr-1">
+      <li v-if="!ordem" class="lg:sticky lg:top-0 lg:z-10 lg:bg-surface">
         <button
           type="button"
           class="flex w-full items-center gap-3 rounded-controle px-2 py-2 text-left"
