@@ -1614,6 +1614,15 @@ Pedido do dono em 23/11/2026: os outros servidores (bf, PDV, Mac) usam o cofre s
 - **Forma antiga**: `hub-pass login --email <e-mail ou "master">` continua valendo (senha, 2FA e palavra-passe digitados na máquina; sempre a conta inteira). Máquinas aprovadas assim seguem funcionando e aparecem sem o botão **Cofres**.
 - Testes: `NODE_PATH=cli/hub-pass/node_modules npx tsx scripts/teste-cofre-pareamento.ts` (selo e código, sem servidor) e o ponta a ponta `scripts/teste-cofre-cli.ts`, que agora faz o papel da tela na aprovação e confere o alcance.
 
+#### Digital do cofre no iPhone (v1.9.4)
+
+Pedido do dono em 24/11/2026: a digital funcionava no computador e, no iPhone, era cadastrada mas não abria o cofre (a digital "iPhone · Safari" ficava com último uso "nunca").
+
+- **Cadastro em dois toques** (`criarDigital` + `concluirDigital`): a passkey é criada e depois **lida**; o embrulho da chave da conta é feito com o segredo da leitura, o mesmo caminho que a abertura repete. O segredo que alguns navegadores devolvem já na criação deixou de ser usado. Se o navegador só aceitar a leitura depois de um toque novo, a folha mostra **Confirmar a digital**.
+- **Digital deste navegador** (`cofre_digital_local` no `localStorage`, só o id da credencial): a abertura pede só a digital cadastrada aqui, com o sal dela em `eval`, em vez da lista de todos os aparelhos com um sal por credencial (`evalByCredential`). Sem a lembrança, vale a lista inteira, como antes.
+- **Mensagens**: leitor fechado ou digital não achada deixou de ser silêncio; digital lida que não abre o cofre vira `DIGITAL_NAO_ABRE`, com a instrução de tirar e ativar de novo (antes saía "Palavra-passe errada" na página de entrada).
+- Digital cadastrada antes desta versão e que não abre: abrir com a palavra-passe, **Tirar** e **Ativar** de novo naquele aparelho.
+
 #### "Meu cofre" com CPF e a vaga `cofre` (v1.9.3)
 
 Pedido do dono em 24/11/2026: os funcionários da Sul Alimentos entram com **CPF + CPF + Google Authenticator**, e a tela "Meu cofre" dizia "E-mail" (e o campo, do tipo e-mail, nem deixava digitar um CPF).

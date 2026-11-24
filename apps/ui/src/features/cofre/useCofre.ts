@@ -3,7 +3,7 @@ import { cofreApi } from '@loginhub/api-client';
 import type { CofreAparelho, CofreAparelhoAcesso, CofreAparelhoPedido, CofreDigital, CofreEntradaPedido, CofreEstado } from '@loginhub/schema';
 import { randomBytes } from '@noble/ciphers/utils.js';
 import type { AparenciaCofre } from './aparencia';
-import { criarDigital, pedirSegredo } from './digital';
+import { criarDigital, digitalLocal, esquecerDigitalLocal, lembrarDigitalLocal, pedirSegredo } from './digital';
 import { adSelo, codigoDoPedido, limparCodigo, provaDoAparelho, selar } from './pareamento';
 import { assinarEntrada, desafioDoPasse, mensagemDaEntrada, novaChaveDeEntrada, type EntradaDoItem } from './entrada';
 import {
@@ -178,44 +178,79 @@ async function abrirComDigital(): Promise<void> {
   await carregar();
   const lista = bruto.value?.digitais ?? [];
   if (!bruto.value?.conta || !lista.length) throw new Error('SEM_DIGITAL');
-  const { credencialId, segredo } = await pedirSegredo(lista.map((d) => ({ credencial_id: d.credencial_id, prf_sal: deB64(d.prf_sal) })));
+  // A digital deste navegador, se ele lembra qual é (e ela ainda vale): pede só ela. Senão, a lista inteira.
+  const daqui = lista.find((x) => x.credencial_id === digitalLocal());
+  const candidatas = daqui ? [daqui] : lista;
+  const { credencialId, segredo } = await pedirSegredo(candidatas.map((d) => ({ credencial_id: d.credencial_id, prf_sal: deB64(d.prf_sal) })));
   const d = lista.find((x) => x.credencial_id === credencialId);
   if (!d) {
     segredo.fill(0);
-    throw new Error('CHAVE_ERRADA');
+    throw new Error('DIGITAL_NAO_ABRE');
   }
   const chave = chaveDoPrf(segredo);
   segredo.fill(0);
   try {
     chaveConta.value = decifrar(chave, d.chave_por_digital, adContaPrf(dono(), d.credencial_id));
+  } catch {
+    // O aparelho leu a digital, mas o segredo não é o do cadastro: esta digital não serve mais.
+    esquecerDigitalLocal(d.credencial_id);
+    throw new Error('DIGITAL_NAO_ABRE');
   } finally {
     chave.fill(0);
   }
+  lembrarDigitalLocal(d.credencial_id);
   abrirTudo();
   cofreApi.usouDigital(d.id).catch(() => undefined);
 }
 
+/**
+ * Digital criada no aparelho e ainda não confirmada (24/11/2026). O cadastro tem
+ * dois toques: criar a passkey e LER a digital — é a leitura que dá o segredo do
+ * embrulho, o mesmo que a abertura do cofre vai pedir. Alguns navegadores (Safari
+ * do iPhone) só aceitam a segunda chamada depois de um toque novo da pessoa: aí a
+ * tela mostra "Confirmar a digital" e chama `concluirDigital`.
+ */
+const digitalPendente = shallowRef<{ credencialId: string; sal: Uint8Array; nome: string } | null>(null);
+
 /** Cadastra a digital deste aparelho (só com o cofre aberto: precisa da chave da conta). */
 async function ativarDigital(nome: string): Promise<void> {
-  const conta = chaveConta.value;
-  if (!conta) throw new Error('TRANCADO');
+  if (!chaveConta.value) throw new Error('TRANCADO');
   const sal = randomBytes(32);
-  const { credencialId, segredo } = await criarDigital(dono(), nome, sal);
+  const { credencialId } = await criarDigital(dono(), nome, sal);
+  digitalPendente.value = { credencialId, sal, nome: nome.trim().slice(0, 120) || 'Aparelho' };
+  await concluirDigital();
+}
+
+/** Lê a digital recém-criada e grava o embrulho. Se a leitura falhar, a pendente fica para um novo toque. */
+async function concluirDigital(): Promise<void> {
+  const conta = chaveConta.value;
+  const p = digitalPendente.value;
+  if (!conta) throw new Error('TRANCADO');
+  if (!p) throw new Error('SEM_DIGITAL');
+  const { credencialId, segredo } = await pedirSegredo([{ credencial_id: p.credencialId, prf_sal: p.sal }]);
   const chave = chaveDoPrf(segredo);
   segredo.fill(0);
   try {
+    if (credencialId !== p.credencialId) throw new Error('DIGITAL_NAO_ABRE');
     await cofreApi.registrarDigital({
       id: novoId(),
-      nome: nome.trim().slice(0, 120) || 'Aparelho',
-      credencial_id: credencialId,
-      prf_sal: b64(sal),
-      chave_por_digital: cifrar(chave, conta, adContaPrf(dono(), credencialId)),
+      nome: p.nome,
+      credencial_id: p.credencialId,
+      prf_sal: b64(p.sal),
+      chave_por_digital: cifrar(chave, conta, adContaPrf(dono(), p.credencialId)),
     });
   } finally {
     chave.fill(0);
   }
+  lembrarDigitalLocal(p.credencialId);
+  digitalPendente.value = null;
   await carregar();
   await listarDigitais();
+}
+
+/** Desiste da digital que ficou sem confirmar (a passkey fica no aparelho, sem abrir nada). */
+function descartarDigitalPendente(): void {
+  digitalPendente.value = null;
 }
 
 async function listarDigitais(): Promise<void> {
@@ -224,6 +259,8 @@ async function listarDigitais(): Promise<void> {
 
 async function revogarDigital(id: string): Promise<void> {
   await cofreApi.revogarDigital(id);
+  // Se era a deste navegador, ele deixa de pedir por ela (a lista do estado ainda tem o id da credencial).
+  esquecerDigitalLocal(bruto.value?.digitais?.find((d) => d.id === id)?.credencial_id ?? '-');
   await carregar();
   await listarDigitais();
 }
@@ -240,6 +277,7 @@ async function trocarSenha(nova: string): Promise<void> {
 }
 
 function trancar(): void {
+  digitalPendente.value = null;
   chaveConta.value?.fill(0);
   for (const c of cofres.value) c.chave.fill(0);
   chaveConta.value = null;
@@ -442,6 +480,9 @@ export function useCofre() {
     abrirComKit,
     abrirComDigital,
     ativarDigital,
+    digitalPendente,
+    concluirDigital,
+    descartarDigitalPendente,
     listarDigitais,
     revogarDigital,
     trocarSenha,

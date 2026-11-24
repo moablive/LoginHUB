@@ -59,7 +59,7 @@ const props = withDefaults(
 const emit = defineEmits<{ sair: [] }>();
 
 const cofre = useCofre();
-const { existe, aberto, cofres, itens, ilegiveis, temDigital, digitais } = cofre;
+const { existe, aberto, cofres, itens, ilegiveis, temDigital, digitais, digitalPendente } = cofre;
 
 const carregando = ref(true);
 const erro = ref<string | null>(null);
@@ -80,8 +80,12 @@ const MENSAGEM_DIGITAL: Record<ErroDigital['codigo'], string> = {
   CANCELADO: '',
   NAO_RECONHECIDA: 'Digital não reconhecida.',
 };
+// A digital foi lida, mas não é a que abre este cofre: o aparelho não tem digital cadastrada, ou a que ele tem foi
+// cadastrada com defeito (antes de 24/11/2026) ou tirada.
+const DIGITAL_NAO_ABRE = 'Esta digital não abre o cofre neste aparelho. Abra com a palavra-passe, toque no ícone da digital, tire a digital deste aparelho (se estiver na lista) e ative de novo.';
 const mensagemDe = (e: unknown, padrao: string): string => {
   if (e instanceof ErroDigital) return MENSAGEM_DIGITAL[e.codigo];
+  if (e instanceof Error && e.message === 'DIGITAL_NAO_ABRE') return DIGITAL_NAO_ABRE;
   if (e instanceof Error && e.message === 'SEM_DIGITAL') return 'Nenhuma digital abre este cofre ainda.';
   if (e instanceof Error && e.message === 'CHAVE_ERRADA') return usarKit.value ? 'Kit de recuperação errado.' : 'Palavra-passe errada.';
   if (e instanceof Error && (e.message === 'KIT_INVALIDO' || e.message === 'BASE32_INVALIDO')) return 'Kit de recuperação incompleto ou com caractere errado.';
@@ -163,8 +167,8 @@ async function abrirDigital() {
   try {
     await cofre.abrirComDigital();
   } catch (e) {
-    const m = e instanceof Error && e.message === 'CHAVE_ERRADA' ? 'Esta digital não abre o cofre (foi tirada ou é de outro cofre).' : mensagemDe(e, 'Não foi possível abrir pela digital.');
-    erro.value = m || null;
+    // Leitor fechado ou digital não achada: aqui o silêncio parecia botão morto.
+    erro.value = mensagemDe(e, 'Não foi possível abrir pela digital.') || 'A digital não abriu o cofre: o leitor foi fechado ou este aparelho não achou a digital. Tente de novo ou use a palavra-passe.';
   } finally {
     ocupado.value = false;
   }
@@ -200,7 +204,24 @@ async function ativarDigital() {
     await cofre.ativarDigital(nomeDigital.value);
     avisoDigital.value = 'Pronto: da próxima vez, o cofre trancado abre com a digital neste aparelho.';
   } catch (e) {
-    erro.value = mensagemDe(e, 'Não foi possível cadastrar a digital.') || null;
+    // A passkey foi criada e falta só a leitura: o botão "Confirmar a digital" aparece no lugar do erro.
+    erro.value = digitalPendente.value ? null : mensagemDe(e, 'Não foi possível cadastrar a digital.') || null;
+  } finally {
+    ocupado.value = false;
+  }
+}
+// No template `cofre` é o objeto do composable, sem o desempacotamento dos refs: a chamada fica aqui.
+function desistirDaDigital() {
+  cofre.descartarDigitalPendente();
+}
+async function confirmarDigital() {
+  ocupado.value = true;
+  erro.value = null;
+  try {
+    await cofre.concluirDigital();
+    avisoDigital.value = 'Pronto: da próxima vez, o cofre trancado abre com a digital neste aparelho.';
+  } catch (e) {
+    erro.value = mensagemDe(e, 'Não foi possível confirmar a digital.') || 'A digital não foi lida. Toque em Confirmar a digital de novo.';
   } finally {
     ocupado.value = false;
   }
@@ -729,6 +750,13 @@ async function confirmarTrocaSenha() {
           vai ao servidor; a palavra-passe e o kit de recuperação continuam abrindo o cofre.
         </div>
         <p v-if="!digitalSuportada()" class="rounded-celula bg-warning/10 p-3 text-subhead text-warning">Este navegador não tem passkey.</p>
+        <div v-else-if="digitalPendente" class="space-y-3 rounded-celula bg-warning/10 p-3">
+          <p class="text-subhead text-label">A digital foi criada neste aparelho. Falta confirmar: toque no botão e passe a digital mais uma vez.</p>
+          <UiButton tamanho="large" bloco :carregando="ocupado" @click="confirmarDigital">
+            <FingerPrintIcon class="h-5 w-5" />Confirmar a digital
+          </UiButton>
+          <UiButton variante="plain" tamanho="small" :disabled="ocupado" @click="desistirDaDigital">Desistir</UiButton>
+        </div>
         <form v-else class="space-y-3" @submit.prevent="ativarDigital">
           <UiTextField v-model="nomeDigital" rotulo="Nome deste aparelho" maxlength="120" required />
           <UiButton type="submit" tamanho="large" bloco :carregando="ocupado">

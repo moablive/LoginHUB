@@ -55,6 +55,7 @@ const MENSAGEM_DIGITAL: Record<ErroDigital['codigo'], string> = {
 function mensagemDe(e: unknown, padrao: string): string {
   if (e instanceof ErroDigital) return MENSAGEM_DIGITAL[e.codigo];
   if (e instanceof ErroEntradaPorItem) return e.message;
+  if (e instanceof Error && e.message === 'DIGITAL_NAO_ABRE') return 'Esta digital não abre o cofre neste aparelho. Use a palavra-passe; depois, em loginhub › Cofre › ícone da digital, tire a digital deste aparelho e ative de novo.';
   if (e instanceof Error && e.message === 'CHAVE_ERRADA') return 'Palavra-passe errada.';
   if (axios.isAxiosError(e) && e.response?.data?.message) return String(e.response.data.message);
   return padrao;
