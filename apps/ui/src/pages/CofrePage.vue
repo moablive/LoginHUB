@@ -35,7 +35,8 @@ import CofreItemIcone, { type LogoDeApp } from '@/components/CofreItemIcone.vue'
 import CofreAparelhos from '@/components/cofre/CofreAparelhos.vue';
 import CofreFolha from '@/components/cofre/CofreFolha.vue';
 import CofreLista from '@/components/cofre/CofreLista.vue';
-import { estiloDoCofre, iconeDoCofre, type AparenciaCofre } from '@/features/cofre/aparencia';
+import CofreIcone from '@/components/cofre/CofreIcone.vue';
+import type { AparenciaCofre } from '@/features/cofre/aparencia';
 import { useCofre, type ItemAberto, type ItemCofre } from '@/features/cofre/useCofre';
 import { codigoTotp, gerarSenha, lerTotp, segundosRestantes } from '@/features/cofre/cripto';
 import { digitalSuportada, ErroDigital } from '@/features/cofre/digital';
@@ -415,7 +416,7 @@ async function apagarItem() {
 }
 
 // --- cofres: criar, editar (nome, cor, ícone) e apagar, pela lista (CofreLista) e pela folha (CofreFolha)
-const editandoCofre = ref<{ id?: string; nome: string; icone?: string; cor?: string } | null>(null);
+const editandoCofre = ref<{ id?: string; nome: string; icone?: string; cor?: string; imagem?: string } | null>(null);
 function novoCofre() {
   mostrarCofres.value = false;
   editandoCofre.value = { nome: '' };
@@ -424,19 +425,19 @@ function editarCofre(id: string) {
   const c = cofres.value.find((x) => x.id === id);
   if (!c) return;
   mostrarCofres.value = false;
-  editandoCofre.value = { id: c.id, nome: c.nome, icone: c.icone, cor: c.cor };
+  editandoCofre.value = { id: c.id, nome: c.nome, icone: c.icone, cor: c.cor, imagem: c.imagem };
 }
 function pedirApagarCofre(id: string) {
   mostrarCofres.value = false;
   cofreParaApagar.value = { id, nome: nomeDoCofre(id) };
 }
-async function salvarCofre(dados: { nome: string } & AparenciaCofre) {
+async function salvarCofre(dados: { nome: string; imagem: string | null } & AparenciaCofre) {
   const e = editandoCofre.value;
   if (!e) return;
   ocupado.value = true;
   erro.value = null;
   try {
-    const id = await cofre.salvarCofre(dados.nome, e.id, { icone: dados.icone, cor: dados.cor });
+    const id = await cofre.salvarCofre(dados.nome, e.id, { icone: dados.icone, cor: dados.cor, imagem: dados.imagem });
     // Cofre novo já abre escolhido, pronto para receber itens.
     if (!e.id) cofreAtual.value = id;
     editandoCofre.value = null;
@@ -602,9 +603,7 @@ async function confirmarTrocaSenha() {
         <p v-if="erro" role="alert" class="rounded-celula bg-danger/10 p-3 text-subhead text-danger">{{ erro }}</p>
 
         <button type="button" class="flex w-full items-center gap-3 rounded-celula bg-surface p-2 text-left lg:hidden" aria-haspopup="dialog" @click="mostrarCofres = true">
-          <span v-if="cofreEscolhido" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full" :style="estiloDoCofre(cofreEscolhido.cor)" aria-hidden="true">
-            <component :is="iconeDoCofre(cofreEscolhido.icone)" class="h-5 w-5" />
-          </span>
+          <CofreIcone v-if="cofreEscolhido" :icone="cofreEscolhido.icone" :cor="cofreEscolhido.cor" :imagem="cofreEscolhido.imagem" />
           <span v-else class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent" aria-hidden="true">
             <Squares2X2Icon class="h-5 w-5" />
           </span>

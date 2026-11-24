@@ -2,7 +2,7 @@ import { computed, ref, shallowRef } from 'vue';
 import { cofreApi } from '@loginhub/api-client';
 import type { CofreAparelho, CofreAparelhoAcesso, CofreAparelhoPedido, CofreDigital, CofreEntradaPedido, CofreEstado } from '@loginhub/schema';
 import { randomBytes } from '@noble/ciphers/utils.js';
-import type { AparenciaCofre } from './aparencia';
+import { imagemDoCofreValida, type AparenciaCofre } from './aparencia';
 import { criarDigital, digitalLocal, esquecerDigitalLocal, lembrarDigitalLocal, pedirSegredo } from './digital';
 import { adSelo, codigoDoPedido, limparCodigo, provaDoAparelho, selar } from './pareamento';
 import { assinarEntrada, desafioDoPasse, mensagemDaEntrada, novaChaveDeEntrada, type EntradaDoItem } from './entrada';
@@ -40,6 +40,8 @@ export interface CofreAberto {
   /** Identificadores de `aparencia.ts`; cofre antigo não tem e cai no padrão. */
   icone?: string;
   cor?: string;
+  /** Miniatura (data: URL) que o dono pôs no lugar do ícone (24/11/2026). */
+  imagem?: string;
   /** Posição na lista, escolhida pelo dono (23/11/2026). Sem ela, o cofre vai depois dos ordenados, por nome. */
   ordem?: number;
 }
@@ -95,8 +97,8 @@ function abrirTudo(): void {
   const abertos: CofreAberto[] = [];
   for (const c of estado.cofres) {
     try {
-      const d = decifrarJson<{ nome: string; chave: string; icone?: string; cor?: string; ordem?: number }>(conta, c.dados, adCofre(dono(), c.id));
-      abertos.push({ id: c.id, nome: d.nome, chave: deB64(d.chave), icone: d.icone, cor: d.cor, ordem: typeof d.ordem === 'number' ? d.ordem : undefined });
+      const d = decifrarJson<{ nome: string; chave: string; icone?: string; cor?: string; imagem?: string; ordem?: number }>(conta, c.dados, adCofre(dono(), c.id));
+      abertos.push({ id: c.id, nome: d.nome, chave: deB64(d.chave), icone: d.icone, cor: d.cor, imagem: imagemDoCofreValida(d.imagem) ? d.imagem : undefined, ordem: typeof d.ordem === 'number' ? d.ordem : undefined });
     } catch {
       falhas++;
     }
@@ -290,7 +292,7 @@ function trancar(): void {
  * Cria (sem `id`) ou regrava um cofre e devolve o id dele. Ícone e cor vão
  * cifrados junto do nome; sem `aparencia`, o cofre fica com a que já tinha.
  */
-async function salvarCofre(nome: string, id?: string, aparencia?: Partial<AparenciaCofre>): Promise<string> {
+async function salvarCofre(nome: string, id?: string, aparencia?: Partial<AparenciaCofre> & { imagem?: string | null }): Promise<string> {
   const conta = chaveConta.value;
   if (!conta) throw new Error('TRANCADO');
   const existente = id ? cofres.value.find((c) => c.id === id) : undefined;
@@ -298,22 +300,25 @@ async function salvarCofre(nome: string, id?: string, aparencia?: Partial<Aparen
   const chave = existente?.chave ?? novaChave();
   const icone = aparencia?.icone ?? existente?.icone;
   const cor = aparencia?.cor ?? existente?.cor;
+  // Imagem: `null` tira a que havia; sem o campo, fica a que já estava.
+  const imagem = aparencia?.imagem === null ? undefined : (aparencia?.imagem ?? existente?.imagem);
   // Cofre novo entra no fim da ordem do dono (se ele já ordenou algum); o que existe fica onde está.
   const ordens = cofres.value.flatMap((c) => (c.ordem === undefined ? [] : [c.ordem]));
   const ordem = existente ? existente.ordem : ordens.length ? Math.max(...ordens) + 1 : undefined;
-  await cofreApi.salvarCofre(cofreId, cifrarJson(conta, dadosDoCofre({ nome: nome.trim(), chave, icone, cor, ordem }), adCofre(dono(), cofreId)));
+  await cofreApi.salvarCofre(cofreId, cifrarJson(conta, dadosDoCofre({ nome: nome.trim(), chave, icone, cor, imagem, ordem }), adCofre(dono(), cofreId)));
   await carregar();
   abrirTudo();
   return cofreId;
 }
 
-/** O que vai cifrado no registro do cofre: nome, chave e, quando existem, ícone, cor e ordem. */
+/** O que vai cifrado no registro do cofre: nome, chave e, quando existem, ícone, cor, imagem e ordem. */
 function dadosDoCofre(c: Omit<CofreAberto, 'id'>): Record<string, string | number> {
   return {
     nome: c.nome,
     chave: b64(c.chave),
     ...(c.icone ? { icone: c.icone } : {}),
     ...(c.cor ? { cor: c.cor } : {}),
+    ...(imagemDoCofreValida(c.imagem) ? { imagem: c.imagem } : {}),
     ...(c.ordem === undefined ? {} : { ordem: c.ordem }),
   };
 }

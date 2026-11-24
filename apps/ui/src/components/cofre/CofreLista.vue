@@ -12,7 +12,7 @@ import {
   TrashIcon,
 } from '@heroicons/vue/24/outline';
 import UiButton from '@/components/ui/UiButton.vue';
-import { estiloDoCofre, iconeDoCofre } from '@/features/cofre/aparencia';
+import CofreIcone from './CofreIcone.vue';
 
 /**
  * Lista dos cofres no molde do Proton Pass (20/11/2026, pedido do dono):
@@ -30,6 +30,7 @@ interface CofreDaLista {
   nome: string;
   icone?: string;
   cor?: string;
+  imagem?: string;
 }
 
 const props = defineProps<{
@@ -147,9 +148,7 @@ function salvarOrdem() {
       <li v-for="(c, i) in visiveis" :key="c.id" class="relative">
         <!-- ordenar: subir, descer, topo -->
         <div v-if="ordem" class="flex items-center gap-2 rounded-controle py-1 pl-2">
-          <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full" :style="estiloDoCofre(c.cor)" aria-hidden="true">
-            <component :is="iconeDoCofre(c.icone)" class="h-5 w-5" />
-          </span>
+          <CofreIcone :icone="c.icone" :cor="c.cor" :imagem="c.imagem" />
           <span class="min-w-0 flex-1 truncate text-headline font-semibold">{{ c.nome }}</span>
           <div class="flex shrink-0">
             <button type="button" class="flex h-toque w-9 items-center justify-center rounded-full text-label-2 hover:bg-fill-2 hover:text-label disabled:opacity-30" :aria-label="`${c.nome}: para o topo`" title="Para o topo" :disabled="i === 0" @click="mover(i, 0)">
@@ -170,12 +169,11 @@ function salvarOrdem() {
             <button
               type="button"
               class="ml-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-full hover:ring-2 hover:ring-accent/40"
-              :style="estiloDoCofre(c.cor)"
               :aria-label="`Mudar o nome, o ícone e a cor do cofre ${c.nome}`"
               title="Mudar o nome, o ícone e a cor"
               @click="emit('editar', c.id)"
             >
-              <component :is="iconeDoCofre(c.icone)" class="h-5 w-5" />
+              <CofreIcone :icone="c.icone" :cor="c.cor" :imagem="c.imagem" />
             </button>
             <button
               type="button"

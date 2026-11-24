@@ -96,3 +96,45 @@ export const estiloDoCofre = (cor?: string): { backgroundColor: string; color: s
   const hex = corDoCofre(cor);
   return { backgroundColor: `${hex}26`, color: hex };
 };
+
+// ------------------------------------------------------------ imagem do cofre (24/11/2026)
+
+/**
+ * O dono pode pôr uma IMAGEM no lugar do ícone. Ela vira uma miniatura quadrada
+ * aqui no navegador e vai, como data: URL, dentro dos dados cifrados do cofre —
+ * o servidor não a vê. O teto mantém o registro do cofre bem abaixo do limite
+ * do hub (64 KB por registro).
+ */
+const LADO_DA_IMAGEM = 128;
+const MAX_IMAGEM = 28 * 1024;
+const DATA_DE_IMAGEM = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
+
+/** Só data: de imagem, no tamanho que este arquivo gera. Qualquer outra coisa (dado mexido) é ignorada. */
+export const imagemDoCofreValida = (s: unknown): s is string => typeof s === 'string' && s.length <= MAX_IMAGEM && DATA_DE_IMAGEM.test(s);
+
+/**
+ * Reduz o arquivo escolhido a uma miniatura quadrada (corte central). Lança
+ * `IMAGEM_INVALIDA` se o navegador não conseguir abrir o arquivo como imagem.
+ */
+export async function miniaturaDoCofre(arquivo: Blob): Promise<string> {
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(arquivo);
+  } catch {
+    throw new Error('IMAGEM_INVALIDA');
+  }
+  const lado = Math.min(bitmap.width, bitmap.height);
+  const tela = document.createElement('canvas');
+  tela.width = LADO_DA_IMAGEM;
+  tela.height = LADO_DA_IMAGEM;
+  const ctx = tela.getContext('2d');
+  if (!ctx || lado === 0) throw new Error('IMAGEM_INVALIDA');
+  ctx.drawImage(bitmap, (bitmap.width - lado) / 2, (bitmap.height - lado) / 2, lado, lado, 0, 0, LADO_DA_IMAGEM, LADO_DA_IMAGEM);
+  bitmap.close();
+  // WebP onde o navegador gera (menor e com transparência); senão JPEG, baixando a qualidade até caber.
+  for (const [tipo, qualidade] of [['image/webp', 0.85], ['image/webp', 0.6], ['image/jpeg', 0.8], ['image/jpeg', 0.55]] as const) {
+    const url = tela.toDataURL(tipo, qualidade);
+    if (url.startsWith(`data:${tipo}`) && imagemDoCofreValida(url)) return url;
+  }
+  throw new Error('IMAGEM_INVALIDA');
+}
