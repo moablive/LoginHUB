@@ -1614,6 +1614,16 @@ Pedido do dono em 23/11/2026: os outros servidores (bf, PDV, Mac) usam o cofre s
 - **Forma antiga**: `hub-pass login --email <e-mail ou "master">` continua valendo (senha, 2FA e palavra-passe digitados na máquina; sempre a conta inteira). Máquinas aprovadas assim seguem funcionando e aparecem sem o botão **Cofres**.
 - Testes: `NODE_PATH=cli/hub-pass/node_modules npx tsx scripts/teste-cofre-pareamento.ts` (selo e código, sem servidor) e o ponta a ponta `scripts/teste-cofre-cli.ts`, que agora faz o papel da tela na aprovação e confere o alcance.
 
+#### "Meu cofre" com CPF e a vaga `cofre` (v1.9.3)
+
+Pedido do dono em 24/11/2026: os funcionários da Sul Alimentos entram com **CPF + CPF + Google Authenticator**, e a tela "Meu cofre" dizia "E-mail" (e o campo, do tipo e-mail, nem deixava digitar um CPF).
+
+- **Tela** (`apps/ui/src/pages/MeuCofrePage.vue`): o campo é **CPF ou e-mail**. CPF digitado com pontos e traço vira só dígitos (na senha também, quando são 11 dígitos); e-mail vai em minúsculas.
+- **Aparelho**: conta de CPF só entra dizendo de que aparelho vem. A tela manda o id deste navegador (`apps/ui/src/features/aparelho.ts`, guardado em `hub_aparelho_id`) e a marca `cofre: true` no `POST /auth/login`.
+- **Vaga `cofre`** (`db/019_aparelho_cofre.sql`, quarta vaga de `usuarios_aparelho`): a tela do hub mora noutro endereço que o app da pessoa e guarda outro id de aparelho — sem vaga própria o hub a via como um segundo celular e recusava (`APARELHO_EM_USO`). A vaga só é dada quando o pedido traz a marca **e** o cabeçalho `Origin` é o do próprio hub (`UI_PUBLIC_URL`), que página de outro endereço não consegue forjar; em qualquer outro caso a marca é ignorada e vale a regra de sempre (celular ou computador). É de um aparelho só e passa para outro depois de 12 h parada, como a do computador. No painel aparece como "Cofre do LoginHUB" (🔐) e sai pelo **Liberar**.
+- **Sul Alimentos com o cofre liberado**: `aplicativos.cofre_liberado = true` no app 2. Cada funcionário cria o próprio cofre, com a palavra-passe dele; o dono do cofre é a pessoa (hash do CPF ou do e-mail).
+- Conta sem Google Authenticator configurado não entra por aqui: configura primeiro no app dela.
+
 ## 🔑 Sessão master e a master key
 
 O painel do hub tem uma credencial só: a `MASTER_API_KEY`. Ela **não** muda de

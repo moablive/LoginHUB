@@ -122,7 +122,7 @@ const emitirSessaoMaster = (masterKey: string): LoginResponseDTO => {
 // 1. AUTH SERVICE
 // ==========================================
 export class AuthService {
-    public async login(data: LoginInputDTO, ip: string | null = null, navegador?: { userAgent?: string; mobile?: string; telegram?: boolean }): Promise<LoginResponseDTO | TwoFactorChallengeResponse | TwoFactorSetupRequiredResponse> {
+    public async login(data: LoginInputDTO, ip: string | null = null, navegador?: { userAgent?: string; mobile?: string; telegram?: boolean; cofre?: boolean }): Promise<LoginResponseDTO | TwoFactorChallengeResponse | TwoFactorSetupRequiredResponse> {
         // Mesmo e-mail pode existir em apps diferentes (unique composto).
         // Se o cliente passa app_id, filtra direto. Senão e houver ambiguidade, devolve a lista
         // de apps disponíveis para o cliente escolher.
@@ -202,7 +202,8 @@ export class AuthService {
         // navegador que fez o pedido, não do nome que o app manda.
         // Vaga do Telegram (24/11/2026): só quando o controller já conferiu a
         // chave do bot (`x-telegram-key`) — nunca pelo que o corpo diz.
-        const tipo = navegador?.telegram === true ? 'telegram' : aparelhoService.tipoDe(navegador?.userAgent, navegador?.mobile, data.aparelho_nome);
+        // Vaga do cofre (24/11/2026, db/019): só quando o controller viu o Origin do próprio hub.
+        const tipo = navegador?.telegram === true ? 'telegram' : navegador?.cofre === true ? 'cofre' : aparelhoService.tipoDe(navegador?.userAgent, navegador?.mobile, data.aparelho_nome);
         const aparelho = aparelhoService.normalizar(data.aparelho_id, data.aparelho_nome, ip, tipo);
         await aparelhoService.conferir(user, aparelho);
 
@@ -481,7 +482,8 @@ export class AuthService {
         // A vaga veio assinada no desafio (`apt`); desafio sem ela (de antes de
         // 05/11/2026, vive 5 min) conta como celular.
         // `telegram` (24/11/2026) só existe no desafio se o login conferiu a chave do bot.
-        const tipo = decoded.apt === 'computador' || decoded.apt === 'telegram' ? decoded.apt : 'celular';
+        // `cofre` (24/11/2026) idem: só se o login veio da tela do próprio hub.
+        const tipo = decoded.apt === 'computador' || decoded.apt === 'telegram' || decoded.apt === 'cofre' ? decoded.apt : 'celular';
         const aparelho = aparelhoService.normalizar(decoded.apa, decoded.apn, ip, tipo);
         await aparelhoService.conferir(user, aparelho);
         return this.emitirSessao(user, 86400, await aparelhoService.prender(user, aparelho));

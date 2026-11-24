@@ -58,7 +58,7 @@ export class AuthController {
             // Vaga celular/computador (05/11/2026): o hub decide pelo navegador.
             const ua = req.get('user-agent');
             const mobile = req.get('sec-ch-ua-mobile');
-            const navegador: { userAgent?: string; mobile?: string; telegram?: boolean } = {
+            const navegador: { userAgent?: string; mobile?: string; telegram?: boolean; cofre?: boolean } = {
                 ...(ua ? { userAgent: ua } : {}),
                 ...(mobile ? { mobile } : {}),
             };
@@ -72,6 +72,11 @@ export class AuthController {
                 }
                 navegador.telegram = true;
             }
+            // "Meu cofre" do próprio hub (24/11/2026, db/019): a tela do hub guarda outro id de
+            // aparelho que o app da pessoa, e contaria como um segundo celular. Com o pedido
+            // marcado E vindo do endereço do hub (Origin, que página de outro site não forja), a
+            // conta de CPF ocupa a vaga `cofre`. Sem o Origin certo, a marca é ignorada.
+            if (req.body.cofre === true && veioDaTelaDoHub(req.get('origin'))) navegador.cofre = true;
             const result = await authService.login({ email, password, app_id, aparelho_id, aparelho_nome }, ip, navegador);
             await bloqueioService.registrarSucesso(appIdNum, ip, email);
             return res.status(200).json(result);
@@ -302,6 +307,16 @@ const chaveTelegramValida = (recebida: string): boolean => {
     return timingSafeEqual(h(recebida), h(esperada));
 };
 
+/** O pedido veio da própria tela do hub? Compara o Origin com o endereço público da UI (`UI_PUBLIC_URL`). */
+const veioDaTelaDoHub = (origin: string | undefined): boolean => {
+    if (!origin) return false;
+    try {
+        return new URL(origin).origin === new URL(process.env.UI_PUBLIC_URL || 'https://loginhub.astralwavelabel.com').origin;
+    } catch {
+        return false;
+    }
+};
+
 const responderAparelho = (res: Response, erro: Error & { aparelhoNome?: string | null; tipo?: string }) => {
     if (erro.message === 'APARELHO_DESCONHECIDO') {
         return res.status(409).json({
@@ -311,7 +326,7 @@ const responderAparelho = (res: Response, erro: Error & { aparelhoNome?: string 
     }
     const onde = erro.aparelhoNome ? ` (${erro.aparelhoNome})` : '';
     // Duas vagas (05/11/2026): a mensagem diz qual está ocupada.
-    const vaga = erro.tipo === 'computador' ? 'computador' : erro.tipo === 'celular' ? 'celular' : erro.tipo === 'telegram' ? 'Telegram' : 'aparelho';
+    const vaga = erro.tipo === 'computador' ? 'computador' : erro.tipo === 'celular' ? 'celular' : erro.tipo === 'telegram' ? 'Telegram' : erro.tipo === 'cofre' ? 'navegador (cofre do LoginHUB)' : 'aparelho';
     return res.status(409).json({
         error: 'APARELHO_EM_USO',
         aparelhoNome: erro.aparelhoNome ?? null,
@@ -923,7 +938,7 @@ export class AparelhoController {
         }
     }
 
-    /** POST /admin/aparelhos/:usuarioId/liberar — corpo `{ por, app_id, tipo? }`. Solta a vaga (`celular`/`computador`/`telegram`) ou, sem `tipo`, todas. */
+    /** POST /admin/aparelhos/:usuarioId/liberar — corpo `{ por, app_id, tipo? }`. Solta a vaga (`celular`/`computador`/`telegram`/`cofre`) ou, sem `tipo`, todas. */
     static async liberar(req: Request<{ usuarioId: string }>, res: Response) {
         try {
             const usuarioId = Number(req.params.usuarioId);
@@ -933,8 +948,8 @@ export class AparelhoController {
             const appId = Number(req.body?.app_id);
             if (!Number.isInteger(appId) || appId <= 0) return res.status(400).json({ error: 'app_id obrigatório.' });
             const tipoBruto = req.body?.tipo;
-            if (tipoBruto !== undefined && tipoBruto !== null && tipoBruto !== 'celular' && tipoBruto !== 'computador' && tipoBruto !== 'telegram') {
-                return res.status(400).json({ error: 'tipo deve ser celular, computador ou telegram.' });
+            if (tipoBruto !== undefined && tipoBruto !== null && tipoBruto !== 'celular' && tipoBruto !== 'computador' && tipoBruto !== 'telegram' && tipoBruto !== 'cofre') {
+                return res.status(400).json({ error: 'tipo deve ser celular, computador, telegram ou cofre.' });
             }
             await aparelhoService.liberar(usuarioId, appId, por, tipoBruto ?? undefined);
             return res.status(200).json({ ok: true });

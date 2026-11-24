@@ -45,7 +45,14 @@ let ultimoExpurgo = 0;
 
 export const ehContaDeCpf = (email: string | null | undefined): boolean => /^\d{11}$/.test(String(email ?? ''));
 
-const NOME_VAGA: Record<TipoAparelho, string> = { celular: 'celular', computador: 'computador', telegram: 'Telegram' };
+const NOME_VAGA: Record<TipoAparelho, string> = { celular: 'celular', computador: 'computador', telegram: 'Telegram', cofre: 'cofre do LoginHUB' };
+
+/**
+ * Vagas que passam para outro aparelho depois de 12 h sem uso: o computador e o
+ * cofre do LoginHUB (24/11/2026, db/019 — a tela do hub guarda outro id que o
+ * app, e limpar os dados do navegador não pode trancar a pessoa fora do cofre).
+ */
+const vagaExpira = (tipo: TipoAparelho): boolean => tipo === 'computador' || tipo === 'cofre';
 
 /**
  * Vaga do Telegram (24/11/2026, db/018): o bot da Sul faz o login de CPF do
@@ -85,9 +92,9 @@ export class AparelhoService {
         return { id: i, nome: n, ip: ip ? ip.slice(0, 64) : null, tipo };
     }
 
-    /** Vaga de computador parada há mais de 12 h. Celular não expira. */
+    /** Vaga de computador (ou do cofre) parada há mais de 12 h. Celular não expira. */
     expirado(v: Pick<Vinculo, 'tipo' | 'ultimoAcesso'>): boolean {
-        return v.tipo === 'computador' && Date.now() - v.ultimoAcesso.getTime() > COMPUTADOR_EXPIRA_MS;
+        return vagaExpira(v.tipo as TipoAparelho) && Date.now() - v.ultimoAcesso.getTime() > COMPUTADOR_EXPIRA_MS;
     }
 
     async preso(usuarioId: number, tipo: TipoAparelho): Promise<Vinculo | null> {
@@ -190,7 +197,7 @@ export class AparelhoService {
             },
             // Telegram: sem condição — o Telegram novo assume a vaga (ver `vagaLivre`).
             ...(vagaLivre(aparelho.tipo) ? {} : {
-                setWhere: aparelho.tipo === 'computador'
+                setWhere: vagaExpira(aparelho.tipo)
                     ? or(eq(usuariosAparelho.aparelhoId, aparelho.id), lt(usuariosAparelho.ultimoAcesso, corte))
                     : eq(usuariosAparelho.aparelhoId, aparelho.id),
             }),

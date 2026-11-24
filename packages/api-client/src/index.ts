@@ -256,7 +256,13 @@ export const authApi = {
    *              backend detectar ambiguidade, lança erro com `availableApps`
    *              em `error.response.data.availableApps`.
    */
-  login: async (email: string, password: string, appId?: string): Promise<AuthResult> => {
+  login: async (
+    email: string,
+    password: string,
+    appId?: string,
+    /** "Meu cofre" (db/019): o aparelho deste navegador e a marca que pede a vaga `cofre` à conta de CPF. */
+    cofre?: { aparelho: { id: string; nome: string } },
+  ): Promise<AuthResult> => {
     localStorage.removeItem('awl_token');
     localStorage.removeItem('awl_user');
     localStorage.removeItem('awl_app');
@@ -267,8 +273,13 @@ export const authApi = {
         throw new Error('Acesso Negado: Credenciais Mestra inválidas.');
     }
 
-    const payload: { email: string; password: string; app_id?: string } = { email, password };
+    const payload: { email: string; password: string; app_id?: string; aparelho_id?: string; aparelho_nome?: string; cofre?: boolean } = { email, password };
     if (appId) payload.app_id = appId;
+    if (cofre) {
+      payload.aparelho_id = cofre.aparelho.id;
+      payload.aparelho_nome = cofre.aparelho.nome;
+      payload.cofre = true;
+    }
 
     const { data } = await api.post<LoginResponse | TwoFactorChallengeResponse | TwoFactorSetupRequiredResponse>('/auth/login', payload);
 
@@ -667,7 +678,7 @@ export const aparelhoApi = {
     return data;
   },
   /** `tipo`: solta só a vaga do celular ou do computador; sem ele, as duas. */
-  liberar: async (usuarioId: number | string, por: string, appId?: string, tipo?: 'celular' | 'computador' | 'telegram'): Promise<void> => {
+  liberar: async (usuarioId: number | string, por: string, appId?: string, tipo?: 'celular' | 'computador' | 'telegram' | 'cofre'): Promise<void> => {
     await api.post(`/admin/aparelhos/${usuarioId}/liberar`, {
       por,
       ...(appId ? { app_id: Number(appId) } : {}),

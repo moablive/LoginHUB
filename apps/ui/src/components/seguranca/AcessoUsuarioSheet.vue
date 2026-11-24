@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { ChatBubbleLeftRightIcon, ComputerDesktopIcon, DevicePhoneMobileIcon, LockOpenIcon, ShieldCheckIcon } from '@heroicons/vue/24/outline';
+import { ChatBubbleLeftRightIcon, ComputerDesktopIcon, DevicePhoneMobileIcon, LockClosedIcon, LockOpenIcon, ShieldCheckIcon } from '@heroicons/vue/24/outline';
 import { aparelhoApi } from '@loginhub/api-client';
 import type { AparelhosDoApp, TipoAparelho, User } from '@loginhub/schema';
 import UiSheet from '@/components/ui/UiSheet.vue';
@@ -50,10 +50,12 @@ const VAGAS: { tipo: TipoAparelho; rotulo: string; icone: typeof DevicePhoneMobi
   { tipo: 'computador', rotulo: 'Computador', icone: ComputerDesktopIcon },
   // Bot do Telegram (24/11/2026, db/018): só aparece quando a pessoa entrou por ele.
   { tipo: 'telegram', rotulo: 'Telegram', icone: ChatBubbleLeftRightIcon },
+  // "Meu cofre" do hub (24/11/2026, db/019): só aparece quando a pessoa entrou por lá.
+  { tipo: 'cofre', rotulo: 'Cofre do LoginHUB', icone: LockClosedIcon },
 ];
 const vaga = (tipo: TipoAparelho): Preso | null => dados.value.presos.find((p) => p.tipo === tipo) ?? null;
 // Celular e computador sempre (livre ou ocupada); Telegram só quando ocupada.
-const vagasVisiveis = computed(() => VAGAS.filter((v) => v.tipo !== 'telegram' || vaga(v.tipo)));
+const vagasVisiveis = computed(() => VAGAS.filter((v) => (v.tipo !== 'telegram' && v.tipo !== 'cofre') || vaga(v.tipo)));
 const historico = computed(() => dados.value.registro);
 const ultimoLogin = computed(() => historico.value.find((r) => r.evento === 'entrou') ?? null);
 const ehCpf = computed(() => /^\d{11}$/.test(props.user?.email ?? ''));
@@ -185,6 +187,7 @@ async function liberar() {
           <ComputerDesktopIcon v-if="r.tipo === 'computador'" class="h-4 w-4" />
           <DevicePhoneMobileIcon v-else-if="r.tipo === 'celular'" class="h-4 w-4" />
           <ChatBubbleLeftRightIcon v-else-if="r.tipo === 'telegram'" class="h-4 w-4" />
+          <LockClosedIcon v-else-if="r.tipo === 'cofre'" class="h-4 w-4" />
           <span class="text-label">{{ r.aparelhoNome || 'aparelho sem nome' }}</span>
           <span v-if="r.ip" class="font-mono">{{ r.ip }}</span>
           <span v-if="r.detalhe">— {{ r.detalhe }}</span>

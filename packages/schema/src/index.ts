@@ -75,12 +75,18 @@ export interface LoginInputDTO {
      */
     aparelho_id?: string | undefined;
     aparelho_nome?: string | undefined;
+    /**
+     * Login feito pela tela "Meu cofre" do próprio hub (24/11/2026, db/019). Só vale
+     * junto do cabeçalho Origin do hub: aí a conta de CPF ocupa a vaga `cofre`.
+     */
+    cofre?: boolean | undefined;
 }
 
 /** Aparelho de um login, já limpo (ver `AparelhoService.normalizar`). */
 /** Vaga do aparelho (05/11/2026): cada conta de CPF tem um celular e um computador. */
 // 24/11/2026: + 'telegram', a vaga do bot do Telegram — só com a chave do bot (db/018).
-export type TipoAparelho = 'celular' | 'computador' | 'telegram';
+// 24/11/2026: + 'cofre', a vaga da tela "Meu cofre" do hub — só com o Origin do próprio hub (db/019).
+export type TipoAparelho = 'celular' | 'computador' | 'telegram' | 'cofre';
 
 export interface AparelhoDoLogin {
     id: string | null;
