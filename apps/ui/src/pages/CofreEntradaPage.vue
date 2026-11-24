@@ -13,6 +13,7 @@ import { useCofre, type ItemAberto } from '@/features/cofre/useCofre';
 import { digitalSuportada, ErroDigital } from '@/features/cofre/digital';
 import { entradaSuportada } from '@/features/cofre/entrada';
 import { ErroEntradaPorItem, itensDeLoginDoApp, passeDeCadastroPeloItem } from '@/features/cofre/entradaPorItem';
+import { lerTotp } from '@/features/cofre/cripto';
 
 /**
  * /cofre/entrada?passe=… (19/11/2026, db/016, pedido do dono: "a biometria do
@@ -47,7 +48,8 @@ const nomeDoAparelho = (): string => {
 const MENSAGEM_DIGITAL: Record<ErroDigital['codigo'], string> = {
   SEM_SUPORTE: 'Este navegador não tem passkey. Use a palavra-passe.',
   SEM_PRF: 'Este aparelho não devolveu o segredo da digital. Use a palavra-passe.',
-  CANCELADO: '',
+  // Aqui o silêncio parecia botão morto (24/11/2026): o leitor fechado sem digital também cai neste código.
+  CANCELADO: 'A digital não abriu o cofre: o leitor foi fechado ou este navegador não achou a digital. Tente de novo ou use a palavra-passe.',
   NAO_RECONHECIDA: 'Digital não reconhecida.',
 };
 function mensagemDe(e: unknown, padrao: string): string {
@@ -60,9 +62,18 @@ function mensagemDe(e: unknown, padrao: string): string {
 
 const entradas = computed<ItemAberto[]>(() => (pedido.value && aberto.value ? cofre.entradasDoApp(pedido.value.app.id) : []));
 // Sem chave de entrada ainda, mas com o login do app guardado no cofre: o cofre faz o login e guarda a chave.
+// Com mais de um item do mesmo endereço, o que tem o 2FA guardado vem primeiro: sem o código o hub recusa o login.
 const itensDeLogin = computed<ItemAberto[]>(() =>
-  pedido.value?.acao === 'entrar' && aberto.value && !entradas.value.length ? itensDeLoginDoApp(cofre.itens.value, pedido.value.app.origem) : [],
+  pedido.value?.acao === 'entrar' && aberto.value && !entradas.value.length
+    ? itensDeLoginDoApp(cofre.itens.value, pedido.value.app.origem).sort((a, b) => Number(!!lerTotp(b.totp)) - Number(!!lerTotp(a.totp)))
+    : [],
 );
+/** Dois itens com o mesmo usuário dariam dois botões iguais: aí o botão diz também o item e o cofre. */
+const rotuloDoItem = (i: ItemAberto): string => {
+  if (itensDeLogin.value.length < 2) return i.usuario;
+  const doCofre = cofre.cofres.value.find((c) => c.id === i.cofre_id)?.nome;
+  return `${i.usuario} · ${i.titulo}${doCofre ? ` (${doCofre})` : ''}${lerTotp(i.totp) ? '' : ' · sem 2FA'}`;
+};
 const jaGuardada = computed(() => !!pedido.value?.conta && entradas.value.some((i) => i.entrada?.usuario_id === pedido.value?.conta?.id));
 
 onMounted(async () => {
@@ -254,7 +265,7 @@ const texto = computed(() => {
             vezes, só assina.
           </p>
           <UiButton v-for="i in itensDeLogin" :key="i.id" tamanho="large" bloco :carregando="ocupado" @click="entrarComItem(i)">
-            <KeyIcon class="h-5 w-5" /> Entrar como {{ i.usuario }}
+            <KeyIcon class="h-5 w-5" /> Entrar como {{ rotuloDoItem(i) }}
           </UiButton>
         </template>
         <p v-else-if="!entradas.length" class="rounded-celula bg-fill-2 p-3 text-subhead">
