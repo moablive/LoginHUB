@@ -250,6 +250,35 @@ export const authApi = {
   },
 
   /**
+   * Login do master pela DIGITAL (db/020). `resposta` é a assinatura do aparelho
+   * já em JSON (apps/ui/src/features/masterDigital.ts); o hub confere e devolve a
+   * mesma sessão master do login com a chave.
+   */
+  loginMasterPelaDigital: async (challengeToken: string, resposta: unknown): Promise<AuthResult> => {
+    localStorage.removeItem('awl_token');
+    localStorage.removeItem('awl_user');
+    localStorage.removeItem('awl_app');
+    limparSuperAdmin();
+
+    const { data } = await api.post<LoginResponse>('/auth/master-passkey/login/verificar', { challengeToken, resposta });
+    if (typeof data.token !== 'string' || !data.token) throw new Error('O servidor não devolveu a sessão.');
+
+    marcarSuperAdmin();
+    localStorage.setItem('awl_token', data.token);
+    // O mesmo perfil que o login com a chave grava (ver `loginMaster`).
+    const adminUser: User = {
+      id: 'master-root-id',
+      nome: 'Super Administrator',
+      email: 'root@infrastructure.local',
+      role: 'master',
+      app_id: null,
+      status: 'ativo'
+    };
+    localStorage.setItem('awl_user', JSON.stringify(adminUser));
+    return { redirect: '/apps' };
+  },
+
+  /**
    * Login do usuário.
    * @param appId Opcional — quando o mesmo e-mail existe em apps diferentes,
    *              é necessário informar para desambiguar. Se omitido e o
@@ -728,6 +757,47 @@ export const organizacaoApi = {
   /** Tira da organização; a conta fica (sem organização, o painel não abre nada). */
   remover: async (categoriaId: number, usuarioId: number): Promise<void> => {
     await api.delete(`/admin/organizacoes/${categoriaId}/admins/${usuarioId}`);
+  },
+};
+
+// ==========================================
+// DIGITAL DO MASTER (db/020, 24/11/2026)
+// ==========================================
+// O pedido da digital ao aparelho mora na UI (apps/ui/src/features/masterDigital.ts).
+export interface OpcoesDaDigital {
+  opcoes: Record<string, any>;
+  challengeToken: string;
+}
+export interface DigitalDoMaster {
+  id: number;
+  nome: string;
+  criado_em: string | null;
+  ultimo_uso: string | null;
+}
+export const masterDigitalApi = {
+  /** A tela de login mostra o botão da digital? (público) */
+  disponivel: async (): Promise<boolean> => {
+    const { data } = await api.get<{ disponivel: boolean }>('/auth/master-passkey/disponivel');
+    return data.disponivel === true;
+  },
+  opcoesDeLogin: async (): Promise<OpcoesDaDigital> => {
+    const { data } = await api.post<OpcoesDaDigital>('/auth/master-passkey/login/opcoes', {});
+    return data;
+  },
+  opcoesDeRegistro: async (): Promise<OpcoesDaDigital> => {
+    const { data } = await api.post<OpcoesDaDigital>('/admin/master-passkeys/registro/opcoes', {});
+    return data;
+  },
+  registrar: async (challengeToken: string, resposta: unknown, nome: string): Promise<DigitalDoMaster> => {
+    const { data } = await api.post<DigitalDoMaster>('/admin/master-passkeys/registro/verificar', { challengeToken, resposta, nome });
+    return data;
+  },
+  listar: async (): Promise<DigitalDoMaster[]> => {
+    const { data } = await api.get<DigitalDoMaster[]>('/admin/master-passkeys');
+    return data;
+  },
+  tirar: async (id: number): Promise<void> => {
+    await api.delete(`/admin/master-passkeys/${id}`);
   },
 };
 

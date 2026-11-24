@@ -34,9 +34,10 @@ import { ehContaDeCpf } from './AparelhoService';
 const DESAFIO_TTL_SEGUNDOS = 300;
 const MAX_PASSKEYS_POR_CONTA = 10;
 
-type AcaoDoDesafio = 'passkey-registro' | 'passkey-login' | 'cofre-registro' | 'cofre-login';
+// `master-*` (db/020): o desafio da digital do master, conferido pelo MasterPasskeyService.
+export type AcaoDoDesafio = 'passkey-registro' | 'passkey-login' | 'cofre-registro' | 'cofre-login' | 'master-registro' | 'master-login';
 
-interface PasseDoDesafio {
+export interface PasseDoDesafio {
     action: AcaoDoDesafio;
     ch: string;
     jti: string;
@@ -49,7 +50,7 @@ interface PasseDoDesafio {
 // rate limit em memória): reiniciar esquece a lista, mas o passe vive 5 minutos.
 const passesUsados = new Map<string, number>();
 
-const queimarPasse = (passe: PasseDoDesafio): void => {
+export const queimarPasse = (passe: PasseDoDesafio): void => {
     const agora = Date.now();
     if (passesUsados.size > 2000) for (const [k, v] of passesUsados) if (v <= agora) passesUsados.delete(k);
     if (passesUsados.has(passe.jti)) throw new Error('CHALLENGE_INVALIDO');
@@ -65,10 +66,10 @@ const segredo = (): string => {
     return s;
 };
 
-const emitirPasse = (dados: Omit<PasseDoDesafio, 'jti' | 'exp'>): string =>
+export const emitirPasse = (dados: Omit<PasseDoDesafio, 'jti' | 'exp'>): string =>
     jwt.sign({ ...dados, jti: crypto.randomBytes(12).toString('hex') }, segredo(), { expiresIn: DESAFIO_TTL_SEGUNDOS });
 
-const lerPasse = (token: unknown, acao: AcaoDoDesafio | AcaoDoDesafio[]): PasseDoDesafio => {
+export const lerPasse = (token: unknown, acao: AcaoDoDesafio | AcaoDoDesafio[]): PasseDoDesafio => {
     let passe: PasseDoDesafio;
     try {
         passe = jwt.verify(String(token ?? ''), segredo()) as PasseDoDesafio;

@@ -1614,6 +1614,17 @@ Pedido do dono em 23/11/2026: os outros servidores (bf, PDV, Mac) usam o cofre s
 - **Forma antiga**: `hub-pass login --email <e-mail ou "master">` continua valendo (senha, 2FA e palavra-passe digitados na máquina; sempre a conta inteira). Máquinas aprovadas assim seguem funcionando e aparecem sem o botão **Cofres**.
 - Testes: `NODE_PATH=cli/hub-pass/node_modules npx tsx scripts/teste-cofre-pareamento.ts` (selo e código, sem servidor) e o ponta a ponta `scripts/teste-cofre-cli.ts`, que agora faz o papel da tela na aprovação e confere o alcance.
 
+#### Digital do master: entrar no painel com a biometria (v1.10.0)
+
+Pedido do dono em 24/11/2026: o master entra no painel com Touch ID / Face ID no lugar de digitar a Master Key. A chave **continua valendo** (painel e serviços); a digital é um caminho a mais, e é com a chave que se cadastra a digital de novo se os aparelhos se perderem.
+
+- **Como se usa**: entrar uma vez com a Master Key, tocar no ícone da digital no topo do painel e em **Ativar a digital do master neste aparelho** (cada aparelho cadastra a sua). Daí em diante a aba Master Key da tela de login mostra **Entrar com a digital**, com a chave embaixo como reserva.
+- **Banco**: `db/020_master_passkeys.sql`, tabela `master_passkeys` (o master não é linha de `usuarios`).
+- **Servidor**: `MasterPasskeyService` confere a assinatura do aparelho (`@simplewebauthn/server`, verificação do usuário exigida, domínio e origem do `UI_PUBLIC_URL`, desafio de uso único no mesmo passe das outras passkeys) e o `AuthService.sessaoMaster()` emite a mesma sessão do login com a chave, presa à chave vigente (trocar a Master Key derruba também as sessões abertas pela digital).
+- **Rotas**: públicas com rate limit em `/auth/master-passkey/` (`disponivel`, `login/opcoes`, `login/verificar`); só do master em `/admin/master-passkeys` (`registro/opcoes`, `registro/verificar`, listar, `DELETE /:id`).
+- **Tela**: `apps/ui/src/features/masterDigital.ts` (conversa com o aparelho), `components/seguranca/MasterDigitalSheet.vue` e o botão na `LoginPage.vue`.
+- O cofre também tem passkeys neste domínio (a digital que abre o cofre, com PRF). O login do master manda a lista das credenciais dele (`allowCredentials`) para o aparelho não oferecer uma do cofre.
+
 #### Digital do cofre no iPhone (v1.9.4)
 
 Pedido do dono em 24/11/2026: a digital funcionava no computador e, no iPhone, era cadastrada mas não abria o cofre (a digital "iPhone · Safari" ficava com último uso "nunca").

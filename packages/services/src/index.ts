@@ -16,6 +16,7 @@ export { BloqueioService, bloqueioService, LIMITE_POR_IP, LIMITE_POR_CONTA } fro
 export { AparelhoService, aparelhoService, ehContaDeCpf } from './AparelhoService';
 export { AssinaturaService, assinaturaService, iniciarConferenciaDeAssinaturas } from './AssinaturaService';
 export { PasskeyService, passkeyService } from './PasskeyService';
+export { MasterPasskeyService, masterPasskeyService } from './MasterPasskeyService';
 export { CofreService, cofreService } from './CofreService';
 import {
     LoginInputDTO,
@@ -122,6 +123,17 @@ const emitirSessaoMaster = (masterKey: string): LoginResponseDTO => {
 // 1. AUTH SERVICE
 // ==========================================
 export class AuthService {
+    /**
+     * Sessão master para quem JÁ provou ser o master por outro caminho que não a
+     * chave digitada: a digital do master, conferida pelo MasterPasskeyService
+     * (db/020). É a mesma sessão do login com a chave, presa à chave vigente.
+     */
+    public sessaoMaster(): LoginResponseDTO {
+        const validKey = masterKeyDoAmbiente();
+        if (!validKey) throw new Error('PASSKEY_INDISPONIVEL');
+        return emitirSessaoMaster(validKey);
+    }
+
     public async login(data: LoginInputDTO, ip: string | null = null, navegador?: { userAgent?: string; mobile?: string; telegram?: boolean; cofre?: boolean }): Promise<LoginResponseDTO | TwoFactorChallengeResponse | TwoFactorSetupRequiredResponse> {
         // Mesmo e-mail pode existir em apps diferentes (unique composto).
         // Se o cliente passa app_id, filtra direto. Senão e houver ambiguidade, devolve a lista

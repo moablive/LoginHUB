@@ -41,3 +41,19 @@ export const usuariosPasskeys = pgTable('usuarios_passkeys', {
     // Preenchido = a passkey não entra mais (revogada pelo dono ou pelo master).
     revogadaEm: timestamp('revogada_em'),
 });
+
+/**
+ * Passkeys do MASTER do painel (db/020_master_passkeys.sql, 24/11/2026). O master
+ * não é linha de `usuarios`: a digital dele entra no lugar de digitar a Master Key.
+ */
+export const masterPasskeys = pgTable('master_passkeys', {
+    id: serial('id').primaryKey(),
+    credentialId: varchar('credential_id', { length: 1024 }).notNull().unique(),
+    publicKey: text('public_key').notNull(),
+    counter: bigint('counter', { mode: 'number' }).notNull().default(0),
+    transports: varchar('transports', { length: 255 }),
+    nome: varchar('nome', { length: 120 }).notNull().default('Aparelho'),
+    criadoEm: timestamp('criado_em').defaultNow(),
+    ultimoUso: timestamp('ultimo_uso'),
+    revogadaEm: timestamp('revogada_em'),
+});

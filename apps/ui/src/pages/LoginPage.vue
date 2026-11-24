@@ -1,21 +1,23 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import axios from 'axios';
-import { EnvelopeIcon, KeyIcon, LockClosedIcon } from '@heroicons/vue/24/outline';
-import { authApi, marcarAdminDeOrganizacao } from '@loginhub/api-client';
+import { EnvelopeIcon, FingerPrintIcon, KeyIcon, LockClosedIcon } from '@heroicons/vue/24/outline';
+import { authApi, marcarAdminDeOrganizacao, masterDigitalApi } from '@loginhub/api-client';
 import AuthShell from '@/components/AuthShell.vue';
 import UiButton from '@/components/ui/UiButton.vue';
 import UiTextField from '@/components/ui/UiTextField.vue';
 import UiSegmented from '@/components/ui/UiSegmented.vue';
 import TwoFactorChallenge from '@/features/twoFactor/TwoFactorChallenge.vue';
+import { digitalMasterSuportada, entrarComADigitalDoMaster, ErroDigitalMaster } from '@/features/masterDigital';
 
 /**
  * Duas portas para o painel (19/11/2026, admins de organização, db/012):
  *
  *   Administrador → e-mail + senha + Google Authenticator. É a conta de quem
  *                   foi convidado para cuidar de uma organização (LBS, Sul…).
- *   Master Key    → o master do hub, como sempre foi.
+ *   Master Key    → o master do hub: pela digital do aparelho (db/020), quando
+ *                   cadastrada, ou pela chave, como sempre foi.
  */
 const router = useRouter();
 const route = useRoute();
@@ -80,6 +82,35 @@ async function entrarMaster() {
   }
 }
 
+// Digital do master (24/11/2026, db/020): com alguma digital cadastrada, a aba Master Key mostra o botão em
+// cima e a chave fica embaixo, como reserva.
+const digitalDoMaster = ref(false);
+onMounted(async () => {
+  if (!digitalMasterSuportada()) return;
+  try {
+    digitalDoMaster.value = await masterDigitalApi.disponivel();
+  } catch {
+    /* sem resposta: fica só a Master Key */
+  }
+});
+async function entrarComDigital() {
+  erro.value = null;
+  enviando.value = true;
+  try {
+    await entrarComADigitalDoMaster();
+    await router.push(volta() ?? '/dashboard');
+  } catch (e: unknown) {
+    erro.value =
+      e instanceof ErroDigitalMaster
+        ? e.codigo === 'CANCELADO'
+          ? 'A digital não foi lida: o leitor foi fechado ou este aparelho não tem a digital do master. Tente de novo ou use a Master Key.'
+          : 'Este navegador não conseguiu usar a digital. Use a Master Key.'
+        : mensagemDoErro(e, 'Não foi possível confirmar a digital. Entre com a Master Key.');
+  } finally {
+    enviando.value = false;
+  }
+}
+
 async function entrarAdmin() {
   erro.value = null;
   enviando.value = true;
@@ -122,7 +153,7 @@ function cancelarDesafio() {
   <AuthShell
     v-else
     titulo="LoginHub"
-    :texto="modo === 'admin' ? 'Entre com a conta de administrador da sua organização.' : 'Acesso total com a Master Key.'"
+    :texto="modo === 'admin' ? 'Entre com a conta de administrador da sua organização.' : digitalDoMaster ? 'Acesso total com a digital deste aparelho ou com a Master Key.' : 'Acesso total com a Master Key.'"
   >
     <UiSegmented v-model="modo" :opcoes="MODOS" rotulo="Tipo de acesso" class="mb-5" @update:model-value="trocarModo" />
 
@@ -148,6 +179,12 @@ function cancelarDesafio() {
     </form>
 
     <form v-else class="space-y-4" @submit.prevent="entrarMaster">
+      <template v-if="digitalDoMaster">
+        <UiButton tamanho="large" bloco :carregando="enviando" @click="entrarComDigital">
+          <FingerPrintIcon class="h-5 w-5" />{{ enviando ? 'Verificando…' : 'Entrar com a digital' }}
+        </UiButton>
+        <p class="text-center text-footnote text-label-2">ou com a Master Key</p>
+      </template>
       <UiTextField
         v-model="chave"
         rotulo="Master Key"
@@ -166,8 +203,8 @@ function cancelarDesafio() {
         <p class="mt-0.5 text-subhead text-danger">{{ erro }}</p>
       </div>
 
-      <UiButton type="submit" tamanho="large" bloco :carregando="enviando" :disabled="!chave">
-        {{ enviando ? 'Verificando…' : 'Acessar painel' }}
+      <UiButton type="submit" tamanho="large" bloco :variante="digitalDoMaster ? 'gray' : 'filled'" :carregando="enviando && !!chave" :disabled="!chave">
+        {{ enviando && chave ? 'Verificando…' : 'Acessar painel' }}
       </UiButton>
     </form>
 

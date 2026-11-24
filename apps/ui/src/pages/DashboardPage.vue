@@ -7,6 +7,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   LinkIcon,
+  FingerPrintIcon,
   LockClosedIcon,
   MagnifyingGlassIcon,
   PencilSquareIcon,
@@ -26,6 +27,7 @@ import { getAppIntegration } from '@/config/integrations';
 import { getAppLinks } from '@/config/appLinks';
 import { fundoDoLogo } from '@/config/logoFundo';
 import UiNavBar from '@/components/ui/UiNavBar.vue';
+import MasterDigitalSheet from '@/components/seguranca/MasterDigitalSheet.vue';
 import UiButton from '@/components/ui/UiButton.vue';
 import UiSearchField from '@/components/ui/UiSearchField.vue';
 import UiSection from '@/components/ui/UiSection.vue';
@@ -64,6 +66,8 @@ const mostrarErro = (titulo: string, mensagem: string) => (alerta.value = { titu
 // não oferece o que não vai funcionar.
 const eu = ref<EscopoDoPainel | null>(null);
 const master = computed(() => eu.value?.master === true);
+// Digital do master (db/020): cadastra a biometria deste aparelho para entrar sem digitar a Master Key.
+const mostrarDigitalMaster = ref(false);
 // "Convidar admin": aberta com a organização do grupo (ou a primeira).
 const adminsDe = ref<number | null | undefined>(undefined);
 const mostrarAdmins = computed(() => adminsDe.value !== undefined);
@@ -223,6 +227,7 @@ const seta =
 
 <template>
   <div class="animate-fade-in">
+    <MasterDigitalSheet v-if="master" :aberto="mostrarDigitalMaster" @fechar="mostrarDigitalMaster = false" />
     <UiNavBar
       titulo="Aplicativos"
       :subtitulo="eu && !eu.master ? `LoginHub · ${eu.nome} · ${eu.organizacoes.map((o) => o.nome).join(', ')}` : 'LoginHub · gestão centralizada de aplicativos e infraestrutura'"
@@ -230,6 +235,9 @@ const seta =
       <template #acoes>
         <UiButton v-if="master" variante="plain" icone aria-label="Categorias" title="Criar, renomear e ordenar as categorias" @click="mostrarCategorias = true">
           <TagIcon class="h-6 w-6" />
+        </UiButton>
+        <UiButton v-if="master" variante="plain" icone aria-label="Digital do master" title="Entrar no painel com a digital (Touch ID, Face ID)" @click="mostrarDigitalMaster = true">
+          <FingerPrintIcon class="h-6 w-6" />
         </UiButton>
         <UiButton v-if="master" variante="gray" tamanho="small" to="/cofre" title="Cofre de senhas e códigos 2FA, cifrado no navegador">
           <LockClosedIcon class="h-4 w-4" />

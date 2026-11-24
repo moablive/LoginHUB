@@ -11,6 +11,7 @@ import {
 } from '../controllers';
 import { VendaPublicaController, VendaAdminController } from '../controllers/assinaturas';
 import { PasskeyController } from '../controllers/passkeys';
+import { MasterPasskeyController } from '../controllers/masterPasskeys';
 import { CofreController } from '../controllers/cofre';
 import { EntradaController } from '../controllers/entradas';
 import {
@@ -109,6 +110,15 @@ passkeyRouter.delete('/:id', ...gestao, PasskeyController.revogar as any);
 
 authRouter.use('/passkey', passkeyRouter);
 
+// -- Digital do master (db/020): entrar no painel com a biometria no lugar de digitar a
+//    Master Key. Aqui só o que é público (a credencial é a assinatura do aparelho);
+//    cadastrar, listar e tirar moram no adminRouter, atrás do `soMaster`.
+const masterPasskeyRouter = Router();
+masterPasskeyRouter.get('/disponivel', rateLimitPasskey as any, MasterPasskeyController.disponivel as any);
+masterPasskeyRouter.post('/login/opcoes', rateLimitPasskey as any, MasterPasskeyController.opcoesDeLogin as any);
+masterPasskeyRouter.post('/login/verificar', rateLimitPasskey as any, MasterPasskeyController.verificarLogin as any);
+authRouter.use('/master-passkey', masterPasskeyRouter);
+
 // -- Entrada pelo cofre (db/016): a chave da conta mora cifrada no cofre do
 //    LoginHUB e assina um desafio de uso único. Mesmas regras da passkey:
 //    entrar é público com rate limit; cadastrar e gerir exigem sessão completa.
@@ -184,6 +194,12 @@ mainRouter.use('/admin', orgRouter);
 const adminRouter = Router();
 adminRouter.use(adminMiddleware as any);
 adminRouter.use(soMaster as any);
+
+// -- Digital do master (db/020): só o master cadastra, lista e tira.
+adminRouter.post('/master-passkeys/registro/opcoes', MasterPasskeyController.opcoesDeRegistro as any);
+adminRouter.post('/master-passkeys/registro/verificar', MasterPasskeyController.verificarRegistro as any);
+adminRouter.get('/master-passkeys', MasterPasskeyController.listar as any);
+adminRouter.delete('/master-passkeys/:id', MasterPasskeyController.revogar as any);
 
 // -- Apps
 adminRouter.post('/apps', AppController.createApp as any);
