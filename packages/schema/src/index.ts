@@ -79,7 +79,8 @@ export interface LoginInputDTO {
 
 /** Aparelho de um login, já limpo (ver `AparelhoService.normalizar`). */
 /** Vaga do aparelho (05/11/2026): cada conta de CPF tem um celular e um computador. */
-export type TipoAparelho = 'celular' | 'computador';
+// 24/11/2026: + 'telegram', a vaga do bot do Telegram — só com a chave do bot (db/018).
+export type TipoAparelho = 'celular' | 'computador' | 'telegram';
 
 export interface AparelhoDoLogin {
     id: string | null;

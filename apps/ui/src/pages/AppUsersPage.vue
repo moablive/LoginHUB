@@ -125,7 +125,7 @@ const userAcesso = ref<User | null>(null);
 function ondeEsta(u: User): { texto: string; ip: string | null; conectado: boolean } | null {
   const vagas = aparelhoDe.value.get(String(u.id));
   if (vagas?.length) {
-    const texto = vagas.map((p) => `${p.tipo === 'computador' ? '💻' : '📱'} ${p.aparelhoNome || 'aparelho sem nome'}`).join('  ·  ');
+    const texto = vagas.map((p) => `${p.tipo === 'computador' ? '💻' : p.tipo === 'telegram' ? '💬' : '📱'} ${p.aparelhoNome || 'aparelho sem nome'}`).join('  ·  ');
     return { texto, ip: vagas.length === 1 ? (vagas[0]?.ip ?? null) : null, conectado: true };
   }
   const r = ultimoLoginDe.value.get(String(u.id));

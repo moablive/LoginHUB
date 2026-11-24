@@ -45,7 +45,16 @@ let ultimoExpurgo = 0;
 
 export const ehContaDeCpf = (email: string | null | undefined): boolean => /^\d{11}$/.test(String(email ?? ''));
 
-const NOME_VAGA: Record<TipoAparelho, string> = { celular: 'celular', computador: 'computador' };
+const NOME_VAGA: Record<TipoAparelho, string> = { celular: 'celular', computador: 'computador', telegram: 'Telegram' };
+
+/**
+ * Vaga do Telegram (24/11/2026, db/018): o bot da Sul faz o login de CPF do
+ * servidor, sem navegador. Ela não tranca ninguém — um Telegram novo da mesma
+ * pessoa assume a vaga — porque quem autoriza o uso do bot dali em diante é o
+ * vínculo do lado do app, que confere nível e status no hub a cada consulta.
+ * Só serve para o bot não tomar a vaga do celular de verdade.
+ */
+const vagaLivre = (tipo: TipoAparelho): boolean => tipo === 'telegram';
 
 type Vinculo = typeof usuariosAparelho.$inferSelect;
 type Conta = { id: number; email: string; app_id: number | null };
@@ -144,7 +153,7 @@ export class AparelhoService {
             throw new Error('APARELHO_DESCONHECIDO');
         }
         const p = await this.preso(user.id, aparelho.tipo);
-        if (p && p.aparelhoId !== aparelho.id && !this.expirado(p)) await this.recusar(user, aparelho, p);
+        if (p && p.aparelhoId !== aparelho.id && !this.expirado(p) && !vagaLivre(aparelho.tipo)) await this.recusar(user, aparelho, p);
     }
 
     /**
@@ -179,9 +188,12 @@ export class AparelhoService {
                 // Mesmo aparelho: guarda o "desde"; vaga tomada de um computador expirado: começa agora.
                 desde: sql`CASE WHEN ${usuariosAparelho.aparelhoId} = excluded.aparelho_id THEN ${usuariosAparelho.desde} ELSE excluded.desde END`,
             },
-            setWhere: aparelho.tipo === 'computador'
-                ? or(eq(usuariosAparelho.aparelhoId, aparelho.id), lt(usuariosAparelho.ultimoAcesso, corte))
-                : eq(usuariosAparelho.aparelhoId, aparelho.id),
+            // Telegram: sem condição — o Telegram novo assume a vaga (ver `vagaLivre`).
+            ...(vagaLivre(aparelho.tipo) ? {} : {
+                setWhere: aparelho.tipo === 'computador'
+                    ? or(eq(usuariosAparelho.aparelhoId, aparelho.id), lt(usuariosAparelho.ultimoAcesso, corte))
+                    : eq(usuariosAparelho.aparelhoId, aparelho.id),
+            }),
         }).returning({ aparelhoId: usuariosAparelho.aparelhoId });
         if (!gravou.length) await this.recusar(user, aparelho, await this.preso(user.id, aparelho.tipo));
 
@@ -189,7 +201,9 @@ export class AparelhoService {
             void this.registrar({
                 appId, usuarioId: user.id, conta: user.email, evento: 'saiu',
                 aparelho: { id: anterior.aparelhoId, nome: anterior.aparelhoNome, ip: anterior.ip, tipo: aparelho.tipo },
-                detalhe: `${NOME_VAGA[aparelho.tipo]} parado há mais de ${COMPUTADOR_EXPIRA_HORAS} h — vaga passou para ${aparelho.nome ?? 'outro aparelho'}`,
+                detalhe: vagaLivre(aparelho.tipo)
+                    ? `${NOME_VAGA[aparelho.tipo]} trocado — vaga passou para ${aparelho.nome ?? 'outro Telegram'}`
+                    : `${NOME_VAGA[aparelho.tipo]} parado há mais de ${COMPUTADOR_EXPIRA_HORAS} h — vaga passou para ${aparelho.nome ?? 'outro aparelho'}`,
             });
         }
         // Mesmo aparelho preso na OUTRA vaga desta conta (ex.: vínculo antigo

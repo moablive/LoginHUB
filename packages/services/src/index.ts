@@ -122,7 +122,7 @@ const emitirSessaoMaster = (masterKey: string): LoginResponseDTO => {
 // 1. AUTH SERVICE
 // ==========================================
 export class AuthService {
-    public async login(data: LoginInputDTO, ip: string | null = null, navegador?: { userAgent?: string; mobile?: string }): Promise<LoginResponseDTO | TwoFactorChallengeResponse | TwoFactorSetupRequiredResponse> {
+    public async login(data: LoginInputDTO, ip: string | null = null, navegador?: { userAgent?: string; mobile?: string; telegram?: boolean }): Promise<LoginResponseDTO | TwoFactorChallengeResponse | TwoFactorSetupRequiredResponse> {
         // Mesmo e-mail pode existir em apps diferentes (unique composto).
         // Se o cliente passa app_id, filtra direto. Senão e houver ambiguidade, devolve a lista
         // de apps disponíveis para o cliente escolher.
@@ -200,7 +200,10 @@ export class AuthService {
         // aqui, antes do 2FA — mas só o login completo prende (ver AparelhoService).
         // Duas vagas desde 05/11/2026 (celular + computador): a vaga sai do
         // navegador que fez o pedido, não do nome que o app manda.
-        const aparelho = aparelhoService.normalizar(data.aparelho_id, data.aparelho_nome, ip, aparelhoService.tipoDe(navegador?.userAgent, navegador?.mobile, data.aparelho_nome));
+        // Vaga do Telegram (24/11/2026): só quando o controller já conferiu a
+        // chave do bot (`x-telegram-key`) — nunca pelo que o corpo diz.
+        const tipo = navegador?.telegram === true ? 'telegram' : aparelhoService.tipoDe(navegador?.userAgent, navegador?.mobile, data.aparelho_nome);
+        const aparelho = aparelhoService.normalizar(data.aparelho_id, data.aparelho_nome, ip, tipo);
         await aparelhoService.conferir(user, aparelho);
 
         // Senha conferiu — mas isso pode não bastar.
@@ -477,7 +480,9 @@ export class AuthService {
         // se outro concluiu o login entre a senha e o código).
         // A vaga veio assinada no desafio (`apt`); desafio sem ela (de antes de
         // 05/11/2026, vive 5 min) conta como celular.
-        const aparelho = aparelhoService.normalizar(decoded.apa, decoded.apn, ip, decoded.apt === 'computador' ? 'computador' : 'celular');
+        // `telegram` (24/11/2026) só existe no desafio se o login conferiu a chave do bot.
+        const tipo = decoded.apt === 'computador' || decoded.apt === 'telegram' ? decoded.apt : 'celular';
+        const aparelho = aparelhoService.normalizar(decoded.apa, decoded.apn, ip, tipo);
         await aparelhoService.conferir(user, aparelho);
         return this.emitirSessao(user, 86400, await aparelhoService.prender(user, aparelho));
     }

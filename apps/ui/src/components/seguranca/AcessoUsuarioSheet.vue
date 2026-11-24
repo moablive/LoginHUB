@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { ComputerDesktopIcon, DevicePhoneMobileIcon, LockOpenIcon, ShieldCheckIcon } from '@heroicons/vue/24/outline';
+import { ChatBubbleLeftRightIcon, ComputerDesktopIcon, DevicePhoneMobileIcon, LockOpenIcon, ShieldCheckIcon } from '@heroicons/vue/24/outline';
 import { aparelhoApi } from '@loginhub/api-client';
 import type { AparelhosDoApp, TipoAparelho, User } from '@loginhub/schema';
 import UiSheet from '@/components/ui/UiSheet.vue';
@@ -48,8 +48,12 @@ async function carregar() {
 const VAGAS: { tipo: TipoAparelho; rotulo: string; icone: typeof DevicePhoneMobileIcon }[] = [
   { tipo: 'celular', rotulo: 'Celular', icone: DevicePhoneMobileIcon },
   { tipo: 'computador', rotulo: 'Computador', icone: ComputerDesktopIcon },
+  // Bot do Telegram (24/11/2026, db/018): só aparece quando a pessoa entrou por ele.
+  { tipo: 'telegram', rotulo: 'Telegram', icone: ChatBubbleLeftRightIcon },
 ];
 const vaga = (tipo: TipoAparelho): Preso | null => dados.value.presos.find((p) => p.tipo === tipo) ?? null;
+// Celular e computador sempre (livre ou ocupada); Telegram só quando ocupada.
+const vagasVisiveis = computed(() => VAGAS.filter((v) => v.tipo !== 'telegram' || vaga(v.tipo)));
 const historico = computed(() => dados.value.registro);
 const ultimoLogin = computed(() => historico.value.find((r) => r.evento === 'entrou') ?? null);
 const ehCpf = computed(() => /^\d{11}$/.test(props.user?.email ?? ''));
@@ -106,7 +110,7 @@ async function liberar() {
       <UiSection titulo="Onde está autenticado" lista>
         <!-- Conta de CPF: as duas vagas -->
         <template v-if="ehCpf">
-          <div v-for="v in VAGAS" :key="v.tipo" class="flex flex-wrap items-center gap-3 px-4 py-3">
+          <div v-for="v in vagasVisiveis" :key="v.tipo" class="flex flex-wrap items-center gap-3 px-4 py-3">
             <component :is="v.icone" class="h-7 w-7 shrink-0" :class="vaga(v.tipo) && !vaga(v.tipo)!.expirado ? 'text-success' : 'text-label-3'" />
             <div class="min-w-0 flex-1">
               <template v-if="vaga(v.tipo)">
@@ -180,6 +184,7 @@ async function liberar() {
           <UiBadge :tom="TOM[r.evento] ?? 'neutro'">{{ ROTULO[r.evento] ?? r.evento }}</UiBadge>
           <ComputerDesktopIcon v-if="r.tipo === 'computador'" class="h-4 w-4" />
           <DevicePhoneMobileIcon v-else-if="r.tipo === 'celular'" class="h-4 w-4" />
+          <ChatBubbleLeftRightIcon v-else-if="r.tipo === 'telegram'" class="h-4 w-4" />
           <span class="text-label">{{ r.aparelhoNome || 'aparelho sem nome' }}</span>
           <span v-if="r.ip" class="font-mono">{{ r.ip }}</span>
           <span v-if="r.detalhe">— {{ r.detalhe }}</span>

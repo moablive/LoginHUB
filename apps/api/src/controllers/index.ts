@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { createHash, timingSafeEqual } from 'crypto';
 import { AuthService, AppService, UserService, CategoriaService, twoFactorService, bloqueioService, aparelhoService, organizacaoService } from '@loginhub/services';
 import { ipDoCliente, escopoDe } from '@loginhub/middlewares';
 import { LoginInputDTO, CreateAppDTO, UpdateAppDTO, CreateUserDTO, UpdateUserDTO, DbError, DirecaoMovimento, CreateCategoriaDTO, UpdateCategoriaDTO } from '@loginhub/schema';
@@ -57,10 +58,20 @@ export class AuthController {
             // Vaga celular/computador (05/11/2026): o hub decide pelo navegador.
             const ua = req.get('user-agent');
             const mobile = req.get('sec-ch-ua-mobile');
-            const navegador: { userAgent?: string; mobile?: string } = {
+            const navegador: { userAgent?: string; mobile?: string; telegram?: boolean } = {
                 ...(ua ? { userAgent: ua } : {}),
                 ...(mobile ? { mobile } : {}),
             };
+            // Bot do Telegram (24/11/2026): com a chave dele, o login de CPF ocupa a
+            // vaga `telegram` e não a do celular da pessoa. Chave errada é recusada
+            // (não vira login comum) para o erro de configuração aparecer.
+            const chaveTelegram = req.get('x-telegram-key');
+            if (chaveTelegram !== undefined) {
+                if (!chaveTelegramValida(chaveTelegram)) {
+                    return res.status(403).json({ error: 'CHAVE_TELEGRAM_INVALIDA', message: 'Chave do bot do Telegram inválida.' });
+                }
+                navegador.telegram = true;
+            }
             const result = await authService.login({ email, password, app_id, aparelho_id, aparelho_nome }, ip, navegador);
             await bloqueioService.registrarSucesso(appIdNum, ip, email);
             return res.status(200).json(result);
@@ -279,6 +290,18 @@ const verificarComListaNegra = async (
  * bateu — o que impede é o outro aparelho, e o app mostra o nome dele para a
  * pessoa saber onde sair (ou pedir ao escritório o "Liberar").
  */
+/**
+ * `x-telegram-key` contra `HUB_TELEGRAM_KEY` (24/11/2026). Sem a variável no
+ * `.env`, a vaga do Telegram fica desligada. Compara o hash para o tempo não
+ * depender do tamanho da chave.
+ */
+const chaveTelegramValida = (recebida: string): boolean => {
+    const esperada = process.env.HUB_TELEGRAM_KEY ?? '';
+    if (esperada.length < 32) return false;
+    const h = (v: string) => createHash('sha256').update(v).digest();
+    return timingSafeEqual(h(recebida), h(esperada));
+};
+
 const responderAparelho = (res: Response, erro: Error & { aparelhoNome?: string | null; tipo?: string }) => {
     if (erro.message === 'APARELHO_DESCONHECIDO') {
         return res.status(409).json({
@@ -288,7 +311,7 @@ const responderAparelho = (res: Response, erro: Error & { aparelhoNome?: string 
     }
     const onde = erro.aparelhoNome ? ` (${erro.aparelhoNome})` : '';
     // Duas vagas (05/11/2026): a mensagem diz qual está ocupada.
-    const vaga = erro.tipo === 'computador' ? 'computador' : erro.tipo === 'celular' ? 'celular' : 'aparelho';
+    const vaga = erro.tipo === 'computador' ? 'computador' : erro.tipo === 'celular' ? 'celular' : erro.tipo === 'telegram' ? 'Telegram' : 'aparelho';
     return res.status(409).json({
         error: 'APARELHO_EM_USO',
         aparelhoNome: erro.aparelhoNome ?? null,
@@ -900,7 +923,7 @@ export class AparelhoController {
         }
     }
 
-    /** POST /admin/aparelhos/:usuarioId/liberar — corpo `{ por, app_id, tipo? }`. Solta a vaga (`celular`/`computador`) ou, sem `tipo`, as duas. */
+    /** POST /admin/aparelhos/:usuarioId/liberar — corpo `{ por, app_id, tipo? }`. Solta a vaga (`celular`/`computador`/`telegram`) ou, sem `tipo`, todas. */
     static async liberar(req: Request<{ usuarioId: string }>, res: Response) {
         try {
             const usuarioId = Number(req.params.usuarioId);
@@ -910,8 +933,8 @@ export class AparelhoController {
             const appId = Number(req.body?.app_id);
             if (!Number.isInteger(appId) || appId <= 0) return res.status(400).json({ error: 'app_id obrigatório.' });
             const tipoBruto = req.body?.tipo;
-            if (tipoBruto !== undefined && tipoBruto !== null && tipoBruto !== 'celular' && tipoBruto !== 'computador') {
-                return res.status(400).json({ error: 'tipo deve ser celular ou computador.' });
+            if (tipoBruto !== undefined && tipoBruto !== null && tipoBruto !== 'celular' && tipoBruto !== 'computador' && tipoBruto !== 'telegram') {
+                return res.status(400).json({ error: 'tipo deve ser celular, computador ou telegram.' });
             }
             await aparelhoService.liberar(usuarioId, appId, por, tipoBruto ?? undefined);
             return res.status(200).json({ ok: true });

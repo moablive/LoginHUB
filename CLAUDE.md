@@ -136,6 +136,11 @@ bump deixa o mecanismo mudo. Detalhes na seção *Versionamento* do README.
   só enquanto nenhum aparelho estiver preso). Registro guardado 6 meses (LGPD). Solta no
   logout com o token do aparelho preso ou no `POST /admin/aparelhos/:id/liberar`.
   Registro de tudo (nome + IP) em `login_aparelhos`. E-mail não é preso.
+  Vagas: celular e computador (05/11/2026, `db/008`) e **telegram** (24/11/2026,
+  `db/018`): o bot do Telegram da Sul faz o login de CPF do servidor e manda
+  `x-telegram-key` = `HUB_TELEGRAM_KEY` do `.env`; só com a chave o hub dá a vaga
+  `telegram` (chave errada → 403, sem a variável a vaga fica desligada). Ela
+  não tranca ninguém: um Telegram novo da mesma pessoa assume a vaga.
 
 - **Admins de organização** (19/11/2026, `db/012_admins_organizacao.sql`): o `/admin` tem dois
   roteadores — `orgRouter` (rotas abertas ao admin de organização, cada uma com guarda do alvo) e
