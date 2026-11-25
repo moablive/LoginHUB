@@ -47,6 +47,8 @@ export interface HubSessionData {
     expiresIn: number;
     usuario?: HubUser;
     app?: HubApp;
+    /** Chave de aparelho confiável (db/021 do hub): só no login completo de conta de CPF de app com `aparelho_confiavel`. */
+    aparelho_confianca?: string;
 }
 
 export type MetodoSegundoFator = 'totp' | 'backup';
@@ -131,6 +133,13 @@ export interface HubAuthConfig {
      * neste navegador e um nome legível ("Android · SM-A146M · Chrome").
      */
     aparelho?: () => { id: string; nome: string } | Promise<{ id: string; nome: string }>;
+    /**
+     * Chave do storage para a chave de aparelho confiável (24/11/2026, db/021 do hub).
+     * Em app com `aparelho_confiavel` (Sul), o login completo de conta de CPF devolve
+     * `aparelho_confianca`; o kit guarda e manda nos próximos logins deste aparelho,
+     * que entram só com CPF + CPF. Padrão: `awl_aparelho_confianca`. Só vale com `aparelho`.
+     */
+    confiancaKey?: string;
 }
 
 // ==========================================
@@ -169,6 +178,7 @@ export function createHubAuth(config: HubAuthConfig) {
     const TOKEN_KEY = config.tokenKey ?? 'awl_token';
     const USER_KEY = config.userKey ?? 'awl_user';
     const APP_KEY = config.appKey ?? 'awl_app';
+    const CONFIANCA_KEY = config.confiancaKey ?? 'awl_aparelho_confianca';
 
     /** Renovação em voo, compartilhada por todos os chamadores. Ver `refresh`. */
     let refreshEmVoo: Promise<string | null> | null = null;
@@ -214,6 +224,9 @@ export function createHubAuth(config: HubAuthConfig) {
         if (textoUtil(data.token)) store.set(TOKEN_KEY, data.token);
         if (data.usuario) store.set(USER_KEY, JSON.stringify(data.usuario));
         if (data.app) store.set(APP_KEY, JSON.stringify(data.app));
+        // Aparelho registrado (db/021): a chave sai só no login completo e não sai no
+        // logout — o hub já a invalida ao soltar a vaga.
+        if (textoUtil(data.aparelho_confianca)) store.set(CONFIANCA_KEY, data.aparelho_confianca);
     }
 
     function limparSessao(): void {
@@ -260,6 +273,8 @@ export function createHubAuth(config: HubAuthConfig) {
                 const a = await config.aparelho();
                 body.aparelho_id = a.id;
                 body.aparelho_nome = a.nome;
+                const confianca = store.get(CONFIANCA_KEY);
+                if (textoUtil(confianca)) body.aparelho_confianca = confianca;
             }
 
             const data = await chamar<Record<string, unknown>>('/auth/login', { body });
