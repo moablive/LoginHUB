@@ -5,7 +5,9 @@ import {
   ChevronDownIcon,
   ChevronUpDownIcon,
   ChevronUpIcon,
+  ChatBubbleLeftRightIcon,
   ClipboardDocumentIcon,
+  ComputerDesktopIcon,
   DevicePhoneMobileIcon,
   EllipsisHorizontalIcon,
   KeyIcon,
@@ -132,6 +134,12 @@ function ondeEsta(u: User): { texto: string; ip: string | null; conectado: boole
   if (r) return { texto: `último login ${quandoCurto(r.criadoEm)} · ${r.aparelhoNome || 'aparelho sem nome'}`, ip: r.ip, conectado: false };
   return null;
 }
+
+// Dispositivos na folha do usuário (25/11/2026, pedido do dono): ao tocar no
+// nome, a folha já lista os aparelhos; tocar num deles abre a ficha (Liberar e histórico).
+const ICONE_APARELHO = { celular: DevicePhoneMobileIcon, computador: ComputerDesktopIcon, telegram: ChatBubbleLeftRightIcon, cofre: LockClosedIcon };
+const ROTULO_APARELHO = { celular: 'Celular', computador: 'Computador', telegram: 'Telegram', cofre: 'Cofre do LoginHUB' };
+const dispositivosDe = (u: User) => aparelhoDe.value.get(String(u.id)) ?? [];
 
 function quandoCurto(iso: string): string {
   const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
@@ -697,8 +705,31 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
     <!-- FOLHA DE AÇÕES: todas as opções do usuário juntas (celular e computador) -->
     <UiSheet :aberto="!!userAcoes" :titulo="userAcoes?.nome || ''" :subtitulo="userAcoes?.email" largura="sm" @fechar="userAcoes = null">
       <div v-if="userAcoes" class="space-y-6">
+        <UiSection :titulo="`Dispositivos (${dispositivosDe(userAcoes).length})`" lista>
+          <UiRow v-for="p in dispositivosDe(userAcoes)" :key="p.tipo" clicavel chevron @click="acao((u) => (userAcesso = u))">
+            <template #icone>
+              <component :is="ICONE_APARELHO[p.tipo]" :class="p.expirado ? 'text-label-3' : 'text-success'" />
+            </template>
+            <span class="flex items-center gap-2">
+              <span class="truncate text-body text-label">{{ p.aparelhoNome || 'aparelho sem nome' }}</span>
+              <UiBadge v-if="p.expirado" tom="warning">Parado</UiBadge>
+              <UiBadge v-else tom="success">Conectado</UiBadge>
+            </span>
+            <span class="block truncate text-footnote text-label-2">
+              {{ ROTULO_APARELHO[p.tipo] }}<template v-if="p.ip"> · <span class="font-mono">{{ p.ip }}</span></template>
+              · último acesso {{ quandoCurto(p.ultimoAcesso) }}
+            </span>
+          </UiRow>
+          <UiRow v-if="!dispositivosDe(userAcoes).length" clicavel chevron @click="acao((u) => (userAcesso = u))">
+            <template #icone><DevicePhoneMobileIcon class="text-label-3" /></template>
+            <span class="block truncate text-body text-label-2">Nenhum aparelho conectado</span>
+            <span class="block truncate text-footnote text-label-2">
+              {{ ultimoLoginDe.get(String(userAcoes.id)) ? ondeEsta(userAcoes)?.texto : 'sem login no registro' }}
+            </span>
+          </UiRow>
+        </UiSection>
         <UiSection lista>
-          <UiRow clicavel titulo="Onde está autenticado" subtitulo="Aparelho, IP e histórico de logins" @click="acao((u) => (userAcesso = u))">
+          <UiRow clicavel titulo="Onde está autenticado" subtitulo="Liberar aparelho e histórico de logins" @click="acao((u) => (userAcesso = u))">
             <template #icone><DevicePhoneMobileIcon class="text-success" /></template>
           </UiRow>
           <UiRow clicavel titulo="Editar dados" @click="acao((u) => (userToEdit = u))">
