@@ -37,7 +37,7 @@ import CofreFolha from '@/components/cofre/CofreFolha.vue';
 import CofreLista from '@/components/cofre/CofreLista.vue';
 import CofreIcone from '@/components/cofre/CofreIcone.vue';
 import type { AparenciaCofre } from '@/features/cofre/aparencia';
-import { useCofre, type ItemAberto, type ItemCofre } from '@/features/cofre/useCofre';
+import { TEMPOS_TRANCA_MIN, useCofre, type ItemAberto, type ItemCofre } from '@/features/cofre/useCofre';
 import { codigoTotp, gerarSenha, lerTotp, segundosRestantes } from '@/features/cofre/cripto';
 import { digitalSuportada, ErroDigital } from '@/features/cofre/digital';
 
@@ -278,42 +278,19 @@ watch(
 const dataHora = (d: string | Date | null) =>
   d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
 
-// --- tranca sozinho: o tempo sem mexer (ou com a aba some) é escolha do dono, por aparelho: 5 min a 1 h
-const TEMPOS_TRANCA_MIN = [5, 10, 15, 30, 60] as const;
-const CHAVE_TEMPO_TRANCA = 'loginhub.cofre.tranca-min';
-function tempoGuardado(): number {
-  try {
-    const n = Number(localStorage.getItem(CHAVE_TEMPO_TRANCA));
-    return (TEMPOS_TRANCA_MIN as readonly number[]).includes(n) ? n : 5;
-  } catch {
-    return 5;
-  }
-}
-const trancaMin = ref<number>(tempoGuardado());
-watch(trancaMin, (min) => {
-  try {
-    localStorage.setItem(CHAVE_TEMPO_TRANCA, String(min));
-  } catch {
-    /* sem armazenamento: vale só nesta sessão */
-  }
-});
+// --- tranca sozinho: o relógio e a escolha do tempo moram no useCofre (ir aos apps e voltar não tranca)
+const trancaMin = cofre.trancaMin;
 const rotuloTempo = (min: number) => (min >= 60 ? `${min / 60} h` : `${min} min`);
-let ultimoUso = Date.now();
-const marcarUso = () => (ultimoUso = Date.now());
-let relogio: ReturnType<typeof setInterval> | undefined;
 const agora = ref(Date.now());
+let relogio: ReturnType<typeof setInterval> | undefined;
 onMounted(() => {
-  for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, marcarUso);
-  relogio = setInterval(() => {
-    agora.value = Date.now();
-    if (aberto.value && Date.now() - ultimoUso > trancaMin.value * 60_000) trancar();
-  }, 1000);
+  relogio = setInterval(() => (agora.value = Date.now()), 1000);
 });
 onBeforeUnmount(() => {
-  for (const ev of ['pointerdown', 'keydown']) window.removeEventListener(ev, marcarUso);
   clearInterval(relogio);
-  // Sair da tela tranca: as chaves não ficam vivas no resto do painel.
-  trancar();
+  revelados.value = new Set();
+  // No painel do dono, ir aos apps e voltar não tranca (só o tempo parado). Como usuário comum, sair da tela tranca.
+  if (props.modo === 'usuario') trancar();
 });
 
 // --- lista. `cofreAtual` nulo = "Todos os itens" (como o Proton Pass abre).

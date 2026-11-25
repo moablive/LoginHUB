@@ -1,4 +1,4 @@
-import { computed, ref, shallowRef } from 'vue';
+import { computed, ref, shallowRef, watch } from 'vue';
 import { cofreApi } from '@loginhub/api-client';
 import type { CofreAparelho, CofreAparelhoAcesso, CofreAparelhoPedido, CofreDigital, CofreEntradaPedido, CofreEstado } from '@loginhub/schema';
 import { randomBytes } from '@noble/ciphers/utils.js';
@@ -288,6 +288,40 @@ function trancar(): void {
   ilegiveis.value = 0;
 }
 
+// --- tranca sozinho depois de um tempo sem uso (5 min a 1 h, escolha do dono, por aparelho). O relógio mora aqui,
+// não na página: ir do cofre para os apps e voltar não tranca; só o tempo parado tranca.
+export const TEMPOS_TRANCA_MIN = [5, 10, 15, 30, 60] as const;
+const CHAVE_TEMPO_TRANCA = 'loginhub.cofre.tranca-min';
+function tempoGuardado(): number {
+  try {
+    const n = Number(localStorage.getItem(CHAVE_TEMPO_TRANCA));
+    return (TEMPOS_TRANCA_MIN as readonly number[]).includes(n) ? n : 5;
+  } catch {
+    return 5;
+  }
+}
+const trancaMin = ref<number>(tempoGuardado());
+watch(trancaMin, (min) => {
+  try {
+    localStorage.setItem(CHAVE_TEMPO_TRANCA, String(min));
+  } catch {
+    /* sem armazenamento: vale só nesta sessão */
+  }
+});
+let ultimoUso = Date.now();
+const marcarUso = (): void => {
+  ultimoUso = Date.now();
+};
+watch(aberto, (abriu) => {
+  if (abriu) marcarUso();
+});
+if (typeof window !== 'undefined') {
+  for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, marcarUso);
+  setInterval(() => {
+    if (aberto.value && Date.now() - ultimoUso > trancaMin.value * 60_000) trancar();
+  }, 1000);
+}
+
 /**
  * Cria (sem `id`) ou regrava um cofre e devolve o id dele. Ícone e cor vão
  * cifrados junto do nome; sem `aparencia`, o cofre fica com a que já tinha.
@@ -472,6 +506,7 @@ async function assinarParaEntrar(item: ItemAberto, passe: string): Promise<{ ent
 
 export function useCofre() {
   return {
+    trancaMin,
     existe,
     aberto,
     temDigital,
