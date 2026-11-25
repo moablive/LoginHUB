@@ -60,7 +60,7 @@ const props = withDefaults(
 const emit = defineEmits<{ sair: [] }>();
 
 const cofre = useCofre();
-const { existe, aberto, cofres, itens, ilegiveis, temDigital, digitais, digitalPendente } = cofre;
+const { existe, aberto, cofres, itens, ilegiveis, temDigital, digitais, digitalPendente, offline, copiaEm, sincronizando } = cofre;
 
 const carregando = ref(true);
 const erro = ref<string | null>(null);
@@ -88,6 +88,8 @@ const mensagemDe = (e: unknown, padrao: string): string => {
   if (e instanceof ErroDigital) return MENSAGEM_DIGITAL[e.codigo];
   if (e instanceof Error && e.message === 'DIGITAL_NAO_ABRE') return DIGITAL_NAO_ABRE;
   if (e instanceof Error && e.message === 'SEM_DIGITAL') return 'Nenhuma digital abre este cofre ainda.';
+  if (e instanceof Error && e.message === 'OFFLINE_SEM_SENHA') return 'Sem internet: abra o cofre pela digital (Face ID). A palavra-passe só funciona com rede.';
+  if (e instanceof Error && e.message === 'OFFLINE') return 'Sem internet: o cofre está só para leitura. Sincronize quando a rede voltar.';
   if (e instanceof Error && e.message === 'CHAVE_ERRADA') return usarKit.value ? 'Kit de recuperação errado.' : 'Palavra-passe errada.';
   if (e instanceof Error && (e.message === 'KIT_INVALIDO' || e.message === 'BASE32_INVALIDO')) return 'Kit de recuperação incompleto ou com caractere errado.';
   if (axios.isAxiosError(e) && e.response?.data?.message) return String(e.response.data.message);
@@ -117,6 +119,8 @@ onMounted(async () => {
   void carregarLogos();
   try {
     await cofre.carregar();
+    // O iOS fecha o PWA em segundo plano: dentro do tempo escolhido o cofre volta aberto, sem pedir a digital.
+    if (!aberto.value) await cofre.restaurarSessao();
   } catch (e) {
     erro.value = mensagemDe(e, 'Não foi possível carregar o cofre.');
   } finally {
@@ -255,6 +259,24 @@ async function definirNovaSenha() {
     erro.value = mensagemDe(e, 'Não foi possível trocar a palavra-passe.');
   } finally {
     ocupado.value = false;
+  }
+}
+
+const quandoSincronizou = computed(() => {
+  agora.value; // reavalia a cada segundo
+  if (!copiaEm.value) return '';
+  const min = Math.floor((Date.now() - new Date(copiaEm.value).getTime()) / 60_000);
+  if (min < 1) return 'agora há pouco';
+  if (min < 60) return `há ${min} min`;
+  if (min < 24 * 60) return `há ${Math.floor(min / 60)} h`;
+  return new Date(copiaEm.value).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+});
+async function sincronizar() {
+  erro.value = null;
+  try {
+    await cofre.sincronizar();
+  } catch (e) {
+    erro.value = mensagemDe(e, 'Não foi possível sincronizar agora.');
   }
 }
 
@@ -496,6 +518,10 @@ async function confirmarTrocaSenha() {
           <UiButton variante="plain" icone aria-label="Trocar palavra-passe" title="Trocar a palavra-passe" @click="abrirTrocaSenha">
             <KeyIcon class="h-6 w-6" />
           </UiButton>
+          <UiButton tamanho="small" variante="gray" :disabled="offline || sincronizando" :carregando="sincronizando" title="Baixar do servidor os itens mais novos" @click="sincronizar">
+            <ArrowPathIcon class="h-4 w-4" />
+            Sincronizar
+          </UiButton>
           <select
             v-model.number="trancaMin"
             aria-label="Trancar o cofre sozinho depois de"
@@ -573,6 +599,9 @@ async function confirmarTrocaSenha() {
         <LockClosedIcon class="h-7 w-7 text-accent" />
         <h2 class="text-title-3 font-semibold">Cofre trancado</h2>
       </div>
+      <p v-if="offline" role="status" class="rounded-celula bg-warning/10 p-3 text-subhead text-warning">
+        Sem internet: abra pela digital (Face ID) para ler a cópia de {{ quandoSincronizou }}. A palavra-passe só funciona com rede.
+      </p>
       <template v-if="podeDigital && !usarKit">
         <UiButton tamanho="large" bloco :carregando="ocupado" @click="abrirDigital">
           <FingerPrintIcon class="h-5 w-5" />{{ ocupado ? 'Abrindo…' : 'Abrir com a digital' }}
@@ -600,6 +629,10 @@ async function confirmarTrocaSenha() {
       </aside>
 
       <div class="space-y-4">
+        <p v-if="offline" role="status" class="rounded-celula bg-warning/10 p-3 text-subhead text-warning">
+          Sem internet: cópia de {{ quandoSincronizou }}, só para leitura. Ver e copiar senhas e o código 2FA funciona; criar, editar e apagar voltam com a rede.
+        </p>
+        <p v-else-if="copiaEm" class="text-caption-1 text-label-2">Sincronizado {{ quandoSincronizou }}</p>
         <p v-if="ilegiveis > 0" class="rounded-celula bg-warning/10 p-3 text-subhead text-warning">
           {{ ilegiveis }} registro(s) não abriram: foram alterados fora do cofre ou estão corrompidos.
         </p>
@@ -619,7 +652,7 @@ async function confirmarTrocaSenha() {
 
         <div class="flex items-center gap-2">
           <UiSearchField v-model="busca" placeholder="Buscar em todos os cofres" />
-          <UiButton tamanho="small" :disabled="cofres.length === 0" @click="novoItem"><PlusIcon class="h-4 w-4" />Item</UiButton>
+          <UiButton tamanho="small" :disabled="cofres.length === 0 || offline" @click="novoItem"><PlusIcon class="h-4 w-4" />Item</UiButton>
         </div>
 
         <UiEmpty
@@ -675,8 +708,8 @@ async function confirmarTrocaSenha() {
                 <p v-if="item.notas" class="max-h-24 overflow-y-auto whitespace-pre-wrap break-all text-footnote text-label-2">{{ item.notas }}</p>
               </div>
               <div class="flex shrink-0 flex-col gap-1">
-                <UiButton variante="plain" icone :aria-label="`Editar ${item.titulo}`" @click="editarItem(item)"><PencilSquareIcon class="h-5 w-5" /></UiButton>
-                <UiButton variante="plain" icone class="!text-danger hover:!bg-danger/10" :aria-label="`Apagar ${item.titulo}`" @click="itemParaApagar = item">
+                <UiButton variante="plain" icone :disabled="offline" :aria-label="`Editar ${item.titulo}`" @click="editarItem(item)"><PencilSquareIcon class="h-5 w-5" /></UiButton>
+                <UiButton variante="plain" icone :disabled="offline" class="!text-danger hover:!bg-danger/10" :aria-label="`Apagar ${item.titulo}`" @click="itemParaApagar = item">
                   <TrashIcon class="h-5 w-5" />
                 </UiButton>
               </div>

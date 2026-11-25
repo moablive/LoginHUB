@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { apagarTudoLocal } from '@/features/cofre/local';
 import { computed, onMounted, ref } from 'vue';
 import {
   ArrowRightOnRectangleIcon,
@@ -134,7 +135,8 @@ const grupos = computed(() => {
 // --- AÇÕES ---
 
 function sair() {
-  authApi.logout();
+  // Sair da conta apaga do aparelho a cópia do cofre e a sessão guardada (features/cofre/local.ts).
+  void apagarTudoLocal().finally(() => authApi.logout());
 }
 
 async function confirmarExclusao() {

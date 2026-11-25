@@ -4,6 +4,7 @@ import type { CofreAparelho, CofreAparelhoAcesso, CofreAparelhoPedido, CofreDigi
 import { randomBytes } from '@noble/ciphers/utils.js';
 import { imagemDoCofreValida, type AparenciaCofre } from './aparencia';
 import { criarDigital, digitalLocal, esquecerDigitalLocal, lembrarDigitalLocal, pedirSegredo } from './digital';
+import { apagarSessao, guardarCopia, guardarSessao, lerCopia, lerSessao, pedirPersistencia, tocarSessao, ultimoDono } from './local';
 import { adSelo, codigoDoPedido, limparCodigo, provaDoAparelho, selar } from './pareamento';
 import { assinarEntrada, desafioDoPasse, mensagemDaEntrada, novaChaveDeEntrada, type EntradaDoItem } from './entrada';
 import {
@@ -85,8 +86,59 @@ const existe = computed(() => !!bruto.value?.conta);
 const temDigital = computed(() => (bruto.value?.digitais?.length ?? 0) > 0);
 const digitais = ref<CofreDigital[]>([]);
 
+/** Sem rede o cofre abre a cópia que ficou no aparelho (só leitura). `copiaEm` = quando o servidor a entregou. */
+const offline = ref(false);
+const copiaEm = ref<string | null>(null);
+const sincronizando = ref(false);
+
+/** Falha de rede (não chegou ao servidor)? Erro com resposta (401, 500…) NÃO é offline: vale como erro de verdade. */
+const semRede = (e: unknown): boolean => {
+  const r = (e as { response?: unknown } | null)?.response;
+  return !r && (typeof navigator === 'undefined' || navigator.onLine === false || (e as { code?: string } | null)?.code === 'ERR_NETWORK');
+};
+
 async function carregar(): Promise<void> {
-  bruto.value = await cofreApi.estado();
+  try {
+    const estado = await cofreApi.estado();
+    bruto.value = estado;
+    offline.value = false;
+    copiaEm.value = new Date().toISOString();
+    void guardarCopia(estado);
+  } catch (e) {
+    const dono = ultimoDono();
+    const copia = semRede(e) && dono ? await lerCopia(dono) : null;
+    if (!copia) throw e;
+    bruto.value = copia.estado;
+    offline.value = true;
+    copiaEm.value = copia.em;
+  }
+}
+
+/** Botão Sincronizar (e volta da rede): baixa o estado de novo e reabre os itens com a chave que já está aberta. */
+async function sincronizar(): Promise<void> {
+  if (sincronizando.value) return;
+  sincronizando.value = true;
+  try {
+    await carregar();
+    if (offline.value) throw new Error('OFFLINE');
+    if (chaveConta.value) abrirTudo();
+  } finally {
+    sincronizando.value = false;
+  }
+}
+
+const exigeRede = (): void => {
+  if (offline.value) throw new Error('OFFLINE');
+};
+
+/** Reabre o cofre com a chave guardada no aparelho, se ainda estiver dentro do tempo escolhido (sem pedir a digital). */
+async function restaurarSessao(): Promise<boolean> {
+  if (chaveConta.value || !bruto.value?.conta) return false;
+  const chave = await lerSessao(dono(), trancaMin.value * 60_000);
+  if (!chave) return false;
+  chaveConta.value = chave;
+  abrirTudo();
+  return aberto.value;
 }
 
 function abrirTudo(): void {
@@ -123,6 +175,8 @@ function abrirTudo(): void {
   cofres.value = abertos;
   itens.value = lista;
   ilegiveis.value = falhas;
+  pedirPersistencia();
+  void guardarSessao(dono(), conta);
 }
 
 /** Cria o cofre: devolve o kit de recuperação, que a tela mostra UMA vez. */
@@ -149,6 +203,7 @@ async function criar(palavraPasse: string): Promise<string> {
 /** Lança `CHAVE_ERRADA` se a palavra-passe não abre. */
 async function abrirComSenha(palavraPasse: string): Promise<void> {
   await carregar();
+  if (offline.value) throw new Error('OFFLINE_SEM_SENHA');
   const conta = bruto.value?.conta;
   if (!conta) throw new Error('SEM_COFRE');
   const mestra = await chaveMestraDe(palavraPasse, conta.kdf);
@@ -163,6 +218,7 @@ async function abrirComSenha(palavraPasse: string): Promise<void> {
 /** Abre pelo kit de recuperação. Depois disso a tela pede uma palavra-passe nova. */
 async function abrirComKit(kitTexto: string): Promise<void> {
   await carregar();
+  if (offline.value) throw new Error('OFFLINE_SEM_SENHA');
   const conta = bruto.value?.conta;
   if (!conta) throw new Error('SEM_COFRE');
   const kit = kitDeTexto(kitTexto);
@@ -216,6 +272,7 @@ const digitalPendente = shallowRef<{ credencialId: string; sal: Uint8Array; nome
 
 /** Cadastra a digital deste aparelho (só com o cofre aberto: precisa da chave da conta). */
 async function ativarDigital(nome: string): Promise<void> {
+  exigeRede();
   if (!chaveConta.value) throw new Error('TRANCADO');
   const sal = randomBytes(32);
   const { credencialId } = await criarDigital(dono(), nome, sal);
@@ -260,6 +317,7 @@ async function listarDigitais(): Promise<void> {
 }
 
 async function revogarDigital(id: string): Promise<void> {
+  exigeRede();
   await cofreApi.revogarDigital(id);
   // Se era a deste navegador, ele deixa de pedir por ela (a lista do estado ainda tem o id da credencial).
   esquecerDigitalLocal(bruto.value?.digitais?.find((d) => d.id === id)?.credencial_id ?? '-');
@@ -269,6 +327,7 @@ async function revogarDigital(id: string): Promise<void> {
 
 /** Palavra-passe nova (troca ou depois do kit). Cofres e itens não mudam. */
 async function trocarSenha(nova: string): Promise<void> {
+  exigeRede();
   const conta = chaveConta.value;
   if (!conta) throw new Error('TRANCADO');
   const kdf = novosParametrosKdf();
@@ -279,6 +338,7 @@ async function trocarSenha(nova: string): Promise<void> {
 }
 
 function trancar(): void {
+  void apagarSessao();
   digitalPendente.value = null;
   chaveConta.value?.fill(0);
   for (const c of cofres.value) c.chave.fill(0);
@@ -320,6 +380,21 @@ if (typeof window !== 'undefined') {
   setInterval(() => {
     if (aberto.value && Date.now() - ultimoUso > trancaMin.value * 60_000) trancar();
   }, 1000);
+  // A sessão guardada no aparelho conta o tempo desde o último uso: renova a cada 15 s de uso e ao esconder o app.
+  let ultimaRenovacao = 0;
+  const renovar = (): void => {
+    if (!aberto.value || ultimoUso <= ultimaRenovacao) return;
+    ultimaRenovacao = ultimoUso;
+    void tocarSessao();
+  };
+  setInterval(renovar, 15_000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') renovar();
+  });
+  // A rede voltou com o cofre aberto: confere se mudou algo.
+  window.addEventListener('online', () => {
+    if (aberto.value) void sincronizar().catch(() => undefined);
+  });
 }
 
 /**
@@ -327,6 +402,7 @@ if (typeof window !== 'undefined') {
  * cifrados junto do nome; sem `aparencia`, o cofre fica com a que já tinha.
  */
 async function salvarCofre(nome: string, id?: string, aparencia?: Partial<AparenciaCofre> & { imagem?: string | null }): Promise<string> {
+  exigeRede();
   const conta = chaveConta.value;
   if (!conta) throw new Error('TRANCADO');
   const existente = id ? cofres.value.find((c) => c.id === id) : undefined;
@@ -362,6 +438,7 @@ function dadosDoCofre(c: Omit<CofreAberto, 'id'>): Record<string, string | numbe
  * os cofres. Só regrava os que mudaram de posição.
  */
 async function reordenarCofres(ids: string[]): Promise<void> {
+  exigeRede();
   const conta = chaveConta.value;
   if (!conta) throw new Error('TRANCADO');
   if (ids.length !== cofres.value.length || new Set(ids).size !== ids.length) throw new Error('ORDEM_INVALIDA');
@@ -380,12 +457,14 @@ async function reordenarCofres(ids: string[]): Promise<void> {
 }
 
 async function apagarCofre(id: string): Promise<void> {
+  exigeRede();
   await cofreApi.apagarCofre(id);
   await carregar();
   abrirTudo();
 }
 
 async function salvarItem(cofreId: string, dados: ItemCofre, id?: string): Promise<void> {
+  exigeRede();
   const cofre = cofres.value.find((c) => c.id === cofreId);
   if (!cofre) throw new Error('COFRE_NAO_ENCONTRADO');
   const itemId = id ?? novoId();
@@ -395,6 +474,7 @@ async function salvarItem(cofreId: string, dados: ItemCofre, id?: string): Promi
 }
 
 async function apagarItem(id: string): Promise<void> {
+  exigeRede();
   // Item com chave de entrada: tira a entrada no hub antes (sem a privada ela não serve, mas não fica pendurada).
   const entrada = itens.value.find((i) => i.id === id)?.entrada;
   if (entrada) {
@@ -439,6 +519,7 @@ async function acessoPara(aparelhoId: string, chavePublica: string, cofreIds: st
 
 /** Aprova a máquina do pedido para os cofres escolhidos (`null` = a conta inteira). Só com o cofre aberto. */
 async function aprovarAparelho(pedido: CofreAparelhoPedido, cofreIds: string[] | null): Promise<void> {
+  exigeRede();
   const conta = chaveConta.value;
   if (!conta) throw new Error('TRANCADO');
   const acesso = await acessoPara(pedido.id, pedido.chave_publica, cofreIds);
@@ -507,6 +588,12 @@ async function assinarParaEntrar(item: ItemAberto, passe: string): Promise<{ ent
 export function useCofre() {
   return {
     trancaMin,
+    offline,
+    copiaEm,
+    sincronizando,
+    sincronizar,
+    restaurarSessao,
+    exigeRede,
     existe,
     aberto,
     temDigital,

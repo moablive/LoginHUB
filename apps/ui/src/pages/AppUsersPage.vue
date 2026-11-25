@@ -20,7 +20,7 @@ import {
   UserIcon,
   UserPlusIcon,
 } from '@heroicons/vue/24/outline';
-import { appApi, userApi, aparelhoApi } from '@loginhub/api-client';
+import { appApi, userApi, aparelhoApi, categoriaApi, organizacaoApi } from '@loginhub/api-client';
 import type { App, User, AparelhosDoApp } from '@loginhub/schema';
 import { ResetPasswordEmail } from '@/templates/emails';
 import { getAppIntegration } from '@/config/integrations';
@@ -159,6 +159,28 @@ async function carregarAparelhos() {
   }
 }
 
+// --- organizações que cada admin administra (só no app do painel: as contas dele são os admins de organização)
+const organizacoesDe = ref<Map<string, string[]>>(new Map());
+async function carregarOrganizacoesDosAdmins() {
+  try {
+    const [categorias, apps] = await Promise.all([categoriaApi.getAll(), appApi.getAll()]);
+    const mapa = new Map<string, string[]>();
+    await Promise.all(
+      categorias.map(async (c) => {
+        const admins = await organizacaoApi.admins(c.id).catch(() => []);
+        if (admins.length === 0) return;
+        const appsDaOrg = apps.filter((a) => a.categoria_id === c.id).map((a) => a.nome);
+        const texto = appsDaOrg.length > 0 ? `${c.nome} · ${appsDaOrg.join(', ')}` : c.nome;
+        for (const a of admins) mapa.set(String(a.usuario_id), [...(mapa.get(String(a.usuario_id)) ?? []), texto]);
+      }),
+    );
+    organizacoesDe.value = mapa;
+  } catch {
+    /* o selo da organização é reforço: sem ele a lista segue como está */
+  }
+}
+const organizacoesDoUsuario = (u: User): string[] => organizacoesDe.value.get(String(u.id)) ?? [];
+
 // --- carregamento ---
 async function fetchData() {
   void carregarAparelhos();
@@ -167,6 +189,7 @@ async function fetchData() {
     const [usersData, appData] = await Promise.all([userApi.getByAppId(props.id), appApi.getById(props.id)]);
     users.value = usersData;
     app.value = appData;
+    if ((appData as App & { painelDoHub?: boolean }).painelDoHub) void carregarOrganizacoesDosAdmins();
   } catch (error) {
     console.error(error);
     showAlert('Erro de conexão', 'Não foi possível carregar os dados do aplicativo.', 'error');
@@ -552,6 +575,7 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
                    linha os motoristas apareciam como "Usuário". -->
               <UiBadge v-else-if="user.role === 'motorista'" tom="accent">Motorista</UiBadge>
               <UiBadge v-else>Usuário</UiBadge>
+              <UiBadge v-for="org in organizacoesDoUsuario(user)" :key="org" tom="accent" title="Organização e apps que ele administra">{{ org }}</UiBadge>
               <UiBadge v-if="ehDoRoster(user)" tom="accent">{{ rosterCfg?.label }}</UiBadge>
               <UiBadge v-if="app?.usaLoginHub === false">2FA não se aplica</UiBadge>
               <UiBadge v-else-if="user.dois_fatores?.ativo" tom="success"><DevicePhoneMobileIcon class="h-3 w-3" /> 2FA</UiBadge>
@@ -623,6 +647,7 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
                     <UiBadge v-else-if="user.role === 'operador'" tom="warning">Operador</UiBadge>
                     <UiBadge v-else-if="user.role === 'motorista'" tom="accent">Motorista</UiBadge>
                     <UiBadge v-else>Usuário</UiBadge>
+                    <UiBadge v-for="org in organizacoesDoUsuario(user)" :key="org" tom="accent" title="Organização e apps que ele administra">{{ org }}</UiBadge>
                     <UiBadge v-if="ehDoRoster(user)" tom="accent">{{ rosterCfg?.label }}</UiBadge>
                   </div>
                 </td>

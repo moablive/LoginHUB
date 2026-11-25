@@ -1,37 +1,83 @@
-// Service worker do LoginHUB — deliberadamente SEM cache e SEM handler de fetch.
+// Service worker do LoginHUB: deixa o app abrir sem rede (25/11/2026, pedido do dono: cofre offline no iPhone).
 //
-// POR QUE ELE EXISTE ASSIM
+// O que ele guarda, e só isto:
+//  - /assets/* e /fontes/*: arquivos do build com hash no nome. Um arquivo com aquele nome nunca muda, então
+//    servir do cache é seguro e NÃO prende ninguém numa versão velha (o problema do precache antigo, que servia
+//    index e chunks velhos, vinha do index e dos chunks sem hash).
+//  - o index.html: sempre REDE PRIMEIRO. O cache dele só entra quando a rede falha (sem internet ou mais de
+//    PRAZO_REDE_MS sem resposta). Com rede, a versão nova aparece na hora.
 //
-// A config anterior usava o `generateSW` padrão do vite-plugin-pwa, que é
-// Workbox com **precache do app shell** e `navigateFallback`. Como o hub roda
-// `vite dev` em produção (atrás do túnel) e `devOptions.enabled` estava ligado,
-// esse SW ia para o navegador de todo mundo e passava a servir o index e os
-// chunks do CACHE.
-//
-// O efeito prático: quem já tinha aberto o painel antes continuava recebendo a
-// versão antiga do app. Quando a rota `/enrolar-2fa` foi criada, esses
-// navegadores não a conheciam — a navegação caía no `<Route path="*">` e ia
-// parar no login do hub. Do lado do servidor estava tudo certo; num navegador
-// limpo funcionava. É o mesmo "build presa" que o TodoAPP já tinha diagnosticado
-// e resolvido do mesmo jeito.
-//
-// Sem fetch handler, toda navegação vai direto à rede, como numa página comum.
-// O manifest continua fazendo o app ser instalável — é o precache que
-// atrapalhava, não o SW em si.
+// Nunca toca em /api, em outro host nem em método diferente de GET: os dados do cofre vêm cifrados do servidor e a
+// cópia deles mora no IndexedDB (features/cofre/local.ts), não aqui.
+
+const CACHE = 'loginhub-shell-v1';
+const INDEX = '/index.html';
+const PRAZO_REDE_MS = 4000;
 
 self.addEventListener('install', () => {
-    // Assume o controle sem esperar as abas antigas fecharem: quem está preso
-    // numa versão velha precisa sair dela agora, não no próximo reinício do
-    // navegador.
     self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-    // Apaga TODO cache — inclusive o precache do Workbox que a versão anterior
-    // deste SW deixou para trás. É o que desfaz o estrago em quem já está com
-    // o app antigo guardado.
+    // Apaga qualquer cache que não seja o atual (inclusive o precache do Workbox de versões antigas).
     event.waitUntil(
-        caches.keys().then((chaves) => Promise.all(chaves.map((k) => caches.delete(k)))),
+        caches.keys().then((chaves) => Promise.all(chaves.filter((k) => k !== CACHE).map((k) => caches.delete(k)))),
     );
     event.waitUntil(self.clients.claim());
+});
+
+const comPrazo = (promessa, ms) =>
+    new Promise((resolve, reject) => {
+        const t = setTimeout(() => reject(new Error('PRAZO')), ms);
+        promessa.then(
+            (r) => {
+                clearTimeout(t);
+                resolve(r);
+            },
+            (e) => {
+                clearTimeout(t);
+                reject(e);
+            },
+        );
+    });
+
+async function navegacao(request) {
+    const cache = await caches.open(CACHE);
+    try {
+        const resposta = await comPrazo(fetch(request), PRAZO_REDE_MS);
+        // O app é uma SPA: qualquer rota abre o mesmo index. Só guarda resposta boa de HTML.
+        if (resposta.ok && (resposta.headers.get('content-type') || '').includes('text/html')) {
+            await cache.put(INDEX, resposta.clone());
+        }
+        return resposta;
+    } catch (e) {
+        const guardado = await cache.match(INDEX);
+        if (guardado) return guardado;
+        throw e;
+    }
+}
+
+async function arquivoComHash(request) {
+    const cache = await caches.open(CACHE);
+    const guardado = await cache.match(request);
+    if (guardado) return guardado;
+    const resposta = await fetch(request);
+    if (resposta.ok) await cache.put(request, resposta.clone());
+    return resposta;
+}
+
+self.addEventListener('fetch', (event) => {
+    const { request } = event;
+    if (request.method !== 'GET') return;
+    const url = new URL(request.url);
+    if (url.origin !== self.location.origin) return;
+    if (url.pathname.startsWith('/api')) return;
+
+    if (request.mode === 'navigate') {
+        event.respondWith(navegacao(request));
+        return;
+    }
+    if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/fontes/')) {
+        event.respondWith(arquivoComHash(request));
+    }
 });
