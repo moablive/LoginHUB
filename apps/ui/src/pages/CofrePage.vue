@@ -278,8 +278,26 @@ watch(
 const dataHora = (d: string | Date | null) =>
   d ? new Date(d).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
 
-// --- tranca sozinho: 5 minutos sem mexer, ou a aba some por 5 minutos
-const OCIOSO_MS = 5 * 60 * 1000;
+// --- tranca sozinho: o tempo sem mexer (ou com a aba some) é escolha do dono, por aparelho: 5 min a 1 h
+const TEMPOS_TRANCA_MIN = [5, 10, 15, 30, 60] as const;
+const CHAVE_TEMPO_TRANCA = 'loginhub.cofre.tranca-min';
+function tempoGuardado(): number {
+  try {
+    const n = Number(localStorage.getItem(CHAVE_TEMPO_TRANCA));
+    return (TEMPOS_TRANCA_MIN as readonly number[]).includes(n) ? n : 5;
+  } catch {
+    return 5;
+  }
+}
+const trancaMin = ref<number>(tempoGuardado());
+watch(trancaMin, (min) => {
+  try {
+    localStorage.setItem(CHAVE_TEMPO_TRANCA, String(min));
+  } catch {
+    /* sem armazenamento: vale só nesta sessão */
+  }
+});
+const rotuloTempo = (min: number) => (min >= 60 ? `${min / 60} h` : `${min} min`);
 let ultimoUso = Date.now();
 const marcarUso = () => (ultimoUso = Date.now());
 let relogio: ReturnType<typeof setInterval> | undefined;
@@ -288,7 +306,7 @@ onMounted(() => {
   for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, marcarUso);
   relogio = setInterval(() => {
     agora.value = Date.now();
-    if (aberto.value && Date.now() - ultimoUso > OCIOSO_MS) trancar();
+    if (aberto.value && Date.now() - ultimoUso > trancaMin.value * 60_000) trancar();
   }, 1000);
 });
 onBeforeUnmount(() => {
@@ -501,6 +519,14 @@ async function confirmarTrocaSenha() {
           <UiButton variante="plain" icone aria-label="Trocar palavra-passe" title="Trocar a palavra-passe" @click="abrirTrocaSenha">
             <KeyIcon class="h-6 w-6" />
           </UiButton>
+          <select
+            v-model.number="trancaMin"
+            aria-label="Trancar o cofre sozinho depois de"
+            title="Trancar o cofre sozinho (pedir a digital de novo) depois deste tempo sem uso"
+            class="rounded-lg bg-fill-2 px-2 py-1 text-footnote text-label outline-none focus:ring-2 focus:ring-accent/40"
+          >
+            <option v-for="m in TEMPOS_TRANCA_MIN" :key="m" :value="m">Trancar em {{ rotuloTempo(m) }}</option>
+          </select>
           <UiButton tamanho="small" variante="gray" @click="trancar">
             <LockClosedIcon class="h-4 w-4" />
             Trancar
