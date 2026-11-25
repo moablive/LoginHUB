@@ -627,7 +627,7 @@ async function confirmarTrocaSenha() {
         />
 
         <ul v-else class="space-y-2">
-          <li v-for="item in visiveis" :key="item.id" class="rounded-celula bg-surface p-4">
+          <li v-for="item in visiveis" :key="item.id" class="overflow-hidden rounded-celula bg-surface p-4">
             <div class="flex items-start gap-3">
               <CofreItemIcone :titulo="item.titulo" :url="item.url" :apps="logosDosApps" />
               <div class="min-w-0 flex-1 space-y-1">
@@ -640,7 +640,7 @@ async function confirmarTrocaSenha() {
 
                 <div v-if="item.usuario" class="flex items-center gap-2 text-subhead">
                   <span class="w-16 shrink-0 text-label-2">Usuário</span>
-                  <span class="truncate font-mono">{{ item.usuario }}</span>
+                  <span class="min-w-0 truncate font-mono">{{ item.usuario }}</span>
                   <button type="button" class="text-accent" :title="'Copiar usuário'" @click="copiar(item.usuario, item.id + ':u')">
                     <ClipboardDocumentIcon class="h-4 w-4" />
                   </button>
@@ -649,7 +649,7 @@ async function confirmarTrocaSenha() {
 
                 <div v-if="item.senha" class="flex items-center gap-2 text-subhead">
                   <span class="w-16 shrink-0 text-label-2">Senha</span>
-                  <span class="truncate font-mono">{{ revelados.has(item.id) ? item.senha : '••••••••••' }}</span>
+                  <span class="min-w-0 truncate font-mono">{{ revelados.has(item.id) ? item.senha : '••••••••••' }}</span>
                   <button type="button" class="text-label-2" :title="revelados.has(item.id) ? 'Esconder' : 'Mostrar'" @click="alternarRevelar(item.id)">
                     <EyeSlashIcon v-if="revelados.has(item.id)" class="h-4 w-4" /><EyeIcon v-else class="h-4 w-4" />
                   </button>
@@ -669,7 +669,7 @@ async function confirmarTrocaSenha() {
                   <span v-if="copiado === item.id + ':t'" class="text-caption-1 text-success">copiado</span>
                 </div>
 
-                <p v-if="item.notas" class="whitespace-pre-wrap text-footnote text-label-2">{{ item.notas }}</p>
+                <p v-if="item.notas" class="max-h-24 overflow-y-auto whitespace-pre-wrap break-all text-footnote text-label-2">{{ item.notas }}</p>
               </div>
               <div class="flex shrink-0 flex-col gap-1">
                 <UiButton variante="plain" icone :aria-label="`Editar ${item.titulo}`" @click="editarItem(item)"><PencilSquareIcon class="h-5 w-5" /></UiButton>
