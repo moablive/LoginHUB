@@ -1,6 +1,7 @@
 import { db } from '@loginhub/database';
 import { usuarios, usuarios2fa, usuariosAparelho, loginAparelhos, AparelhoDoLogin, AparelhosDoApp, LoginAparelhoEvento, TipoAparelho } from '@loginhub/schema';
 import { and, eq, ne, desc, lt, or, sql } from 'drizzle-orm';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 
 /**
  * Aparelhos de uma conta de CPF (pedido do dono da Sul Alimentos).
@@ -30,6 +31,10 @@ import { and, eq, ne, desc, lt, or, sql } from 'drizzle-orm';
 
 // Mínimo 16: o app gera UUID (36) ou 32 hex; id curto adivinhável não vale (parecer do Conselho).
 const ID_RE = /^[A-Za-z0-9_-]{16,64}$/;
+
+/** Chave de aparelho confiável (db/021): 32 bytes sorteados, em base64url (43 caracteres). */
+const CONFIANCA_RE = /^[A-Za-z0-9_-]{43}$/;
+const hashDaConfianca = (chave: string): string => createHash('sha256').update(chave).digest('hex');
 
 /** Computador sem uso por este tempo: a vaga fica livre para outro computador. */
 export const COMPUTADOR_EXPIRA_HORAS = 12;
@@ -194,6 +199,8 @@ export class AparelhoService {
                 appId, aparelhoId: aparelho.id, aparelhoNome: aparelho.nome, ip: aparelho.ip, ultimoAcesso: agora,
                 // Mesmo aparelho: guarda o "desde"; vaga tomada de um computador expirado: começa agora.
                 desde: sql`CASE WHEN ${usuariosAparelho.aparelhoId} = excluded.aparelho_id THEN ${usuariosAparelho.desde} ELSE excluded.desde END`,
+                // A confiança (db/021) é do APARELHO: outro que toma a vaga começa sem ela.
+                confiancaHash: sql`CASE WHEN ${usuariosAparelho.aparelhoId} = excluded.aparelho_id THEN ${usuariosAparelho.confiancaHash} ELSE NULL END`,
             },
             // Telegram: sem condição — o Telegram novo assume a vaga (ver `vagaLivre`).
             ...(vagaLivre(aparelho.tipo) ? {} : {
@@ -224,6 +231,36 @@ export class AparelhoService {
         await this.registrar({ appId, usuarioId: user.id, conta: user.email, evento: 'entrou', aparelho });
         await this.soltarOutrosNoMesmoAparelho(user.id, appId, aparelho);
         return aparelho.id;
+    }
+
+    /**
+     * Aparelho confiável (24/11/2026, db/021, pedido do dono da Sul): este aparelho
+     * já concluiu um login completo (com 2FA) nesta conta, ocupa a vaga dela e
+     * apresenta a chave que o hub lhe entregou? Aí o CPF + CPF basta. O id do
+     * aparelho sozinho não serve — ele viaja em todo login e fica no registro.
+     * Vaga de Telegram nunca é confiável (ela troca de dono sem 2FA).
+     */
+    async confiavel(user: Conta, aparelho: AparelhoDoLogin, chave: unknown): Promise<boolean> {
+        if (!ehContaDeCpf(user.email) || !aparelho.id || vagaLivre(aparelho.tipo)) return false;
+        if (typeof chave !== 'string' || !CONFIANCA_RE.test(chave)) return false;
+        const p = await this.preso(user.id, aparelho.tipo);
+        if (!p || p.aparelhoId !== aparelho.id || !p.confiancaHash || p.confiancaHash.length !== 64) return false;
+        return timingSafeEqual(Buffer.from(hashDaConfianca(chave), 'hex'), Buffer.from(p.confiancaHash, 'hex'));
+    }
+
+    /**
+     * Registra o aparelho como confiável logo depois do login completo (que acabou
+     * de prender a vaga) e devolve a chave — que sai UMA vez; aqui fica só o hash.
+     * Cada login completo sorteia outra: a anterior deste aparelho deixa de valer.
+     */
+    async confiar(user: Conta, aparelho: AparelhoDoLogin): Promise<string | undefined> {
+        if (!ehContaDeCpf(user.email) || !aparelho.id || vagaLivre(aparelho.tipo)) return undefined;
+        const chave = randomBytes(32).toString('base64url');
+        const marcou = await db.update(usuariosAparelho)
+            .set({ confiancaHash: hashDaConfianca(chave) })
+            .where(and(eq(usuariosAparelho.usuarioId, user.id), eq(usuariosAparelho.tipo, aparelho.tipo), eq(usuariosAparelho.aparelhoId, aparelho.id)))
+            .returning({ u: usuariosAparelho.usuarioId });
+        return marcou.length ? chave : undefined;
     }
 
     /**
@@ -331,6 +368,7 @@ export class AparelhoService {
             usuarioId: usuariosAparelho.usuarioId, nome: usuarios.nome, conta: usuarios.email, tipo: usuariosAparelho.tipo,
             aparelhoNome: usuariosAparelho.aparelhoNome, ip: usuariosAparelho.ip,
             desde: usuariosAparelho.desde, ultimoAcesso: usuariosAparelho.ultimoAcesso,
+            confiancaHash: usuariosAparelho.confiancaHash,
         }).from(usuariosAparelho)
           .innerJoin(usuarios, eq(usuarios.id, usuariosAparelho.usuarioId))
           .where(usuarioId ? and(eq(usuariosAparelho.appId, appId), eq(usuariosAparelho.usuarioId, usuarioId)) : eq(usuariosAparelho.appId, appId))
@@ -347,9 +385,11 @@ export class AparelhoService {
           .limit(limite);
 
         return {
-            presos: presos.map((p: typeof presos[number]) => ({
+            presos: presos.map(({ confiancaHash, ...p }: typeof presos[number]) => ({
                 ...p, tipo: p.tipo as TipoAparelho, desde: p.desde.toISOString(), ultimoAcesso: p.ultimoAcesso.toISOString(),
                 expirado: this.expirado({ tipo: p.tipo, ultimoAcesso: p.ultimoAcesso }),
+                // O hash nunca sai daqui: o painel só fica sabendo se o aparelho é registrado.
+                confiavel: !!confiancaHash,
             })),
             registro: registro.map((r: typeof registro[number]) => ({
                 ...r, evento: r.evento as LoginAparelhoEvento, tipo: (r.tipo as TipoAparelho | null) ?? null, criadoEm: r.criadoEm.toISOString(),

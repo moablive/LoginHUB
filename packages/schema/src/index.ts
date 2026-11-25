@@ -76,6 +76,12 @@ export interface LoginInputDTO {
     aparelho_id?: string | undefined;
     aparelho_nome?: string | undefined;
     /**
+     * Chave de aparelho confiável (24/11/2026, db/021): o hub a entrega no login
+     * completo (com 2FA) de conta de CPF de app com `aparelho_confiavel`, e o app a
+     * devolve nos logins seguintes daquele aparelho para entrar só com CPF + CPF.
+     */
+    aparelho_confianca?: string | undefined;
+    /**
      * Login feito pela tela "Meu cofre" do próprio hub (24/11/2026, db/019). Só vale
      * junto do cabeçalho Origin do hub: aí a conta de CPF ocupa a vaga `cofre`.
      */
@@ -111,6 +117,8 @@ export interface AmbiguousLoginResponse {
 export interface LoginResponse {
     token: string;
     expiresIn?: number;
+    /** Chave de aparelho confiável (db/021), só no login completo de conta de CPF de app com `aparelho_confiavel`. */
+    aparelho_confianca?: string;
     usuario: User;
     app?: {
         id: string;
@@ -122,6 +130,12 @@ export interface LoginResponse {
 export interface LoginResponseDTO {
     token: string;
     expiresIn: number;
+    /**
+     * Chave de aparelho confiável (db/021): só no login completo de conta de CPF de
+     * app com `aparelho_confiavel`. O app guarda no navegador e manda como
+     * `aparelho_confianca` nos próximos logins deste aparelho.
+     */
+    aparelho_confianca?: string;
     usuario: {
         id: string;
         nome: string;
@@ -504,6 +518,9 @@ export const aplicativos = pgTable('aplicativos', {
     painelDoHub: boolean('painel_do_hub').notNull().default(false),
     // TRUE = os usuários deste app podem ter cofre de senhas próprio (db/014).
     cofreLiberado: boolean('cofre_liberado').notNull().default(false),
+    // TRUE = conta de CPF entra só com CPF + CPF a partir de aparelho registrado (2FA uma vez
+    // por aparelho) e o Meu cofre mostra a conta do app sem palavra-passe (db/021, Sul).
+    aparelhoConfiavel: boolean('aparelho_confiavel').notNull().default(false),
     // Grupo do painel. NULL = "Sem categoria". Apagar a categoria devolve os
     // apps para NULL (ON DELETE SET NULL), nunca apaga app.
     categoriaId: integer('categoria_id').references(() => categorias.id, { onDelete: 'set null' }),
@@ -638,6 +655,8 @@ export const usuariosAparelho = pgTable('usuarios_aparelho', {
     ip: varchar('ip', { length: 64 }),
     desde: timestamp('desde').defaultNow().notNull(),
     ultimoAcesso: timestamp('ultimo_acesso').defaultNow().notNull(),
+    /** sha256 hex da chave de aparelho confiável (db/021). NULL = aparelho ainda não registrado. */
+    confiancaHash: varchar('confianca_hash', { length: 64 }),
 }, (t) => [primaryKey({ columns: [t.usuarioId, t.tipo] })]);
 
 /** Registro dos logins por aparelho: entrou, recusado, saiu, liberado. */
@@ -672,6 +691,8 @@ export interface AparelhosDoApp {
         ultimoAcesso: string;
         /** Computador parado há mais de 12 h: a vaga vale como livre no próximo login. */
         expirado: boolean;
+        /** Aparelho registrado (db/021): entra só com CPF + CPF, sem o código do 2FA. */
+        confiavel: boolean;
     }>;
     registro: Array<{
         id: number;

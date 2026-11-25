@@ -288,6 +288,8 @@ export interface DonoDoCofre {
     aparelhoId?: string;
     /** Aparelho com alcance por cofre (db/017): os ids liberados. Ausente = a conta inteira. */
     cofresPermitidos?: string[];
+    /** Sessão de usuário de app (não master, não CLI): a conta dele, para a conta do app no cofre (db/021). */
+    usuarioId?: number;
 }
 
 export const donoDoCofre = (req: unknown): DonoDoCofre | undefined => (req as { cofre?: DonoDoCofre }).cofre;
@@ -372,7 +374,7 @@ export const cofreAuth: RequestHandler = async (req, res, next) => {
             if (!linha[0]?.liberado) {
                 return res.status(403).json({ error: 'COFRE_NAO_LIBERADO', message: 'O cofre não está liberado para o seu aplicativo. Fale com o administrador.' });
             }
-            (req as any).cofre = { dono: donoDaPessoa(linha[0].email) } satisfies DonoDoCofre;
+            (req as any).cofre = { dono: donoDaPessoa(linha[0].email), usuarioId: Number(decoded!.sub) } satisfies DonoDoCofre;
             return next();
         } catch (err) {
             console.error('[cofreAuth] app:', (err as Error).message);

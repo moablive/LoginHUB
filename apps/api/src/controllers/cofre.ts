@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { cofreService } from '@loginhub/services';
+import { cofreService, twoFactorService } from '@loginhub/services';
 import { donoDoCofre, ipDoCliente } from '@loginhub/middlewares';
 
 /**
@@ -23,6 +23,23 @@ function responder(res: Response, err: unknown, acao: string) {
 }
 
 export class CofreController {
+    /**
+     * GET /cofre/conta-do-app (24/11/2026, db/021) — a conta do app da própria pessoa
+     * (logo, CPF, código 2FA) para o "Meu cofre" mostrar sem palavra-passe, em app com
+     * `aparelho_confiavel`. Só para a sessão do usuário (nunca master nem máquina do CLI):
+     * `{ conta: null }` quando não se aplica.
+     */
+    static async contaDoApp(req: Request, res: Response) {
+        const quem = donoDoCofre(req);
+        res.setHeader('Cache-Control', 'no-store');
+        if (!quem?.usuarioId || quem.aparelhoId) return res.status(200).json({ conta: null });
+        try {
+            return res.status(200).json({ conta: await twoFactorService.contaDoApp(String(quem.usuarioId)) });
+        } catch (err) {
+            return responder(res, err, 'contaDoApp');
+        }
+    }
+
     /** GET /cofre — conta (embrulhos + parâmetros do Argon2id), cofres e itens, tudo cifrado. */
     static async estado(req: Request, res: Response) {
         const dono = donoDe(req);

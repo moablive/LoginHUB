@@ -11,6 +11,7 @@ import UiSegmented from '@/components/ui/UiSegmented.vue';
 import TwoFactorChallenge from '@/features/twoFactor/TwoFactorChallenge.vue';
 import { aparelhoAtual } from '@/features/aparelho';
 import CofrePage from './CofrePage.vue';
+import ContaDoAppCartao from '@/components/cofre/ContaDoAppCartao.vue';
 
 /**
  * /meu-cofre (19/11/2026, db/014): o cofre de senhas de quem é usuário de um
@@ -26,6 +27,12 @@ import CofrePage from './CofrePage.vue';
  * digitado com pontos e traço vira só dígitos. O login manda o aparelho deste
  * navegador e a marca do cofre: a conta de CPF ocupa a vaga `cofre` (db/019) e
  * não briga com o celular em que a pessoa usa o app.
+ *
+ * 24/11/2026 (db/021, pedido do dono da Sul): em app com `aparelho_confiavel`, o
+ * aparelho que já concluiu um login completo entra só com CPF + CPF (a chave do
+ * aparelho mora no navegador, ver `api-client`), e a conta do app aparece no topo
+ * (`ContaDoAppCartao`: logo, CPF, código 2FA) sem palavra-passe. O cofre pessoal,
+ * com palavra-passe, continua embaixo para quem quiser guardar outras senhas.
  */
 /** CPF (com ou sem pontos e traço) vira só dígitos; e-mail vai em minúsculas. */
 const identificador = (bruto: string): string => {
@@ -139,7 +146,7 @@ function sair() {
   <AuthShell
     v-else-if="etapa === 'login'"
     titulo="LoginHub"
-    texto="Entre com o CPF ou o e-mail da conta do seu aplicativo. Depois, o cofre pede a sua palavra-passe — só você a sabe."
+    texto="Entre com o CPF ou o e-mail da conta do seu aplicativo. Funcionário da Sul Alimentos entra com CPF + CPF; num aparelho novo, o código do Google Authenticator é pedido uma vez."
   >
     <UiSegmented v-model="aba" :opcoes="ABAS" rotulo="Tipo de acesso" class="mb-5" @update:model-value="trocarAba" />
     <form class="space-y-4" @submit.prevent="entrar()">
@@ -158,6 +165,7 @@ function sair() {
 
   <div v-else class="min-h-screen min-h-dvh bg-canvas text-label">
     <main class="mx-auto w-full max-w-[1200px] px-4 pb-28 sm:px-6 lg:px-8">
+      <ContaDoAppCartao />
       <CofrePage modo="usuario" @sair="sair" />
     </main>
   </div>

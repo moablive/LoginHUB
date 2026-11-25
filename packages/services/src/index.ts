@@ -148,6 +148,7 @@ export class AuthService {
             app_logo: aplicativos.logo,
             app_status: aplicativos.status,
             app_usa_login_hub: aplicativos.usaLoginHub,
+            app_aparelho_confiavel: aplicativos.aparelhoConfiavel,
             status: usuarios.status,
             role_nome: niveisAcesso.nome,
         };
@@ -222,6 +223,14 @@ export class AuthService {
         // Senha conferiu — mas isso pode não bastar.
         const estado = await twoFactorService.estadoDoLogin(user.id.toString());
         const appId = user.app_id ? user.app_id.toString() : '0';
+
+        // Aparelho confiável (24/11/2026, db/021, pedido do dono da Sul: "deve logar CPF + CPF"):
+        // em app com `aparelho_confiavel`, o aparelho que JÁ concluiu um login completo nesta
+        // conta (2FA uma vez por aparelho) e apresenta a chave que o hub lhe deu entra só com a
+        // senha. Só com 2FA ativo: conta com o 2FA reiniciado volta a pedir o código em todo aparelho.
+        if (estado === 'desafio' && user.app_aparelho_confiavel && (await aparelhoService.confiavel(user, aparelho, data.aparelho_confianca))) {
+            return this.emitirSessao(user, 86400, await aparelhoService.prender(user, aparelho));
+        }
 
         // 2FA ativo: o JWT de sessão NÃO sai daqui. O cliente recebe um desafio
         // de vida curta e só troca por sessão depois de provar o segundo fator.
@@ -475,6 +484,7 @@ export class AuthService {
             app_id: usuarios.appId,
             app_nome: aplicativos.nome,
             app_status: aplicativos.status,
+            app_aparelho_confiavel: aplicativos.aparelhoConfiavel,
             status: usuarios.status,
             role_nome: niveisAcesso.nome,
         })
@@ -498,7 +508,14 @@ export class AuthService {
         const tipo = decoded.apt === 'computador' || decoded.apt === 'telegram' || decoded.apt === 'cofre' ? decoded.apt : 'celular';
         const aparelho = aparelhoService.normalizar(decoded.apa, decoded.apn, ip, tipo);
         await aparelhoService.conferir(user, aparelho);
-        return this.emitirSessao(user, 86400, await aparelhoService.prender(user, aparelho));
+        const sessao = await this.emitirSessao(user, 86400, await aparelhoService.prender(user, aparelho));
+        // Login completo num app com `aparelho_confiavel` (db/021): o aparelho fica registrado e
+        // recebe a chave para os próximos logins dele entrarem só com CPF + CPF.
+        if (user.app_aparelho_confiavel) {
+            const chave = await aparelhoService.confiar(user, aparelho);
+            if (chave) sessao.aparelho_confianca = chave;
+        }
+        return sessao;
     }
 
     /**

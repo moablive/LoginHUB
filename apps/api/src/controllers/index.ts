@@ -36,7 +36,7 @@ export class AuthController {
         res: Response
     ) {
         try {
-            const { email, password, aparelho_id, aparelho_nome } = req.body;
+            const { email, password, aparelho_id, aparelho_nome, aparelho_confianca } = req.body;
             // Painel do hub (admin de organização, db/012): o tenant é o app do
             // painel, nunca o que o navegador mandar.
             const app_id = req.body.painel === true ? String(await organizacaoService.idDoPainel()) : req.body.app_id;
@@ -77,7 +77,7 @@ export class AuthController {
             // marcado E vindo do endereço do hub (Origin, que página de outro site não forja), a
             // conta de CPF ocupa a vaga `cofre`. Sem o Origin certo, a marca é ignorada.
             if (req.body.cofre === true && veioDaTelaDoHub(req.get('origin'))) navegador.cofre = true;
-            const result = await authService.login({ email, password, app_id, aparelho_id, aparelho_nome }, ip, navegador);
+            const result = await authService.login({ email, password, app_id, aparelho_id, aparelho_nome, aparelho_confianca }, ip, navegador);
             await bloqueioService.registrarSucesso(appIdNum, ip, email);
             return res.status(200).json(result);
 

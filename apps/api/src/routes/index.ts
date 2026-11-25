@@ -243,6 +243,7 @@ const cofreRouter = Router();
 cofreRouter.post('/aparelhos/pedidos', rateLimitPasskey as any, CofreController.pedirAparelho as any);
 cofreRouter.use(cofreAuth as any);
 cofreRouter.get('/', CofreController.estado as any);
+cofreRouter.get('/conta-do-app', CofreController.contaDoApp as any);
 cofreRouter.post('/conta', CofreController.criarConta as any);
 cofreRouter.put('/conta', CofreController.trocarSenha as any);
 cofreRouter.put('/cofres/:id', CofreController.salvarCofre as any);

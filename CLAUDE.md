@@ -79,6 +79,12 @@ bump deixa o mecanismo mudo. Detalhes na seção *Versionamento* do README.
 - **2FA é obrigatório para toda conta que faz login aqui**, sem configuração por
   app. Não existe rota que isente — a ação administrativa é o *reset* do
   autenticador (`POST /admin/users/:id/reset-2fa`), nunca a isenção.
+  **Única exceção, de propósito** (24/11/2026, pedido do dono, `db/021`): em app com
+  `aplicativos.aparelho_confiavel` (só a Sul), conta de CPF vinda de um aparelho que
+  JÁ concluiu um login completo e apresenta a chave do aparelho (`aparelho_confianca`,
+  só o hash no banco) entra com a senha — o 2FA vale uma vez por aparelho. A
+  confiança sai com a vaga e com o reset do 2FA; Telegram nunca é confiável. Mexeu
+  em login/aparelho → `npx tsx scripts/teste-aparelho-confiavel.ts`.
 - **`aplicativos.usa_login_hub = false` não é isenção de 2FA — é app que não
   autentica no hub.** Hoje só o **Cofre** (app 14): o hub emite o convite e
   para por aí; quem entra lá usa a senha mestra do próprio cofre, que é a chave

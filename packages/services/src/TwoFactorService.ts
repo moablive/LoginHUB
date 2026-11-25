@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { db } from '@loginhub/database';
-import { usuarios, aplicativos, usuarios2fa, usuarios2faBackupCodes } from '@loginhub/schema';
+import { usuarios, aplicativos, usuarios2fa, usuarios2faBackupCodes, usuariosAparelho } from '@loginhub/schema';
 import { eq, and, isNull } from 'drizzle-orm';
 import type {
     TwoFactorSetupResponse,
@@ -232,6 +232,31 @@ export class TwoFactorService {
     }
 
     /**
+     * A conta do app no "Meu cofre" (24/11/2026, db/021, pedido do dono da Sul): o
+     * item que mostra o código 2FA ao vivo, sem a pessoa cadastrar nada nem digitar
+     * palavra-passe. Só para a PRÓPRIA conta, numa sessão já aberta (o login dela
+     * passou pelo 2FA ou por aparelho registrado) e só em app com `aparelho_confiavel`.
+     * `null` quando não se aplica (app sem a opção, 2FA ainda não ativo).
+     */
+    public async contaDoApp(usuarioId: string): Promise<{ titulo: string; usuario: string; url: string | null; logo: string | null; totp: string } | null> {
+        const [linha] = await db.select({
+            email: usuarios.email, appNome: aplicativos.nome, appLogo: aplicativos.logo, url: aplicativos.platformUrl,
+            confiavel: aplicativos.aparelhoConfiavel, ativo: usuarios2fa.ativo, secret: usuarios2fa.secretCifrado,
+        }).from(usuarios)
+          .innerJoin(aplicativos, eq(aplicativos.id, usuarios.appId))
+          .innerJoin(usuarios2fa, eq(usuarios2fa.usuarioId, usuarios.id))
+          .where(eq(usuarios.id, Number(usuarioId)))
+          .limit(1);
+        if (!linha || !linha.confiavel || !linha.ativo || !linha.secret) return null;
+        const issuer = linha.appNome?.trim() || ISSUER_PADRAO;
+        const totp =
+            `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(linha.email)}` +
+            `?secret=${decifrar(linha.secret)}&issuer=${encodeURIComponent(issuer)}` +
+            `&algorithm=SHA1&digits=${DIGITOS}&period=${STEP_SEGUNDOS}`;
+        return { titulo: issuer, usuario: linha.email, url: linha.url ?? null, logo: linha.appLogo ?? null, totp };
+    }
+
+    /**
      * Confirma o enrolamento com um código do app autenticador.
      *
      * É aqui que os códigos de recuperação nascem e que as sessões anteriores
@@ -414,6 +439,10 @@ export class TwoFactorService {
     public async resetarPorAdmin(usuarioId: string): Promise<void> {
         const agora = new Date();
         const config = await this.carregarConfig(usuarioId);
+        // Aparelhos registrados (db/021) perdem o registro: o novo autenticador vale
+        // uma vez em cada aparelho de novo — senão a chave antiga voltaria a pular o
+        // código assim que a pessoa enrolasse outra vez.
+        await db.update(usuariosAparelho).set({ confiancaHash: null }).where(eq(usuariosAparelho.usuarioId, Number(usuarioId)));
 
         if (!config) {
             await db.insert(usuarios2fa).values({

@@ -302,12 +302,15 @@ export const authApi = {
         throw new Error('Acesso Negado: Credenciais Mestra inválidas.');
     }
 
-    const payload: { email: string; password: string; app_id?: string; aparelho_id?: string; aparelho_nome?: string; cofre?: boolean } = { email, password };
+    const payload: { email: string; password: string; app_id?: string; aparelho_id?: string; aparelho_nome?: string; aparelho_confianca?: string; cofre?: boolean } = { email, password };
     if (appId) payload.app_id = appId;
     if (cofre) {
       payload.aparelho_id = cofre.aparelho.id;
       payload.aparelho_nome = cofre.aparelho.nome;
       payload.cofre = true;
+      // Aparelho já registrado (db/021): entra só com CPF + CPF.
+      const confianca = confiancaGuardada();
+      if (confianca) payload.aparelho_confianca = confianca;
     }
 
     const { data } = await api.post<LoginResponse | TwoFactorChallengeResponse | TwoFactorSetupRequiredResponse>('/auth/login', payload);
@@ -332,6 +335,7 @@ export const authApi = {
     }
 
     const sessao = data as LoginResponse;
+    guardarConfianca(sessao);
     localStorage.setItem('awl_token', sessao.token);
     localStorage.setItem('awl_user', JSON.stringify(sessao.usuario));
 
@@ -375,6 +379,7 @@ export const authApi = {
     // Conta do painel sem 2FA não existe (o convite marca obrigatório); se
     // vier sessão direta, o `adminMiddleware` recusa do mesmo jeito.
     const sessao = data as LoginResponse;
+    guardarConfianca(sessao);
     localStorage.setItem('awl_token', sessao.token);
     localStorage.setItem('awl_user', JSON.stringify(sessao.usuario));
     marcarAdminDeOrganizacao();
@@ -453,7 +458,24 @@ export const authApi = {
 // 2FA API
 // ==========================================
 /** Grava a sessão devolvida pela segunda etapa. */
+/**
+ * Chave de aparelho confiável (db/021): o hub a entrega no login completo (com 2FA)
+ * de conta de CPF de app com `aparelho_confiavel`; com ela, o próximo login deste
+ * navegador no "Meu cofre" entra só com CPF + CPF. Fica no navegador, como o id do
+ * aparelho (`hub_aparelho_id`), e sai junto quando os dados do site são limpos.
+ */
+const CHAVE_CONFIANCA = 'hub_aparelho_confianca';
+const guardarConfianca = (data: { aparelho_confianca?: string }): void => {
+  if (data.aparelho_confianca) {
+    try { localStorage.setItem(CHAVE_CONFIANCA, data.aparelho_confianca); } catch { /* sem armazenamento: pede o código de novo */ }
+  }
+};
+const confiancaGuardada = (): string | undefined => {
+  try { return localStorage.getItem(CHAVE_CONFIANCA) || undefined; } catch { return undefined; }
+};
+
 const salvarSessao = (data: LoginResponse): void => {
+  guardarConfianca(data);
   localStorage.setItem('awl_token', data.token);
   localStorage.setItem('awl_user', JSON.stringify(data.usuario));
   if (data.app) localStorage.setItem('awl_app', JSON.stringify(data.app));
@@ -806,10 +828,27 @@ export const masterDigitalApi = {
 // ==========================================
 // A cifra e a decifra moram na UI (apps/ui/src/features/cofre/cripto.ts) e no
 // CLI hub-pass. Rotas em /cofre: master, usuário de app com cofre liberado.
+/** A conta do app no "Meu cofre" (db/021). `totp` é a URI otpauth:// do 2FA da própria conta. */
+export interface ContaDoAppNoCofre {
+  titulo: string;
+  usuario: string;
+  url: string | null;
+  logo: string | null;
+  totp: string;
+}
+
 export const cofreApi = {
   estado: async (): Promise<CofreEstado> => {
     const { data } = await api.get<CofreEstado>('/cofre');
     return data;
+  },
+  /**
+   * A conta do app da própria pessoa (db/021): logo, CPF e o código 2FA ao vivo, para
+   * o "Meu cofre" mostrar sem palavra-passe. `null` fora de app com `aparelho_confiavel`.
+   */
+  contaDoApp: async (): Promise<ContaDoAppNoCofre | null> => {
+    const { data } = await api.get<{ conta: ContaDoAppNoCofre | null }>('/cofre/conta-do-app');
+    return data.conta;
   },
   criarConta: async (conta: CofreConta): Promise<void> => {
     await api.post('/cofre/conta', conta);
