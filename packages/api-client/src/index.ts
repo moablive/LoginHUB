@@ -45,8 +45,16 @@ import type {
 // ==========================================
 // API INSTANCE CONFIGURATION
 // ==========================================
+/**
+ * Sem prazo, uma conexão morta (iOS volta do segundo plano com o socket velho, Wi-Fi para 4G) deixa a promise
+ * pendurada para sempre e o painel "trava" até o F5. Com prazo, a chamada falha e a tela mostra o erro.
+ */
+const PRAZO_REQUISICAO_MS = 20_000;
+const PRAZO_REFRESH_MS = 10_000;
+
 export const api = axios.create({
   baseURL: (import.meta as any).env.VITE_API_URL,
+  timeout: PRAZO_REQUISICAO_MS,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -128,11 +136,18 @@ const MASTER_LOGIN_EMAIL = 'master@infra.local';
 
 // Coordena refreshes concorrentes: se várias requests caem em 401 ao mesmo tempo,
 // só dispara UM refresh — as outras aguardam o mesmo Promise.
-let refreshInFlight: Promise<string | null> | null = null;
+let refreshInFlight: Promise<ResultadoRefresh> | null = null;
 
-const performRefresh = async (): Promise<string | null> => {
+/**
+ * `recusada`: o servidor respondeu que esta sessão não renova (token inválido, expirado além da tolerância ou
+ * revogada) — aí sim é caso de ir ao login. Qualquer outra falha (sem rede, prazo, 5xx) NÃO derruba a sessão: o
+ * token continua bom, só não deu para renovar agora.
+ */
+type ResultadoRefresh = { token: string; recusada?: false } | { token: null; recusada: boolean };
+
+const performRefresh = async (): Promise<ResultadoRefresh> => {
   const currentToken = localStorage.getItem('awl_token');
-  if (!currentToken) return null;
+  if (!currentToken) return { token: null, recusada: true };
 
   try {
     // Usa axios direto (não a instância `api`) para não passar pelo interceptor
@@ -140,16 +155,52 @@ const performRefresh = async (): Promise<string | null> => {
     const { data } = await axios.post<LoginResponse>(
       `${baseURL}/auth/refresh`,
       {},
-      { headers: { 'Authorization': `Bearer ${currentToken}` } },
+      { headers: { 'Authorization': `Bearer ${currentToken}` }, timeout: PRAZO_REFRESH_MS },
     );
 
     localStorage.setItem('awl_token', data.token);
     if (data.usuario) localStorage.setItem('awl_user', JSON.stringify(data.usuario));
     if (data.app) localStorage.setItem('awl_app', JSON.stringify(data.app));
-    return data.token;
+    return { token: data.token };
+  } catch (e) {
+    const status = axios.isAxiosError(e) ? e.response?.status : undefined;
+    return { token: null, recusada: status === 400 || status === 401 || status === 403 };
+  }
+};
+
+const renovarUmaVez = (): Promise<ResultadoRefresh> => {
+  if (!refreshInFlight) {
+    refreshInFlight = performRefresh().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+};
+
+/** Validade (ms desde 1970) do JWT guardado, ou null se não der para ler. */
+const validadeDoToken = (): number | null => {
+  try {
+    const token = localStorage.getItem('awl_token');
+    const carga = token?.split('.')[1];
+    if (!carga) return null;
+    const { exp } = JSON.parse(atob(carga.replace(/-/g, '+').replace(/_/g, '/'))) as { exp?: number };
+    return typeof exp === 'number' ? exp * 1000 : null;
   } catch {
     return null;
   }
+};
+
+const RENOVAR_FALTANDO_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Renova a sessão em silêncio quando ela está perto de vencer (ou já venceu dentro da tolerância do servidor).
+ * Chamada ao abrir o app e ao voltar do segundo plano: assim o primeiro toque depois de horas parado não depende
+ * de uma sequência de 401 → refresh → repetição. Nunca desloga: se falhar, o interceptor decide na próxima chamada.
+ */
+export const renovarSessaoSeVelha = async (): Promise<void> => {
+  const validade = validadeDoToken();
+  if (validade === null || validade - Date.now() > RENOVAR_FALTANDO_MS) return;
+  await renovarUmaVez();
 };
 
 api.interceptors.response.use(
@@ -163,20 +214,18 @@ api.interceptors.response.use(
     if (status === 401 && config && !config._retry && !isAuthEndpoint) {
       config._retry = true;
 
-      if (!refreshInFlight) {
-        refreshInFlight = performRefresh().finally(() => {
-          refreshInFlight = null;
-        });
-      }
-      const newToken = await refreshInFlight;
+      const renovado = await renovarUmaVez();
 
-      if (newToken) {
+      if (renovado.token) {
         if (!config.headers) config.headers = {} as AxiosRequestHeaders;
-        config.headers['Authorization'] = `Bearer ${newToken}`;
+        config.headers['Authorization'] = `Bearer ${renovado.token}`;
         return api.request(config);
       }
 
-      // Refresh falhou: limpa sessão e redireciona
+      // Sem rede ou servidor fora: a sessão continua valendo, só devolve o erro para a tela tratar.
+      if (!renovado.recusada) return Promise.reject(error);
+
+      // O servidor recusou a renovação: limpa sessão e redireciona
       if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
         console.warn('Sessão expirada. Redirecionando...');
         localStorage.removeItem('awl_token');
@@ -417,10 +466,10 @@ export const authApi = {
    * Retorna `null` se o refresh falhou — chame `authApi.logout()` neste caso.
    */
   refresh: async (): Promise<LoginResponse | null> => {
-    const newToken = await performRefresh();
-    if (!newToken) return null;
+    const renovado = await renovarUmaVez();
+    if (!renovado.token) return null;
     return {
-      token: newToken,
+      token: renovado.token,
       expiresIn: 86400,
       usuario: JSON.parse(localStorage.getItem('awl_user') || 'null'),
       app: JSON.parse(localStorage.getItem('awl_app') || 'null'),

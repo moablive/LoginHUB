@@ -7,6 +7,7 @@ import {
   BuildingOfficeIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  EllipsisHorizontalCircleIcon,
   LinkIcon,
   FingerPrintIcon,
   LockClosedIcon,
@@ -30,6 +31,8 @@ import { fundoDoLogo } from '@/config/logoFundo';
 import UiNavBar from '@/components/ui/UiNavBar.vue';
 import MasterDigitalSheet from '@/components/seguranca/MasterDigitalSheet.vue';
 import UiButton from '@/components/ui/UiButton.vue';
+import UiRow from '@/components/ui/UiRow.vue';
+import UiSheet from '@/components/ui/UiSheet.vue';
 import UiSearchField from '@/components/ui/UiSearchField.vue';
 import UiSection from '@/components/ui/UiSection.vue';
 import UiAlert from '@/components/ui/UiAlert.vue';
@@ -52,6 +55,14 @@ const carregando = ref(true);
 // Estados de folhas, alertas e ações
 const mostrarSair = ref(false);
 const mostrarCategorias = ref(false);
+// Celular (26/11/2026): os controles do topo e de cada app não cabem em ~390px; ficam agrupados em folhas.
+const mostrarMaisTopo = ref(false);
+const appMenu = ref<App | null>(null);
+const noMenu = (acao: () => void) => {
+  mostrarMaisTopo.value = false;
+  acao();
+  appMenu.value = null;
+};
 // Id do app cuja seta acabou de ser clicada: trava as setas até a lista voltar.
 const movendo = ref<string | null>(null);
 const excluindo = ref(false);
@@ -235,21 +246,27 @@ const seta =
       :subtitulo="eu && !eu.master ? `LoginHub · ${eu.nome} · ${eu.organizacoes.map((o) => o.nome).join(', ')}` : 'LoginHub · gestão centralizada de aplicativos e infraestrutura'"
     >
       <template #acoes>
-        <UiButton v-if="master" variante="plain" icone aria-label="Categorias" title="Criar, renomear e ordenar as categorias" @click="mostrarCategorias = true">
-          <TagIcon class="h-6 w-6" />
+        <!-- Celular: só "Mais" e "Novo"; o resto vai para a folha. sm+ segue igual. -->
+        <UiButton class="sm:hidden" variante="plain" icone aria-label="Mais opções" title="Categorias, digital, cofre e sair" @click="mostrarMaisTopo = true">
+          <EllipsisHorizontalCircleIcon class="h-6 w-6" />
         </UiButton>
-        <UiButton v-if="master" variante="plain" icone aria-label="Digital do master" title="Entrar no painel com a digital (Touch ID, Face ID)" @click="mostrarDigitalMaster = true">
-          <FingerPrintIcon class="h-6 w-6" />
-        </UiButton>
-        <UiButton v-if="master" variante="gray" tamanho="small" to="/cofre" title="Cofre de senhas e códigos 2FA, cifrado no navegador">
-          <LockClosedIcon class="h-4 w-4" />
-          Cofre
-        </UiButton>
-        <!-- O "Convidar admin" do topo saiu (19/11/2026, pedido do dono): cada app e cada
-             organização tem o próprio botão Admins, já presos à organização certa. -->
-        <UiButton variante="plain" icone aria-label="Sair" title="Sair" class="!text-danger hover:!bg-danger/10" @click="mostrarSair = true">
-          <ArrowRightOnRectangleIcon class="h-6 w-6" />
-        </UiButton>
+        <div class="hidden items-center gap-1 sm:flex">
+          <UiButton v-if="master" variante="plain" icone aria-label="Categorias" title="Criar, renomear e ordenar as categorias" @click="mostrarCategorias = true">
+            <TagIcon class="h-6 w-6" />
+          </UiButton>
+          <UiButton v-if="master" variante="plain" icone aria-label="Digital do master" title="Entrar no painel com a digital (Touch ID, Face ID)" @click="mostrarDigitalMaster = true">
+            <FingerPrintIcon class="h-6 w-6" />
+          </UiButton>
+          <UiButton v-if="master" variante="gray" tamanho="small" to="/cofre" title="Cofre de senhas e códigos 2FA, cifrado no navegador">
+            <LockClosedIcon class="h-4 w-4" />
+            Cofre
+          </UiButton>
+          <!-- O "Convidar admin" do topo saiu (19/11/2026, pedido do dono): cada app e cada
+               organização tem o próprio botão Admins, já presos à organização certa. -->
+          <UiButton variante="plain" icone aria-label="Sair" title="Sair" class="!text-danger hover:!bg-danger/10" @click="mostrarSair = true">
+            <ArrowRightOnRectangleIcon class="h-6 w-6" />
+          </UiButton>
+        </div>
         <UiButton v-if="master" tamanho="small" to="/apps/new">
           <PlusIcon class="h-4 w-4" stroke-width="2.5" />
           Novo
@@ -405,36 +422,38 @@ const seta =
               <span class="text-footnote text-label-2 md:text-subhead">{{ dataCadastro(app.data_cadastro) }}</span>
             </div>
 
-            <!-- ações -->
-            <div class="-mx-2 flex items-center gap-1 md:mx-0 md:justify-end">
-              <!-- Subir/descer dentro da categoria. Travado durante busca. -->
+            <!-- ações: celular = Usuários + "⋯" (folha); md+ = tudo na linha -->
+            <div class="flex items-center gap-1 md:justify-end">
               <template v-if="master">
-              <button
-                type="button"
-                :class="seta"
-                :disabled="buscando || !!movendo || indice === 0"
-                :title="buscando ? 'Limpe a busca para reordenar' : 'Subir'"
-                :aria-label="`Subir ${app.nome}`"
-                @click="mover(app, 'cima')"
-              >
-                <ChevronUpIcon class="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                :class="seta"
-                :disabled="buscando || !!movendo || indice === grupo.apps.length - 1"
-                :title="buscando ? 'Limpe a busca para reordenar' : 'Descer'"
-                :aria-label="`Descer ${app.nome}`"
-                @click="mover(app, 'baixo')"
-              >
-                <ChevronDownIcon class="h-5 w-5" />
-              </button>
+                <button
+                  type="button"
+                  class="hidden md:inline-flex"
+                  :class="seta"
+                  :disabled="buscando || !!movendo || indice === 0"
+                  :title="buscando ? 'Limpe a busca para reordenar' : 'Subir'"
+                  :aria-label="`Subir ${app.nome}`"
+                  @click="mover(app, 'cima')"
+                >
+                  <ChevronUpIcon class="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  class="hidden md:inline-flex"
+                  :class="seta"
+                  :disabled="buscando || !!movendo || indice === grupo.apps.length - 1"
+                  :title="buscando ? 'Limpe a busca para reordenar' : 'Descer'"
+                  :aria-label="`Descer ${app.nome}`"
+                  @click="mover(app, 'baixo')"
+                >
+                  <ChevronDownIcon class="h-5 w-5" />
+                </button>
               </template>
 
               <UiButton variante="tinted" tamanho="small" class="ml-auto md:ml-1" :to="`/apps/${app.id}/users`">Usuários</UiButton>
               <!-- Gerenciar os admins da organização do app: convidar, resetar senha, tirar. -->
               <UiButton
                 v-if="app.categoria_id !== null && app.categoria_id !== undefined"
+                class="hidden md:inline-flex"
                 variante="tinted"
                 tamanho="small"
                 :title="`Admins de ${app.nome}: convidar, resetar senha e tirar`"
@@ -442,29 +461,93 @@ const seta =
               >
                 Admins
               </UiButton>
-              <UiButton v-if="master" variante="plain" icone :aria-label="`Vendas de ${app.nome}`" title="Vendas: preço, afiliados e assinantes" :to="`/apps/${app.id}/vendas`">
+              <UiButton v-if="master" class="hidden md:inline-flex" variante="plain" icone :aria-label="`Vendas de ${app.nome}`" title="Vendas: preço, afiliados e assinantes" :to="`/apps/${app.id}/vendas`">
                 <BanknotesIcon class="h-5 w-5" />
               </UiButton>
-
-              <UiButton v-if="master" variante="plain" icone :aria-label="`Editar ${app.nome}`" title="Editar dados do aplicativo" @click="appParaEditar = app">
+              <UiButton v-if="master" class="hidden md:inline-flex" variante="plain" icone :aria-label="`Editar ${app.nome}`" title="Editar dados do aplicativo" @click="appParaEditar = app">
                 <PencilSquareIcon class="h-5 w-5" />
               </UiButton>
               <UiButton
                 v-if="master"
+                class="hidden !text-danger hover:!bg-danger/10 md:inline-flex"
                 variante="plain"
                 icone
-                class="!text-danger hover:!bg-danger/10"
                 :aria-label="`Excluir ${app.nome}`"
                 title="Excluir aplicativo"
                 @click="appParaExcluir = app"
               >
                 <TrashIcon class="h-5 w-5" />
               </UiButton>
+              <UiButton class="md:hidden" variante="plain" icone :aria-label="`Mais opções de ${app.nome}`" @click="appMenu = app">
+                <EllipsisHorizontalCircleIcon class="h-6 w-6" />
+              </UiButton>
             </div>
           </div>
         </UiSection>
       </div>
     </div>
+
+    <!-- FOLHAS DO CELULAR: topo e cada app -->
+    <UiSheet :aberto="mostrarMaisTopo" titulo="Painel" largura="sm" @fechar="mostrarMaisTopo = false">
+      <div class="divide-y overflow-hidden rounded-celula bg-surface [&>*]:border-separator">
+        <template v-if="master">
+          <UiRow clicavel chevron titulo="Categorias" subtitulo="Criar, renomear e ordenar" @click="noMenu(() => (mostrarCategorias = true))">
+            <template #icone><TagIcon class="text-accent" /></template>
+          </UiRow>
+          <UiRow clicavel chevron titulo="Digital do master" subtitulo="Entrar com Touch ID ou Face ID" @click="noMenu(() => (mostrarDigitalMaster = true))">
+            <template #icone><FingerPrintIcon class="text-accent" /></template>
+          </UiRow>
+          <UiRow :to="'/cofre'" titulo="Cofre" subtitulo="Senhas e códigos 2FA">
+            <template #icone><LockClosedIcon class="text-accent" /></template>
+          </UiRow>
+        </template>
+        <UiRow clicavel titulo="Sair" @click="noMenu(() => (mostrarSair = true))">
+          <template #icone><ArrowRightOnRectangleIcon class="text-danger" /></template>
+        </UiRow>
+      </div>
+    </UiSheet>
+
+    <UiSheet :aberto="!!appMenu" :titulo="appMenu?.nome ?? ''" largura="sm" @fechar="appMenu = null">
+      <div v-if="appMenu" class="divide-y overflow-hidden rounded-celula bg-surface [&>*]:border-separator">
+        <UiRow
+          v-if="appMenu.categoria_id !== null && appMenu.categoria_id !== undefined"
+          clicavel
+          chevron
+          titulo="Admins"
+          subtitulo="Convidar, resetar senha e tirar"
+          @click="noMenu(() => (adminsDe = appMenu?.categoria_id))"
+        >
+          <template #icone><UserPlusIcon class="text-accent" /></template>
+        </UiRow>
+        <template v-if="master">
+          <UiRow :to="`/apps/${appMenu.id}/vendas`" titulo="Vendas" subtitulo="Preço, afiliados e assinantes">
+            <template #icone><BanknotesIcon class="text-accent" /></template>
+          </UiRow>
+          <UiRow clicavel chevron titulo="Editar" subtitulo="Dados do aplicativo" @click="noMenu(() => (appParaEditar = appMenu))">
+            <template #icone><PencilSquareIcon class="text-accent" /></template>
+          </UiRow>
+          <UiRow
+            clicavel
+            titulo="Subir na lista"
+            :class="buscando || !!movendo ? 'pointer-events-none opacity-40' : ''"
+            @click="noMenu(() => appMenu && mover(appMenu, 'cima'))"
+          >
+            <template #icone><ChevronUpIcon class="text-accent" /></template>
+          </UiRow>
+          <UiRow
+            clicavel
+            titulo="Descer na lista"
+            :class="buscando || !!movendo ? 'pointer-events-none opacity-40' : ''"
+            @click="noMenu(() => appMenu && mover(appMenu, 'baixo'))"
+          >
+            <template #icone><ChevronDownIcon class="text-accent" /></template>
+          </UiRow>
+          <UiRow clicavel titulo="Excluir" @click="noMenu(() => (appParaExcluir = appMenu))">
+            <template #icone><TrashIcon class="text-danger" /></template>
+          </UiRow>
+        </template>
+      </div>
+    </UiSheet>
 
     <!-- FOLHAS E ALERTAS -->
     <UiAlert
