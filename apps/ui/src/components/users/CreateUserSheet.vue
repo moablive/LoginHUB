@@ -84,7 +84,7 @@ function carregarRemotos() {
   if (!prov) return;
   const token = localStorage.getItem('awl_token');
   for (const field of prov.fields) {
-    if (field.type !== 'remote-select' || !field.source) continue;
+    if ((field.type !== 'remote-select' && field.type !== 'remote-choice') || !field.source) continue;
     const source = field.source;
     void (async () => {
       try {
@@ -203,6 +203,12 @@ function escolher(field: ProvisionField, value: string) {
   };
   fieldErrors.value = { ...fieldErrors.value, name: '', email: '' };
 }
+
+// remote-choice: a explicação e o "desabilitado" de cada botão vêm do item cru.
+const descricaoDe = (field: ProvisionField, o: { item: Record<string, unknown> }) =>
+  field.optionDescription ? String(o.item[field.optionDescription] ?? '') : '';
+const desabilitada = (field: ProvisionField, o: { item: Record<string, unknown> }) =>
+  !!field.optionDisabledWhenFalse && !o.item[field.optionDisabledWhenFalse];
 
 const selecionados = (field: ProvisionField) =>
   String(extraData.value[field.name] ?? '')
@@ -451,6 +457,31 @@ const descricaoPapel = computed(() =>
                   <option v-for="o in remoteOptions[field.name] ?? []" :key="o.value" :value="o.value">{{ o.label }}</option>
                   <option v-if="field.allowNew" :value="field.newValue || '__new__'">{{ field.newLabel || 'Criar novo' }}</option>
                 </UiSelect>
+              </template>
+
+              <!-- remote-choice: botões lado a lado, escolha única -->
+              <template v-else-if="field.type === 'remote-choice'">
+                <p class="mb-1.5 px-1 text-footnote font-medium text-label-2">{{ field.label }}</p>
+                <div class="grid gap-2 sm:grid-cols-2" role="radiogroup" :aria-label="field.label">
+                  <button
+                    v-for="o in remoteOptions[field.name] ?? []"
+                    :key="o.value"
+                    type="button"
+                    role="radio"
+                    :aria-checked="extraData[field.name] === o.value"
+                    :disabled="desabilitada(field, o)"
+                    class="flex min-h-toque flex-col items-start gap-1 rounded-controle border-2 px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-45"
+                    :class="extraData[field.name] === o.value ? 'border-[rgb(var(--acento))] bg-fill-2' : 'border-transparent bg-fill-2 hover:border-separator'"
+                    @click="setExtra(field, o.value)"
+                  >
+                    <span class="text-body font-semibold text-label">{{ o.label }}</span>
+                    <span v-if="descricaoDe(field, o)" class="text-footnote text-label-2">{{ descricaoDe(field, o) }}</span>
+                    <span v-if="desabilitada(field, o)" class="text-footnote font-medium text-label-2">Indisponível: o contrato ainda não foi aprovado.</span>
+                  </button>
+                </div>
+                <p v-if="fieldErrors[field.name] || remoteErrors[field.name] || field.help" class="mt-1.5 px-1 text-footnote" :class="fieldErrors[field.name] || remoteErrors[field.name] ? 'text-danger' : 'text-label-2'">
+                  {{ fieldErrors[field.name] || remoteErrors[field.name] || field.help }}
+                </p>
               </template>
 
               <!-- checkbox-group: lista de marcação, como no Ajustes -->

@@ -25,20 +25,27 @@ export interface ProvisionField {
   placeholder?: string;
   help?: string;
   required?: boolean;
-  type?: "text" | "number" | "remote-select" | "checkbox-group";
+  type?: "text" | "number" | "remote-select" | "checkbox-group" | "remote-choice";
   /** Máscara aplicada na digitação (chave de `utils/masks`). */
   mask?: "cpf" | "phone";
   /** Valor inicial do campo. */
   defaultValue?: string;
   /** Sufixo exibido dentro do input (ex.: "%"). */
   suffix?: string;
-  // -- remote-select: opções vêm de um GET no app (Bearer master) --
+  // -- remote-select / remote-choice: opções vêm de um GET no app (Bearer master) --
+  // O remote-choice mostra as opções como botões lado a lado (escolha única),
+  // com a `optionDescription` embaixo; item com `optionDisabledWhenFalse`
+  // falso aparece desabilitado (ex.: contrato que ainda não existe).
   /** URL que devolve a lista de opções. */
   source?: string;
   /** Campo do item usado como value da opção (default "id"). */
   optionValue?: string;
   /** Campo do item usado como label da opção (default "name"). */
   optionLabel?: string;
+  /** remote-choice: campo do item com a linha de explicação do botão. */
+  optionDescription?: string;
+  /** remote-choice: campo do item que, falso, deixa o botão desabilitado. */
+  optionDisabledWhenFalse?: string;
   /** Exclui o item quando ESTE campo dele é truthy (ex.: já tem login). */
   excludeWhenField?: string;
   /** Adiciona a opção "criar novo". */
@@ -219,7 +226,7 @@ export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
   "8": {
     roleLabel: "DJ / Artista",
     roleDescription:
-      "Cria o artista na Astral Wave Label e o login do DJ no LoginHUB, amarrados. Todo DJ entra com o painel completo e, no primeiro acesso, lê e aceita o contrato base antes de qualquer outra coisa (o convite já leva o PDF).",
+      "Cria o artista na Astral Wave Label e o login do DJ no LoginHUB, amarrados. O convite leva o PDF do contrato escolhido, e o painel só libera depois que o artista assinar esse contrato no LibreSign.",
     endpoint: `${ASTRALWAVE_API}/admin/artists/invite`,
     fields: [
       {
@@ -230,12 +237,28 @@ export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
         required: true,
         help: "O nome artístico, como vai aparecer na Astral Wave Label.",
       },
+      // Tipo de contrato (26/11/2026, pedido do dono). A label diz quais
+      // existem: o Records fica desabilitado até o contrato dele estar na
+      // pasta de Contratos, sem precisar mexer aqui.
+      {
+        name: "vinculo",
+        label: "Tipo de contrato",
+        type: "remote-choice",
+        source: `${ASTRALWAVE_API}/admin/contratos/base/vinculos`,
+        optionValue: "id",
+        optionLabel: "name",
+        optionDescription: "descricao",
+        optionDisabledWhenFalse: "disponivel",
+        defaultValue: "completo",
+        required: true,
+      },
     ],
     buildPayload: (base, extra) => ({
       email: base.email,
       nome: base.nome,
       role: "user",
       new_artist_name: (extra.new_artist_name || "").trim(),
+      vinculo: extra.vinculo || "completo",
     }),
   },
 };
