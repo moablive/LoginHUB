@@ -247,7 +247,7 @@ const seta =
     >
       <template #acoes>
         <!-- Celular: só "Mais" e "Novo"; o resto vai para a folha. sm+ segue igual. -->
-        <UiButton class="sm:hidden" variante="plain" icone aria-label="Mais opções" title="Categorias, digital, cofre e sair" @click="mostrarMaisTopo = true">
+        <UiButton class="sm:hidden" variante="plain" icone aria-label="Mais opções" title="Categorias, digital e sair" @click="mostrarMaisTopo = true">
           <EllipsisHorizontalCircleIcon class="h-6 w-6" />
         </UiButton>
         <div class="hidden items-center gap-1 sm:flex">
@@ -267,9 +267,13 @@ const seta =
             <ArrowRightOnRectangleIcon class="h-6 w-6" />
           </UiButton>
         </div>
-        <UiButton v-if="master" tamanho="small" to="/apps/new">
+        <UiButton v-if="master" class="sm:hidden" variante="gray" tamanho="small" to="/cofre" title="Cofre de senhas e códigos 2FA">
+          <LockClosedIcon class="h-4 w-4" />
+          Cofre
+        </UiButton>
+        <UiButton v-if="master" tamanho="small" to="/apps/new" title="Novo aplicativo">
           <PlusIcon class="h-4 w-4" stroke-width="2.5" />
-          Novo
+          App
         </UiButton>
       </template>
     </UiNavBar>
@@ -496,9 +500,6 @@ const seta =
           </UiRow>
           <UiRow clicavel chevron titulo="Digital do master" subtitulo="Entrar com Touch ID ou Face ID" @click="noMenu(() => (mostrarDigitalMaster = true))">
             <template #icone><FingerPrintIcon class="text-accent" /></template>
-          </UiRow>
-          <UiRow :to="'/cofre'" titulo="Cofre" subtitulo="Senhas e códigos 2FA">
-            <template #icone><LockClosedIcon class="text-accent" /></template>
           </UiRow>
         </template>
         <UiRow clicavel titulo="Sair" @click="noMenu(() => (mostrarSair = true))">
