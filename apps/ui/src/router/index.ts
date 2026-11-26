@@ -23,7 +23,20 @@ export const router = createRouter({
     { path: '/cofre/entrada', name: 'cofre-entrada', component: () => import('@/pages/CofreEntradaPage.vue') },
     { path: '/enrolar-2fa', name: 'enrolar-2fa', component: () => import('@/pages/Enroll2FAPage.vue') },
 
-    { path: '/', redirect: '/dashboard' },
+    // A home do hub é a página de venda (astralwavelabel.com/loginhub, com o botão de compra e o Entrar).
+    // Quem já tem sessão, ou abre o app instalado na tela inicial, vai direto ao painel.
+    {
+      path: '/',
+      beforeEnter: () => {
+        const instalado =
+          window.matchMedia('(display-mode: standalone)').matches ||
+          (navigator as Navigator & { standalone?: boolean }).standalone === true;
+        if (authApi.isAuthenticated() || instalado) return { path: '/dashboard', replace: true };
+        window.location.replace('https://astralwavelabel.com/loginhub');
+        return false;
+      },
+      component: { render: () => null },
+    },
 
     // --- área do super admin ---
     {
