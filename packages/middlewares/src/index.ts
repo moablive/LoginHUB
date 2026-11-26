@@ -731,6 +731,26 @@ export const rateLimitPasskey = criarRateLimit({
     chave: (req) => ipDoCliente(req as any),
 });
 
+/**
+ * Cofre compartilhado (db/022): procurar uma conta pelo e-mail e convidar. A resposta é igual para "não existe" e "não
+ * tem cofre", mas o volume de tentativas ainda revelaria quem tem conta: dois limites independentes: por dono do cofre (não depende de cabeçalho nenhum) e por IP.
+ * Vale depois do `cofreAuth` (precisa do dono).
+ */
+export const rateLimitCofreConviteDono = criarRateLimit({
+    nome: 'cofre-convite-dono',
+    janelaMs: 10 * 60 * 1000,
+    max: 30,
+    chave: (req) => donoDoCofre(req)?.dono ?? 'sem-dono',
+});
+
+/** Separado do limite por dono, e folgado (NAT compartilhado): o IP vem de cabeçalho e sozinho não seguraria ninguém. */
+export const rateLimitCofreConviteIp = criarRateLimit({
+    nome: 'cofre-convite-ip',
+    janelaMs: 10 * 60 * 1000,
+    max: 60,
+    chave: (req) => ipDoCliente(req as any),
+});
+
 // ==========================================
 // 4. CORS MIDDLEWARE
 // ==========================================

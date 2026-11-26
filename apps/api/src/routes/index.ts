@@ -30,6 +30,8 @@ import {
   rateLimitCheckout,
   rateLimitVendaLeitura,
   rateLimitPasskey,
+  rateLimitCofreConviteDono,
+  rateLimitCofreConviteIp,
   cofreAuth
 } from '@loginhub/middlewares';
 
@@ -247,6 +249,14 @@ cofreRouter.get('/conta-do-app', CofreController.contaDoApp as any);
 cofreRouter.post('/conta', CofreController.criarConta as any);
 cofreRouter.put('/conta', CofreController.trocarSenha as any);
 cofreRouter.put('/cofres/:id', CofreController.salvarCofre as any);
+// Cofre compartilhado (db/022). Papel conferido no serviço, em cada rota; a máquina do CLI é recusada em todas.
+cofreRouter.put('/pessoa', CofreController.salvarPessoa as any);
+cofreRouter.get('/pessoas', rateLimitCofreConviteDono as any, rateLimitCofreConviteIp as any, CofreController.buscarPessoa as any);
+cofreRouter.post('/cofres/:id/membros', rateLimitCofreConviteDono as any, rateLimitCofreConviteIp as any, CofreController.convidar as any);
+cofreRouter.delete('/cofres/:id/membros/eu', CofreController.sairDoCofre as any);
+cofreRouter.put('/cofres/:id/membros/:membro', CofreController.ajustarMembro as any);
+cofreRouter.delete('/cofres/:id/membros/:membro', CofreController.removerMembro as any);
+cofreRouter.post('/cofres/:id/girar-chave', CofreController.girarChave as any);
 cofreRouter.delete('/cofres/:id', CofreController.apagarCofre as any);
 cofreRouter.put('/itens/:id', CofreController.salvarItem as any);
 cofreRouter.delete('/itens/:id', CofreController.apagarItem as any);

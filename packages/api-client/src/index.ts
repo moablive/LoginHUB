@@ -39,7 +39,12 @@ import type {
   CofreDigital,
   CofreDigitalNova,
   CofreEntradaNova,
-  CofreEntradaPedido
+  CofreEntradaPedido,
+  CofreGiro,
+  CofreMembroAjuste,
+  CofreMembroNovo,
+  CofrePessoa,
+  CofrePessoaPublica
 } from '@loginhub/schema';
 
 // ==========================================
@@ -911,11 +916,51 @@ export const cofreApi = {
   apagarCofre: async (id: string): Promise<void> => {
     await api.delete(`/cofre/cofres/${id}`);
   },
-  salvarItem: async (id: string, cofreId: string, dados: string): Promise<void> => {
-    await api.put(`/cofre/itens/${id}`, { cofre_id: cofreId, dados });
+  /**
+   * `prova` (cofre compartilhado, db/022 e db/023): o `selo` que o membro tem e a `geracao` da chave que ele usou; em
+   * `origem`, o mesmo do cofre de onde o item sai (mover). O servidor recusa com 409 `CHAVE_GIRADA` se a chave girou.
+   */
+  salvarItem: async (
+    id: string,
+    cofreId: string,
+    dados: string,
+    prova: { selo?: string | undefined; geracao?: number | undefined; origem?: { selo?: string | undefined; geracao?: number | undefined } | undefined } = {},
+  ): Promise<void> => {
+    await api.put(`/cofre/itens/${id}`, {
+      cofre_id: cofreId,
+      dados,
+      ...(prova.selo ? { selo: prova.selo } : {}),
+      ...(prova.geracao !== undefined ? { geracao: prova.geracao } : {}),
+      ...(prova.origem?.selo ? { origem_selo: prova.origem.selo } : {}),
+      ...(prova.origem?.geracao !== undefined ? { origem_geracao: prova.origem.geracao } : {}),
+    });
   },
   apagarItem: async (id: string): Promise<void> => {
     await api.delete(`/cofre/itens/${id}`);
+  },
+  // ---- cofre compartilhado (db/022)
+  /** Guarda o par X25519 da conta (a privada já cifrada com a chave da conta). */
+  salvarPessoa: async (par: CofrePessoa): Promise<void> => {
+    await api.put('/cofre/pessoa', par);
+  },
+  /** A chave pública de outra conta com cofre, pelo e-mail. 404 igual para "não existe" e "não tem cofre". */
+  pessoaPorEmail: async (email: string): Promise<CofrePessoaPublica> => {
+    const { data } = await api.get<CofrePessoaPublica>('/cofre/pessoas', { params: { email } });
+    return data;
+  },
+  convidar: async (cofreId: string, membro: CofreMembroNovo): Promise<void> => {
+    await api.post(`/cofre/cofres/${cofreId}/membros`, membro);
+  },
+  ajustarMembro: async (cofreId: string, membro: string, ajuste: CofreMembroAjuste): Promise<void> => {
+    await api.put(`/cofre/cofres/${cofreId}/membros/${encodeURIComponent(membro)}`, ajuste);
+  },
+  /** O membro sai do cofre (perde só o próprio acesso). */
+  sairDoCofre: async (cofreId: string): Promise<void> => {
+    await api.delete(`/cofre/cofres/${cofreId}/membros/eu`);
+  },
+  /** Chave nova do cofre, itens recifrados e selos novos, numa transação (e, se `remover`, tira essa pessoa). */
+  girarChave: async (cofreId: string, giro: CofreGiro): Promise<void> => {
+    await api.post(`/cofre/cofres/${cofreId}/girar-chave`, giro);
   },
   /** Máquinas aprovadas do CLI hub-pass. */
   aparelhos: async (): Promise<CofreAparelho[]> => {

@@ -8,9 +8,12 @@ import {
   EllipsisVerticalIcon,
   PencilSquareIcon,
   PlusIcon,
+  ArrowRightOnRectangleIcon,
   Squares2X2Icon,
   TrashIcon,
+  UserPlusIcon,
 } from '@heroicons/vue/24/outline';
+import UiBadge from '@/components/ui/UiBadge.vue';
 import UiButton from '@/components/ui/UiButton.vue';
 import CofreIcone from './CofreIcone.vue';
 
@@ -24,6 +27,9 @@ import CofreIcone from './CofreIcone.vue';
  * folha de nome, ícone e cor; e o modo ORDENAR (botão das setas, ou "Mover" no
  * menu) troca o ⋮ por subir, descer e ir para o topo. A ordem só é gravada no
  * "Salvar ordem", de uma vez.
+ *
+ * 26/11/2026 (db/022): "Compartilhar" no menu de cada cofre e, embaixo, o grupo "Compartilhados comigo" (cofres de
+ * outras contas, com o papel: leitura ou escrita). Esses não se editam, ordenam nem apagam: só se SAI deles.
  */
 interface CofreDaLista {
   id: string;
@@ -42,6 +48,10 @@ const props = defineProps<{
   atual: string | null;
   /** Gravando (a ordem, por exemplo): trava os botões. */
   ocupado?: boolean;
+  /** Cofres de outras contas compartilhados com esta (db/022). */
+  compartilhados?: (CofreDaLista & { papel: 'leitura' | 'escrita'; donoNome: string | null })[];
+  /** Quantas pessoas, além do dono, abrem cada cofre próprio (id → n). */
+  pessoas?: Record<string, number>;
 }>();
 
 const emit = defineEmits<{
@@ -51,7 +61,15 @@ const emit = defineEmits<{
   apagar: [id: string];
   /** Os ids de todos os cofres, na ordem nova. */
   reordenar: [ids: string[]];
+  compartilhar: [id: string];
+  /** O membro sai de um cofre compartilhado com ele. */
+  sair: [id: string];
 }>();
+
+const pessoasDe = (id: string): string => {
+  const n = props.pessoas?.[id] ?? 0;
+  return n === 0 ? '' : n === 1 ? ' · com 1 pessoa' : ` · com ${n} pessoas`;
+};
 
 const quantos = (n: number) => (n === 1 ? '1 item' : `${n} itens`);
 
@@ -69,9 +87,11 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', aoTeclar);
 });
 
-function acao(tipo: 'editar' | 'apagar' | 'mover', id: string) {
+function acao(tipo: 'editar' | 'apagar' | 'mover' | 'compartilhar' | 'sair', id: string) {
   fecharMenu();
   if (tipo === 'editar') emit('editar', id);
+  else if (tipo === 'compartilhar') emit('compartilhar', id);
+  else if (tipo === 'sair') emit('sair', id);
   else if (tipo === 'apagar') emit('apagar', id);
   else ordenar();
 }
@@ -182,7 +202,7 @@ function salvarOrdem() {
               @click="emit('escolher', c.id)"
             >
               <span class="block truncate text-headline font-semibold">{{ c.nome }}</span>
-              <span class="block text-footnote text-label-2">{{ quantos(contagem[c.id] ?? 0) }}</span>
+              <span class="block text-footnote text-label-2">{{ quantos(contagem[c.id] ?? 0) }}{{ pessoasDe(c.id) }}</span>
             </button>
             <button
               type="button"
@@ -206,6 +226,9 @@ function salvarOrdem() {
             <button type="button" role="menuitem" class="flex min-h-toque w-full items-center gap-2 px-3 text-left text-subhead hover:bg-fill-2" @click="acao('editar', c.id)">
               <PencilSquareIcon class="h-5 w-5 text-label-2" />Nome, ícone e cor
             </button>
+            <button type="button" role="menuitem" class="flex min-h-toque w-full items-center gap-2 px-3 text-left text-subhead hover:bg-fill-2" @click="acao('compartilhar', c.id)">
+              <UserPlusIcon class="h-5 w-5 text-label-2" />Compartilhar
+            </button>
             <button v-if="cofres.length > 1" type="button" role="menuitem" class="flex min-h-toque w-full items-center gap-2 px-3 text-left text-subhead hover:bg-fill-2" @click="acao('mover', c.id)">
               <ArrowsUpDownIcon class="h-5 w-5 text-label-2" />Mover (ordenar os cofres)
             </button>
@@ -215,6 +238,41 @@ function salvarOrdem() {
           </div>
         </template>
       </li>
+
+      <!-- Cofres de outras contas (db/022): só se escolhe e se sai; o dono é quem edita e apaga. -->
+      <template v-if="!ordem && compartilhados && compartilhados.length > 0">
+        <li class="px-2 pt-3 text-subhead font-semibold text-label-2">Compartilhados comigo</li>
+        <li v-for="c in compartilhados" :key="c.id" class="relative">
+          <div class="flex items-center rounded-controle" :class="c.id === atual ? 'bg-accent/15' : 'hover:bg-fill-2'">
+            <span class="ml-2 flex h-10 w-10 shrink-0 items-center justify-center">
+              <CofreIcone :icone="c.icone" :cor="c.cor" :imagem="c.imagem" />
+            </span>
+            <button type="button" class="min-w-0 flex-1 rounded-controle px-3 py-2 text-left" :aria-current="c.id === atual ? 'true' : undefined" @click="emit('escolher', c.id)">
+              <span class="flex items-center gap-2">
+                <span class="block truncate text-headline font-semibold">{{ c.nome }}</span>
+                <UiBadge :tom="c.papel === 'escrita' ? 'accent' : 'neutro'">{{ c.papel === 'escrita' ? 'Leitura e escrita' : 'Somente leitura' }}</UiBadge>
+              </span>
+              <span class="block truncate text-footnote text-label-2">{{ quantos(contagem[c.id] ?? 0) }} · de {{ c.donoNome ?? 'outra conta' }}</span>
+            </button>
+            <button
+              type="button"
+              class="flex h-toque w-toque shrink-0 items-center justify-center rounded-full text-label-2 hover:text-label"
+              :aria-label="`Opções do cofre ${c.nome}`"
+              aria-haspopup="menu"
+              :aria-expanded="menuDe === c.id"
+              @pointerdown.stop
+              @click="menuDe = menuDe === c.id ? null : c.id"
+            >
+              <EllipsisVerticalIcon class="h-6 w-6" />
+            </button>
+          </div>
+          <div v-if="menuDe === c.id" role="menu" class="absolute right-2 top-12 z-20 w-56 overflow-hidden rounded-controle bg-surface-2 shadow-flutuante ring-1 ring-separator" @pointerdown.stop>
+            <button type="button" role="menuitem" class="flex min-h-toque w-full items-center gap-2 px-3 text-left text-subhead text-danger hover:bg-danger/10" @click="acao('sair', c.id)">
+              <ArrowRightOnRectangleIcon class="h-5 w-5" />Sair do cofre
+            </button>
+          </div>
+        </li>
+      </template>
     </ul>
   </nav>
 </template>

@@ -1,4 +1,4 @@
-import { pgTable, varchar, text, timestamp, uuid, jsonb, integer } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, text, timestamp, uuid, jsonb, integer, primaryKey } from 'drizzle-orm/pg-core';
 
 
 // ==========================================
@@ -32,6 +32,44 @@ export const cofreItens = pgTable('cofre_itens', {
     criadoEm: timestamp('criado_em').notNull().defaultNow(),
     atualizadoEm: timestamp('atualizado_em').notNull().defaultNow(),
 });
+
+/**
+ * A coluna `geracao` de `cofre_cofres` (db/023) numa definição À PARTE de propósito: `cofreCofres` entra em todo INSERT
+ * (o drizzle lista as colunas com default) e quebraria o cofre inteiro até a migração rodar. Só o serviço de
+ * compartilhamento lê e grava a geração, e só depois de conferir que a coluna existe.
+ */
+export const cofreGeracao = pgTable('cofre_cofres', {
+    id: uuid('id').primaryKey(),
+    dono: varchar('dono', { length: 64 }).notNull(),
+    geracao: integer('geracao').notNull().default(0),
+});
+
+/**
+ * Par X25519 de uma conta (db/022): a pública em claro, a privada cifrada com a chave da conta. É para a pública
+ * que o dono de um cofre sela a chave do cofre ao compartilhar.
+ */
+export const cofreChavesPessoa = pgTable('cofre_chaves_pessoa', {
+    dono: varchar('dono', { length: 64 }).primaryKey().references(() => cofreContas.dono, { onDelete: 'cascade' }),
+    chavePublica: varchar('chave_publica', { length: 64 }).notNull(),
+    chavePrivada: text('chave_privada').notNull(),
+    criadoEm: timestamp('criado_em').notNull().defaultNow(),
+});
+
+/** Quem mais abre um cofre (db/022). `chaveSelada` = chave do cofre cifrada para a chave pública do membro. */
+export const cofreMembros = pgTable(
+    'cofre_membros',
+    {
+        cofreId: uuid('cofre_id').notNull().references(() => cofreCofres.id, { onDelete: 'cascade' }),
+        membro: varchar('membro', { length: 64 }).notNull().references(() => cofreContas.dono, { onDelete: 'cascade' }),
+        chaveSelada: text('chave_selada').notNull(),
+        papel: varchar('papel', { length: 10 }).$type<'leitura' | 'escrita'>().notNull(),
+        chavePublica: varchar('chave_publica', { length: 64 }).notNull(),
+        prova: varchar('prova', { length: 64 }),
+        convidadoPor: varchar('convidado_por', { length: 64 }).notNull(),
+        criadoEm: timestamp('criado_em').notNull().defaultNow(),
+    },
+    (t) => [primaryKey({ columns: [t.cofreId, t.membro] })],
+);
 
 /**
  * Máquina aprovada para o CLI `hub-pass` (db/014). `chavePorAparelho` é a chave
@@ -218,11 +256,79 @@ export interface CofreConta {
 export interface CofreRegistro {
     id: string;
     dados: string;
+    /** db/023: sobe a cada girar-chave. Ausente enquanto a migração não rodou. */
+    geracao?: number;
     atualizado_em: string | Date;
 }
 
 export interface CofreItemRegistro extends CofreRegistro {
     cofre_id: string;
+}
+
+export type CofrePapel = 'leitura' | 'escrita';
+
+/** O par X25519 da conta, como o servidor guarda (db/022). */
+export interface CofrePessoa {
+    chave_publica: string;
+    chave_privada: string;
+}
+
+/** Quem mais abre um cofre DESTE dono (só o dono recebe a lista). */
+export interface CofreMembro {
+    cofre_id: string;
+    membro: string;
+    /** E-mail para mostrar (null se não foi possível resolver). */
+    nome: string | null;
+    papel: CofrePapel;
+    chave_publica: string;
+    prova: string | null;
+    criado_em: string | Date;
+}
+
+/** Cofre de outra conta que abre para esta (db/022): a chave dele vem selada para a chave pública desta conta. */
+export interface CofreCompartilhado extends CofreRegistro {
+    /** Dono do cofre ('master' ou 'p:…'): entra nos dados associados do selo. */
+    dono: string;
+    dono_nome: string | null;
+    /** Chave pública X25519 do dono, como o servidor a tem: o membro a confere com o selo e fixa o código dela (TOFU). */
+    dono_chave_publica: string | null;
+    papel: CofrePapel;
+    chave_selada: string;
+    itens: CofreItemRegistro[];
+}
+
+/** Resposta de GET /cofre/pessoas?email= : a chave pública a que o dono vai selar. */
+export interface CofrePessoaPublica {
+    dono: string;
+    chave_publica: string;
+}
+
+/** POST /cofre/cofres/:id/membros */
+export interface CofreMembroNovo {
+    membro: string;
+    chave_publica: string;
+    chave_selada: string;
+    papel: CofrePapel;
+    prova: string;
+}
+
+/** PUT /cofre/cofres/:id/membros/:membro — muda o papel e, se vier `chave_selada`, refaz o selo. */
+export interface CofreMembroAjuste {
+    papel: CofrePapel;
+    chave_selada?: string;
+    chave_publica?: string;
+    prova?: string;
+}
+
+/** POST /cofre/cofres/:id/girar-chave */
+export interface CofreGiro {
+    /** Registro do cofre cifrado de novo (nome + chave nova) com a chave da conta do dono. */
+    dados: string;
+    /** TODOS os itens do cofre, recifrados com a chave nova; `atualizado_em` é o que o navegador viu. */
+    itens: { id: string; dados: string; atualizado_em: string | Date }[];
+    /** Membro a tirar (opcional). Os `membros` abaixo são os que FICAM. */
+    remover?: string | null;
+    membros: { membro: string; chave_publica: string; chave_selada: string; prova: string }[];
 }
 
 /** Tudo o que o dono tem, cifrado. Pequeno o bastante para vir de uma vez. */
@@ -240,4 +346,10 @@ export interface CofreEstado {
     digitais?: CofreDigitalEmbrulho[];
     cofres: CofreRegistro[];
     itens: CofreItemRegistro[];
+    /** db/022: o par X25519 da conta (null = ainda não gerado) — ausente para máquina do CLI. */
+    pessoa?: CofrePessoa | null;
+    /** db/022: quem mais abre os cofres DESTA conta. */
+    membros?: CofreMembro[];
+    /** db/022: cofres de outras contas compartilhados com esta. */
+    compartilhados?: CofreCompartilhado[];
 }

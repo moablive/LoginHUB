@@ -119,7 +119,7 @@ vez pelo celular com a biometria; revogar uma máquina não exige trocar a palav
 | C3 | B4 (PRF) para destrancar o cofre com a digital — **feito em 19/11/2026 (v1.5.0)**: `db/015`, `features/cofre/digital.ts`, botão "Abrir com a digital" |
 | C3b | Entrada pelo cofre: a chave de entrada de uma conta de app mora cifrada no cofre e assina o desafio — **feito em 19/11/2026 (v1.6.0)**: `db/016`, `features/cofre/entrada.ts`, `/cofre/entrada`; primeiro app o Escritórios 3D |
 | C4 | CLI `hub-pass` + chave por máquina + repasse no bf, Mac e PDV — **CLI feito em 19/11/2026 (v1.4.0)**; **par de chaves por máquina, aprovação pelo navegador com o cofre aberto (digital) e alcance por cofre feitos em 23/11/2026 (v1.9.0)**: `db/017`, `features/cofre/pareamento.ts`, `CofreAparelhos.vue`, `hub-pass login` mostra um código. Sem repasse por ssh: cada máquina é aprovada e revogada sozinha. Falta instalar no PDV e aprovar bf, Mac e PDV |
-| C5 | Tela do cofre no painel, cofres compartilhados por organização |
+| C5 | Tela do cofre no painel, cofres compartilhados por organização — **cofre compartilhado entre contas feito em 26/11/2026**: `db/022` e `db/023`, par X25519 por conta (pública sempre derivada da privada), chave do cofre selada para cada membro (`leitura`/`escrita`) com tag de remetente e código do dono fixado (TOFU), código de verificação, geração da chave contra a corrida, giro de chave ao remover (`features/cofre/compartilhar.ts`, `CofreCompartilhar.vue`, README "Cofre compartilhado entre contas"). Sem política de organização: qualquer conta com cofre compartilha |
 | C6 | Importar do Proton Pass, rodar os dois juntos e só então mudar a Regra 15 do Ômega |
 | C7 | Revisão de segurança (SEC, Parlamento, teste de invasão) |
 

@@ -192,6 +192,28 @@ export async function apagarSessao(): Promise<void> {
   }
 }
 
+const DONO_FIXO = 'loginhub.cofre.dono-fixo:';
+
+/**
+ * Código de verificação do DONO de um cofre compartilhado, fixado na primeira abertura (TOFU, db/022): por conta que
+ * recebe (`membro`) e por conta que compartilha (`dono`). Mudou depois = a chave do dono não é a que se viu antes.
+ */
+export function codigoFixadoDoDono(membro: string, dono: string): string | null {
+  try {
+    return localStorage.getItem(`${DONO_FIXO}${membro}:${dono}`);
+  } catch {
+    return null;
+  }
+}
+
+export function fixarCodigoDoDono(membro: string, dono: string, codigo: string): void {
+  try {
+    localStorage.setItem(`${DONO_FIXO}${membro}:${dono}`, codigo);
+  } catch {
+    /* sem localStorage: o código volta a ser fixado na próxima abertura */
+  }
+}
+
 /** Sair da conta: some a cópia, a sessão e a chave do aparelho. */
 export async function apagarTudoLocal(): Promise<void> {
   try {

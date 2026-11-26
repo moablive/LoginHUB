@@ -1658,6 +1658,55 @@ Pedido do dono em 24/11/2026: os funcionários da Sul Alimentos entram com **CPF
 - **Sul Alimentos com o cofre liberado**: `aplicativos.cofre_liberado = true` no app 2. Cada funcionário cria o próprio cofre, com a palavra-passe dele; o dono do cofre é a pessoa (hash do CPF ou do e-mail).
 - Conta sem Google Authenticator configurado não entra por aqui: configura primeiro no app dela.
 
+#### Cofre compartilhado entre contas (26/11/2026, `db/022`)
+
+Pedido do dono: compartilhar um cofre (senhas) com outra conta do LoginHUB **sem deixar de ser de ponta a ponta**. Continua valendo o que vale para todo o cofre: o servidor só guarda texto cifrado e chaves públicas; quem cifra e decifra é o navegador.
+
+**Modelo**
+
+| Peça | Como é |
+|---|---|
+| Par X25519 por conta | `cofre_chaves_pessoa`: chave pública em claro, privada cifrada com a **chave da conta** (envelope `v1.`, dado associado `pessoa:<dono>`). Nasce no navegador na primeira vez que a conta abre o cofre depois desta versão (conta antiga ganha o par ao abrir). O servidor nunca vê a privada. **A pública é sempre derivada da privada decifrada** (JWK `x`) e vai no dado associado (`pessoa:<dono>:<pública>`): se o servidor trocar a pública da conta, o par não abre / `PAR_ADULTERADO` e o código de verificação não é anulado. Par antigo (dado `pessoa:<dono>`) abre, é conferido e regravado com o dado novo (`PUT /cofre/pessoa` aceita regravar a privada da MESMA pública) |
+| Compartilhar | O dono decifra a chave do cofre no navegador e a **sela** para a chave pública do convidado: X25519 efêmero → HKDF-SHA256 (etiqueta `loginhub-cofre-membro-x1`, própria: um selo de máquina do CLI nunca abre como selo de membro) → XChaCha20-Poly1305, `x1.<efêmera>.<nonce>.<cifra>`, dado associado `cofre-membro-x1:<cofre>:<dono>:<membro>`. O selo leva a chave, o **dono**, o nome, o ícone e a cor do cofre, e uma **tag de remetente**: HMAC de `cofre|membro|dono|chave` com a chave do **DH estático** entre a privada do dono e a pública do membro (o membro refaz com a própria privada e a pública do dono). O servidor não a produz, então não forja "cofre compartilhado por fulano"; selo cuja tag não confere aparece como "Não foi possível verificar" e **não abre**. O membro vê o **código de verificação do dono** no cofre compartilhado e o navegador o **fixa na primeira abertura** (TOFU, `localStorage`, por conta que recebe e dono): se mudar, o cofre não abre e a tela avisa em destaque ("Confiar no código novo" só depois de conferir por outro canal). Os itens seguem cifrados com a MESMA chave do cofre |
+| Papéis | `leitura` ou `escrita`. **Só o dono** gerencia membros, renomeia e apaga o cofre. `escrita` cria, edita e apaga itens; `leitura` só lê — **o servidor recusa** a escrita (403 `SEM_PERMISSAO`), não só a tela |
+| Convidar | Pelo **e-mail exato** de outra conta que já tenha aberto o cofre. `GET /cofre/pessoas?email=` devolve `{ dono, chave_publica }`; "não existe", "não tem cofre" e "e-mail inválido" respondem o MESMO 404 (ninguém enumera contas), com dois rate limits independentes: por **dono** (30 a cada 10 min, não depende de cabeçalho) e por **IP** (60 a cada 10 min) |
+| Código de verificação | Antes de selar, a tela mostra o código da chave pública do convidado (sha256 → 5 grupos de 4 letras, `codigoDaChave`) e o dono o confere com a pessoa **por outro canal**: o servidor poderia entregar uma chave que não é dela. A própria pessoa vê o código dela na mesma folha. O servidor só aceita selar para a chave pública **atual** do convidado |
+| Prova do membro | Além do pedido: `cofre_membros.chave_publica` (a chave a que o selo foi feito) e `prova` (HMAC, com a chave da conta do dono do cofre, de cofre + membro + chave pública). Ao selar de novo ou girar a chave, o navegador do dono confere a prova (`MEMBRO_ADULTERADO` se o servidor trocou a chave de alguém) |
+| Tirar alguém | **Girar a chave**: o navegador do dono gera chave nova, recifra o registro do cofre e TODOS os itens e sela de novo para quem fica, e manda tudo em `POST /cofre/cofres/:id/girar-chave`. O servidor aplica **numa transação** e confere que os itens enviados são exatamente os do cofre (id e `atualizado_em`) e que os membros são exatamente os que ficam; senão 409 `CONFLITO` e nada muda |
+| Sair | `DELETE /cofre/cofres/:id/membros/eu`: o membro perde só o próprio acesso, sem girar a chave |
+| Quem lê | `GET /cofre` passa a trazer `pessoa` (o par da conta), `membros` (quem abre os cofres DESTA conta, com o e-mail para mostrar) e `compartilhados` (cofres de outras contas: id, dono, `dono_nome`, papel, selo e itens) |
+
+**Rotas novas** (todas em `/cofre/*`, atrás do `cofreAuth`; a **máquina do CLI é recusada em todas**, e o `GET /cofre` dela não traz nada de compartilhamento):
+
+| Rota | Quem pode |
+|---|---|
+| `PUT /cofre/pessoa` | a própria conta, uma vez (409 se já existe) |
+| `GET /cofre/pessoas?email=` | qualquer conta com cofre (rate limit) |
+| `POST /cofre/cofres/:id/membros` | só o **dono** do cofre |
+| `PUT /cofre/cofres/:id/membros/:membro` | só o **dono** (muda o papel; com `chave_selada` refaz o selo, ex.: o cofre foi renomeado) |
+| `DELETE /cofre/cofres/:id/membros/:membro` | só o **dono** (corta o acesso sem girar a chave; a tela usa `girar-chave` com `remover`) |
+| `DELETE /cofre/cofres/:id/membros/eu` | o próprio **membro** |
+| `POST /cofre/cofres/:id/girar-chave` | só o **dono** |
+| `PUT|DELETE /cofre/itens/:id` | dono ou membro `escrita`; `leitura` → 403. Escrita de item: checagem e gravação numa **transação com `SELECT … FOR SHARE`** no cofre (o giro usa `FOR UPDATE`: nunca se cruzam). Membro manda o `selo` e a `geracao` (`db/023`, sobe a cada giro); o dono manda a `geracao`, obrigatória quando o cofre tem membros; velha → 409 `CHAVE_GIRADA` e a tela baixa o estado novo. Mover item de um cofre compartilhado exige o mesmo (`origem_selo`, `origem_geracao`) na ORIGEM. Máquina do CLI: caminho antigo, sem geração |
+| `PUT|DELETE /cofre/cofres/:id` | só o **dono** (membro: 403; quem não tem nada com o cofre: 404) |
+
+**Na tela**: botão **Compartilhar** no cofre (e no menu ⋮ da lista) abre a folha `CofreCompartilhar.vue` (e-mail, papel, código de verificação, lista de pessoas com papel e **Tirar**, "Trocar a chave do cofre", o seu código). Os cofres de outras contas aparecem no grupo **Compartilhados comigo**, com o selo do papel e "Sair do cofre"; item de cofre só de leitura tem editar/apagar desligados e o selo "compartilhado · somente leitura". Código no navegador: `apps/ui/src/features/cofre/compartilhar.ts` (selar/abrir, código, prova, giro) e `useCofre.ts`.
+
+**Limites que valem ser sabidos**
+
+- **Quem já copiou uma senha antes continua com ela.** Tirar alguém impede que leia o que for gravado depois e recifra tudo, mas não desfaz o que ele já viu: troque as senhas sensíveis.
+- **Máquina do CLI com alcance por cofre**: o selo dela guarda a chave do cofre que vale **hoje**. Depois de girar a chave de um cofre, aprove de novo o alcance dessa máquina (`CofreAparelhos` → Cofres). Máquina com a conta inteira não é afetada (lê a chave nova pelo registro do cofre).
+- **Aba velha do dono**: o giro compara `atualizado_em` dos itens; item mexido no meio faz o servidor recusar (`CONFLITO`) e a tela pede para sincronizar. Um membro `escrita` com a chave velha é recusado por `CHAVE_GIRADA`, nunca grava item ilegível.
+- O selo carrega nome, ícone e cor, **não a imagem** do cofre (a miniatura pode ter até 28 KB): quem recebe vê o ícone.
+- **Sem aceite de convite (por ora)**: o cofre cai na conta do convidado na hora. Mitigação: teto de **50 cofres compartilhados por conta** e de **1000 itens por cofre compartilhado** (convite recusado com mensagem clara; cofre com membros não cresce além do teto). "Aceite do convite" (convite pendente que o convidado aprova) fica como evolução.
+- **Só o giro revoga de verdade.** `DELETE …/membros/:membro` (dono) e `DELETE …/membros/eu` (sair) cortam o acesso dali em diante, mas a pessoa já viu a chave do cofre: quem sai sozinho continua capaz de ler o que copiou e, se ainda alcançar o banco/rede, a chave antiga. Depois que um membro sai, o dono deve **Trocar a chave do cofre**. A tela do dono não avisa isso automaticamente (o servidor não guarda quem saiu); fica documentado.
+- Convidar não passa por política de organização: qualquer conta com cofre (master, admin de organização, usuário de app com `cofre_liberado`) compartilha.
+- O hub-pass **não** gerencia membros nem abre cofre compartilhado; o comportamento dele não mudou.
+
+**Subir**: `db/022_cofre_compartilhado.sql` (duas tabelas) e `db/023_cofre_geracao.sql` (`cofre_cofres.geracao`), à mão e idempotentes. Sem a 023 o serviço detecta que a coluna não existe e segue sem a checagem de geração (o selo do membro continua valendo); a `geracao` fica numa definição Drizzle à parte (`cofreGeracao`) para não entrar nos INSERTs do cofre. Enquanto ela não rodar, a API continua funcionando — `GET /cofre` sai sem `pessoa`/`membros`/`compartilhados` (erro `42P01` tratado) e a tela não oferece compartilhar. **Testes**: `npx tsx scripts/teste-cofre-cripto.ts` (cripto: selar/abrir, dado associado, código, prova, girar chave) e `scripts/teste-cofre-compartilhado.ts` (serviço contra um Postgres **descartável**: papéis em cada operação, 404 igual, giro transacional, cascade).
+
+---
+
 ## 🔑 Sessão master e a master key
 
 O painel do hub tem uma credencial só: a `MASTER_API_KEY`. Ela **não** muda de

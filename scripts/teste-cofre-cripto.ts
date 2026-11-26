@@ -1,5 +1,7 @@
 // Teste do cripto.ts do cofre (vetores RFC 6238, ida e volta, adulteração). Rodar: npx tsx scripts/teste-cofre-cripto.ts
 import * as c from '../apps/ui/src/features/cofre/cripto';
+import * as co from '../apps/ui/src/features/cofre/compartilhar';
+import { selar as selarAparelho } from '../apps/ui/src/features/cofre/pareamento';
 let falhas = 0;
 const ok = (nome: string, cond: boolean) => { console.log(`${cond ? 'OK  ' : 'FALHA'} ${nome}`); if (!cond) falhas++; };
 
@@ -61,6 +63,99 @@ ok('lerTotp otpauth', c.codigoTotp({ ...c.lerTotp('otpauth://totp/x?secret=GEZDG
   ok("sal do PRF casa com o validador do servidor", /^[A-Za-z0-9+/]{43}=$/.test(c.b64(c.novaChave())));
   const s = c.gerarSenha(24);
   ok('gerador 24 caracteres', s.length === 24);
+
+  // ------------------------------------------------------------ cofre compartilhado (db/022)
+  const recusa = async (f: () => unknown): Promise<boolean> => { try { await f(); return false; } catch { return true; } };
+  const erroDe = async (f: () => unknown): Promise<string> => { try { await f(); return ''; } catch (e) { return (e as Error).message; } };
+  const SELO_X1 = /^x1\.[A-Za-z0-9+/]{43}=\.[A-Za-z0-9+/=]{20,64}\.[A-Za-z0-9+/=]{16,}$/;
+  const donoA = 'p:aaaa', donoB = 'p:bbbb', donoC = 'p:cccc';
+  const contaA = c.novaChave(), contaB = c.novaChave();
+  const parA = await co.novoParDaPessoa();
+  const parB = await co.novoParDaPessoa();
+  const parC = await co.novoParDaPessoa();
+
+  // par da conta: a privada vai cifrada com a chave da conta (dado associado com a pública) e a pública é DERIVADA
+  const guardado = co.protegerPar(contaB, donoB, parB);
+  ok('par: servidor recebe a pública em claro e a privada cifrada v1', guardado.chave_publica === parB.publica && /^v1\./.test(guardado.chave_privada) && !guardado.chave_privada.includes(parB.privada));
+  const aberto0 = await co.abrirPar(contaB, donoB, guardado);
+  ok('par: privada abre com a chave da conta e a pública bate com a derivada', aberto0.par.privada === parB.privada && aberto0.par.publica === parB.publica && !aberto0.regravar);
+  ok('par: outra chave de conta não abre', await recusa(() => co.abrirPar(contaA, donoB, guardado)));
+  ok('par: privada de uma conta não abre como de outra (dado associado)', await recusa(() => co.abrirPar(contaB, donoC, guardado)));
+  ok('par: validador do servidor aceita o envelope', /^v1\.[A-Za-z0-9+/=]{20,64}\.[A-Za-z0-9+/=]{16,}$/.test(guardado.chave_privada) && /^[A-Za-z0-9+/]{43}=$/.test(guardado.chave_publica));
+  // H1: o servidor troca a chave pública da conta (pela dele)
+  ok('par: pública trocada pelo servidor não abre (a pública está no dado associado)', await recusa(() => co.abrirPar(contaB, donoB, { ...guardado, chave_publica: parC.publica })));
+  // par legado (dado associado antigo "pessoa:<dono>"): abre, confere a pública e pede regravação com o dado novo
+  const legado = { chave_publica: parB.publica, chave_privada: c.cifrar(contaB, c.deB64(parB.privada), `pessoa:${donoB}`) };
+  const abLegado = await co.abrirPar(contaB, donoB, legado);
+  ok('par legado: abre e devolve o registro regravado com o dado associado novo', abLegado.par.publica === parB.publica && !!abLegado.regravar && (await co.abrirPar(contaB, donoB, abLegado.regravar)).regravar === undefined);
+  ok('par legado com pública trocada também é detectado', (await erroDe(() => co.abrirPar(contaB, donoB, { ...legado, chave_publica: parC.publica }))) === 'PAR_ADULTERADO');
+
+  // selar / abrir (autenticando o remetente)
+  const cofreId = c.novoId();
+  const chaveCofre = c.novaChave();
+  const pedido = { parDoDono: parA, dono: donoA, membro: donoB, publicaDoMembro: parB.publica, cofreId, chave: c.b64(chaveCofre), nome: 'Servidores', icone: 'server', cor: 'azul' };
+  const esperado = { cofreId, dono: donoA, membro: donoB, publicaDoDono: parA.publica };
+  const selo = await co.selarCofre(pedido);
+  ok('selo casa com o validador x1 do servidor', SELO_X1.test(selo));
+  const aberto = await co.abrirCofreSelado(parB, selo, esperado);
+  ok('selar/abrir ida e volta (chave, nome, ícone, cor, dono)', aberto.chave === pedido.chave && aberto.nome === 'Servidores' && aberto.icone === 'server' && aberto.cor === 'azul' && aberto.cofre === cofreId && aberto.dono === donoA);
+  ok('selo de outra chave pública falha', await recusa(() => co.abrirCofreSelado(parC, selo, { ...esperado, membro: donoC })));
+  ok('dado associado trocado (outro membro) falha', await recusa(() => co.abrirCofreSelado(parB, selo, { ...esperado, membro: donoC })));
+  ok('dado associado trocado (outro cofre) falha', await recusa(() => co.abrirCofreSelado(parB, selo, { ...esperado, cofreId: c.novoId() })));
+  ok('dado associado trocado (outro dono) falha', await recusa(() => co.abrirCofreSelado(parB, selo, { ...esperado, dono: donoC })));
+  const [vx, ef, nn, cf] = selo.split('.');
+  const seloMexido = `${vx}.${ef}.${nn}.${cf!.slice(0, 8)}${cf![8] === 'A' ? 'B' : 'A'}${cf!.slice(9)}`;
+  ok('selo adulterado falha', await recusa(() => co.abrirCofreSelado(parB, seloMexido, esperado)));
+  const seloAparelho = await selarAparelho(parB.publica, { tipo: 'conta', chave: 'x' }, 'qualquer');
+  ok('selo de máquina do CLI não abre como selo de membro (etiqueta HKDF própria)', await recusa(() => co.abrirCofreSelado(parB, seloAparelho, esperado)));
+  ok('selo sem chave pública de 32 bytes é recusado', await recusa(() => co.selarCofre({ ...pedido, publicaDoMembro: 'AAAA' })));
+  ok('dois selos do mesmo conteúdo diferem (efêmera e nonce novos)', (await co.selarCofre(pedido)) !== selo);
+
+  // M1: o servidor forja "cofre compartilhado por A" — sem a privada de A não há tag que confira
+  const forjador = await co.novoParDaPessoa(); // o servidor tem o próprio par e a pública de B
+  const seloForjado = await co.selarCofre({ ...pedido, parDoDono: forjador }); // dono declarado = A, mas tag feita com a privada do forjador
+  ok('selo forjado em nome do dono (tag de outra privada) não autentica', (await erroDe(() => co.abrirCofreSelado(parB, seloForjado, esperado))) === 'REMETENTE_NAO_CONFERE');
+  ok('selo forjado só abre se o membro aceitar a pública do forjador como a do dono (é o que o código fixado pega)', (await co.abrirCofreSelado(parB, seloForjado, { ...esperado, publicaDoDono: forjador.publica })).dono === donoA && co.codigoDaChave(forjador.publica) !== co.codigoDaChave(parA.publica));
+  ok('tag do remetente é simétrica (dono e membro chegam ao mesmo valor)', (await co.etiquetaDoRemetente(parA, parB.publica, { cofre: cofreId, membro: donoB, dono: donoA, chave: 'k' })) === (await co.etiquetaDoRemetente(parB, parA.publica, { cofre: cofreId, membro: donoB, dono: donoA, chave: 'k' })));
+  ok('tag muda com a chave do cofre', (await co.etiquetaDoRemetente(parA, parB.publica, { cofre: cofreId, membro: donoB, dono: donoA, chave: 'k1' })) !== (await co.etiquetaDoRemetente(parA, parB.publica, { cofre: cofreId, membro: donoB, dono: donoA, chave: 'k2' })));
+
+  // código de verificação
+  const cod = co.codigoDaChave(parB.publica);
+  ok('código: 5 grupos de 4 caracteres', /^([A-Z2-7]{4}-){4}[A-Z2-7]{4}$/.test(cod));
+  ok('código estável para a mesma chave', cod === co.codigoDaChave(parB.publica));
+  ok('código muda com outra chave', cod !== co.codigoDaChave(parC.publica));
+
+  // prova do membro
+  const prova = co.provaDoMembro(contaA, donoA, cofreId, donoB, parB.publica);
+  ok('prova estável e no formato do servidor', prova === co.provaDoMembro(contaA, donoA, cofreId, donoB, parB.publica) && /^[A-Za-z0-9+/]{43}=$/.test(prova));
+  ok('prova muda com a chave pública trocada', prova !== co.provaDoMembro(contaA, donoA, cofreId, donoB, parC.publica));
+  ok('prova depende da chave da conta do dono', prova !== co.provaDoMembro(contaB, donoA, cofreId, donoB, parB.publica));
+
+  // girar a chave: cofre de A com 3 itens, membros B e C; remove C
+  const itensA = ['um', 'dois', 'três'].map((t) => {
+    const id = c.novoId();
+    return { id, dados: c.cifrarJson(chaveCofre, { titulo: t, senha: `s-${t}` }, c.adItem(cofreId, id)), atualizado_em: '2026-11-26T10:00:00.000Z' };
+  });
+  const membros: co.MembroDoGiro[] = [
+    { membro: donoB, chave_publica: parB.publica, prova: co.provaDoMembro(contaA, donoA, cofreId, donoB, parB.publica) },
+    { membro: donoC, chave_publica: parC.publica, prova: co.provaDoMembro(contaA, donoA, cofreId, donoC, parC.publica) },
+  ];
+  const base = { dono: donoA, parDoDono: parA, chaveDaConta: contaA, cofreId, chaveAntiga: chaveCofre, registro: { nome: 'Servidores', icone: 'server', cor: 'azul', ordem: 2 }, itens: itensA, membros, remover: donoC };
+  const { chaveNova, giro } = await co.prepararGiro(base);
+  ok('girar: chave nova diferente da antiga', c.b64(chaveNova) !== c.b64(chaveCofre));
+  ok('girar: todos os itens recifrados', giro.itens.length === 3 && giro.itens.every((i, n) => i.id === itensA[n]!.id && i.dados !== itensA[n]!.dados && i.atualizado_em === itensA[n]!.atualizado_em));
+  ok('girar: itens abrem com a chave nova, com o mesmo conteúdo', giro.itens.every((i, n) => (c.decifrarJson(chaveNova, i.dados, c.adItem(cofreId, i.id)) as { titulo: string }).titulo === ['um', 'dois', 'três'][n]));
+  ok('girar: a chave antiga não abre mais os itens novos', await recusa(() => c.decifrarJson(chaveCofre, giro.itens[0]!.dados, c.adItem(cofreId, giro.itens[0]!.id))));
+  ok('girar: item recifrado continua preso ao cofre e ao id (dado associado)', await recusa(() => c.decifrarJson(chaveNova, giro.itens[0]!.dados, c.adItem(c.novoId(), giro.itens[0]!.id))));
+  ok('girar: registro do cofre guarda a chave nova e abre com a chave da conta', (c.decifrarJson(contaA, giro.dados, c.adCofre(donoA, cofreId)) as { chave: string; nome: string; ordem: number }).chave === c.b64(chaveNova));
+  ok('girar: só o membro que fica recebe selo novo', giro.membros.length === 1 && giro.membros[0]!.membro === donoB && giro.remover === donoC);
+  const seloNovoB = await co.abrirCofreSelado(parB, giro.membros[0]!.chave_selada, esperado);
+  ok('girar: o membro que fica abre a chave nova, autenticada pelo dono', seloNovoB.chave === c.b64(chaveNova) && seloNovoB.nome === 'Servidores' && seloNovoB.dono === donoA);
+  ok('girar: o membro removido não abre o selo novo', await recusa(() => co.abrirCofreSelado(parC, giro.membros[0]!.chave_selada, { ...esperado, membro: donoC })));
+  ok('girar: a chave do selo novo não é a antiga', seloNovoB.chave !== c.b64(chaveCofre));
+  ok('girar: recusa se o servidor trocou a chave pública de um membro (prova)', await recusa(() => co.prepararGiro({ ...base, registro: { nome: 'S' }, membros: [{ membro: donoB, chave_publica: parC.publica, prova: membros[0]!.prova }], remover: null })));
+  ok('girar: item que não abre com a chave antiga impede o giro', await recusa(() => co.prepararGiro({ ...base, chaveAntiga: c.novaChave(), registro: { nome: 'S' }, membros: [], remover: null })));
+  ok('girar: corpo casa com o que o servidor valida (envelopes v1 e selo x1)', giro.itens.every((i) => /^v1\.[A-Za-z0-9+/=]{20,64}\.[A-Za-z0-9+/=]{16,}$/.test(i.dados)) && SELO_X1.test(giro.membros[0]!.chave_selada));
   console.log(`falhas: ${falhas}`);
   process.exit(falhas ? 1 : 0);
 })();

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { cofreService, twoFactorService } from '@loginhub/services';
-import { donoDoCofre, ipDoCliente } from '@loginhub/middlewares';
+import { donoDaPessoa, donoDoCofre, ipDoCliente } from '@loginhub/middlewares';
+import { MASTER_LOGIN_EMAIL } from '@loginhub/schema';
 
 /**
  * Cofre de senhas (db/013 e db/014, 19/11/2026). Rotas em /cofre atrás do
@@ -18,6 +19,10 @@ function responder(res: Response, err: unknown, acao: string) {
     if (e.code === 'NOT_FOUND') return res.status(404).json({ message: e.message });
     if (e.code === 'FORBIDDEN') return res.status(403).json({ error: 'APARELHO_SEM_ALCANCE', message: e.message });
     if (e.code === 'DUPLICATE_ENTRY') return res.status(409).json({ message: e.message });
+    // db/022 (cofre compartilhado): papel insuficiente; chave do cofre/da pessoa girou; conjunto de itens ou membros mudou.
+    if (e.code === 'SEM_PERMISSAO') return res.status(403).json({ error: 'SEM_PERMISSAO', message: e.message });
+    if (e.code === 'CHAVE_GIRADA') return res.status(409).json({ error: 'CHAVE_GIRADA', message: e.message });
+    if (e.code === 'CONFLITO') return res.status(409).json({ error: 'CONFLITO', message: e.message });
     console.error(`[CofreController] ${acao}:`, e.message);
     return res.status(500).json({ error: 'Erro Interno' });
 }
@@ -107,7 +112,7 @@ export class CofreController {
         const dono = donoDe(req);
         if (!dono) return res.status(403).json({ error: 'SO_MASTER' });
         try {
-            await cofreService.salvarItem(dono, req.params.id, req.body?.cofre_id, req.body?.dados, permitidosDe(req));
+            await cofreService.salvarItem(dono, req.params.id, req.body?.cofre_id, req.body?.dados, permitidosDe(req), { aparelho: !!donoDoCofre(req)?.aparelhoId, selo: req.body?.selo, geracao: req.body?.geracao, origemSelo: req.body?.origem_selo, origemGeracao: req.body?.origem_geracao });
             return res.status(200).json({ ok: true });
         } catch (err) {
             return responder(res, err, 'salvarItem');
@@ -119,7 +124,7 @@ export class CofreController {
         const dono = donoDe(req);
         if (!dono) return res.status(403).json({ error: 'SO_MASTER' });
         try {
-            await cofreService.apagarItem(dono, req.params.id, permitidosDe(req));
+            await cofreService.apagarItem(dono, req.params.id, permitidosDe(req), { aparelho: !!donoDoCofre(req)?.aparelhoId });
             return res.status(200).json({ ok: true });
         } catch (err) {
             return responder(res, err, 'apagarItem');
@@ -206,6 +211,111 @@ export class CofreController {
             return res.status(200).json({ ok: true });
         } catch (err) {
             return responder(res, err, 'alterarAcesso');
+        }
+    }
+
+    // ------------------------------------------------------------ cofre compartilhado (db/022)
+    //
+    // Quem gerencia é a conta com o cofre aberto no navegador. A máquina do CLI (hub-pass) NÃO gerencia nem abre cofre
+    // compartilhado: toda rota abaixo recusa credencial de aparelho.
+
+    /** PUT /cofre/pessoa `{ chave_publica, chave_privada }` — guarda o par X25519 da conta (uma vez; 409 se já existe). */
+    static async salvarPessoa(req: Request, res: Response) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SEM_DONO' });
+        if (donoDoCofre(req)?.aparelhoId) return res.status(403).json({ error: 'APARELHO_NAO_COMPARTILHA', message: 'Compartilhe pelo navegador.' });
+        try {
+            await cofreService.registrarPessoa(dono, (req.body ?? {}) as Record<string, unknown>);
+            return res.status(201).json({ ok: true });
+        } catch (err) {
+            return responder(res, err, 'salvarPessoa');
+        }
+    }
+
+    /**
+     * GET /cofre/pessoas?email= — a chave pública de outra conta com cofre, para o dono selar o cofre para ela.
+     * 404 igual para "não existe" e "não tem cofre" (ninguém enumera contas); com rate limit nas rotas.
+     */
+    static async buscarPessoa(req: Request, res: Response) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SEM_DONO' });
+        if (donoDoCofre(req)?.aparelhoId) return res.status(403).json({ error: 'APARELHO_NAO_COMPARTILHA', message: 'Compartilhe pelo navegador.' });
+        const email = String(req.query.email ?? '').trim().toLowerCase();
+        res.setHeader('Cache-Control', 'no-store');
+        try {
+            // E-mail fora do formato responde igual a "não existe": nada a distinguir.
+            if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                return res.status(404).json({ message: 'Não encontramos esta conta com cofre. Confira o e-mail (ela precisa já ter aberto o cofre) e tente de novo.' });
+            }
+            const alvo = email === MASTER_LOGIN_EMAIL.toLowerCase() ? 'master' : donoDaPessoa(email);
+            return res.status(200).json(await cofreService.pessoaPublica(alvo));
+        } catch (err) {
+            return responder(res, err, 'buscarPessoa');
+        }
+    }
+
+    /** POST /cofre/cofres/:id/membros `{ membro, chave_publica, chave_selada, papel, prova }` — só o dono do cofre. */
+    static async convidar(req: Request<{ id: string }>, res: Response) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SEM_DONO' });
+        if (donoDoCofre(req)?.aparelhoId) return res.status(403).json({ error: 'APARELHO_NAO_COMPARTILHA', message: 'Compartilhe pelo navegador.' });
+        try {
+            await cofreService.convidar(dono, req.params.id, req.body ?? {});
+            return res.status(201).json({ ok: true });
+        } catch (err) {
+            return responder(res, err, 'convidar');
+        }
+    }
+
+    /** PUT /cofre/cofres/:id/membros/:membro `{ papel, chave_selada?, chave_publica?, prova? }` — só o dono do cofre. */
+    static async ajustarMembro(req: Request<{ id: string; membro: string }>, res: Response) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SEM_DONO' });
+        if (donoDoCofre(req)?.aparelhoId) return res.status(403).json({ error: 'APARELHO_NAO_COMPARTILHA', message: 'Compartilhe pelo navegador.' });
+        try {
+            await cofreService.ajustarMembro(dono, req.params.id, req.params.membro, req.body ?? {});
+            return res.status(200).json({ ok: true });
+        } catch (err) {
+            return responder(res, err, 'ajustarMembro');
+        }
+    }
+
+    /** DELETE /cofre/cofres/:id/membros/:membro — só o dono. Corta o acesso sem girar a chave (a tela gira, por girar-chave). */
+    static async removerMembro(req: Request<{ id: string; membro: string }>, res: Response) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SEM_DONO' });
+        if (donoDoCofre(req)?.aparelhoId) return res.status(403).json({ error: 'APARELHO_NAO_COMPARTILHA', message: 'Compartilhe pelo navegador.' });
+        try {
+            await cofreService.removerMembro(dono, req.params.id, req.params.membro);
+            return res.status(200).json({ ok: true, chave_girada: false });
+        } catch (err) {
+            return responder(res, err, 'removerMembro');
+        }
+    }
+
+    /** DELETE /cofre/cofres/:id/membros/eu — o membro sai sozinho (perde só o próprio acesso). */
+    static async sairDoCofre(req: Request<{ id: string }>, res: Response) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SEM_DONO' });
+        if (donoDoCofre(req)?.aparelhoId) return res.status(403).json({ error: 'APARELHO_NAO_COMPARTILHA', message: 'Compartilhe pelo navegador.' });
+        try {
+            await cofreService.sairDoCofre(dono, req.params.id);
+            return res.status(200).json({ ok: true });
+        } catch (err) {
+            return responder(res, err, 'sairDoCofre');
+        }
+    }
+
+    /** POST /cofre/cofres/:id/girar-chave `{ dados, itens, membros, remover? }` — só o dono; uma transação. */
+    static async girarChave(req: Request<{ id: string }>, res: Response) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SEM_DONO' });
+        if (donoDoCofre(req)?.aparelhoId) return res.status(403).json({ error: 'APARELHO_NAO_COMPARTILHA', message: 'Compartilhe pelo navegador.' });
+        try {
+            await cofreService.girarChave(dono, req.params.id, req.body ?? {});
+            return res.status(200).json({ ok: true });
+        } catch (err) {
+            return responder(res, err, 'girarChave');
         }
     }
 

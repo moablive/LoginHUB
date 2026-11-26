@@ -1,11 +1,12 @@
 import { computed, ref, shallowRef, watch } from 'vue';
 import { cofreApi } from '@loginhub/api-client';
-import type { CofreAparelho, CofreAparelhoAcesso, CofreAparelhoPedido, CofreDigital, CofreEntradaPedido, CofreEstado } from '@loginhub/schema';
+import type { CofreAparelho, CofreAparelhoAcesso, CofreAparelhoPedido, CofreDigital, CofreEntradaPedido, CofreEstado, CofreMembro, CofrePapel } from '@loginhub/schema';
 import { randomBytes } from '@noble/ciphers/utils.js';
 import { imagemDoCofreValida, type AparenciaCofre } from './aparencia';
 import { criarDigital, digitalLocal, esquecerDigitalLocal, lembrarDigitalLocal, pedirSegredo } from './digital';
-import { apagarSessao, guardarCopia, guardarSessao, lerCopia, lerSessao, pedirPersistencia, tocarSessao, ultimoDono } from './local';
-import { adSelo, codigoDoPedido, limparCodigo, provaDoAparelho, selar } from './pareamento';
+import { apagarSessao, codigoFixadoDoDono, fixarCodigoDoDono, guardarCopia, guardarSessao, lerCopia, lerSessao, pedirPersistencia, tocarSessao, ultimoDono } from './local';
+import { adSelo, codigoDoPedido, limparCodigo, provaDoAparelho, selar, type ParDoAparelho } from './pareamento';
+import { abrirCofreSelado, abrirPar, codigoDaChave, novoParDaPessoa, prepararGiro, protegerPar, provaDoMembro, selarCofre } from './compartilhar';
 import { assinarEntrada, desafioDoPasse, mensagemDaEntrada, novaChaveDeEntrada, type EntradaDoItem } from './entrada';
 import {
   adCofre,
@@ -45,6 +46,32 @@ export interface CofreAberto {
   imagem?: string;
   /** Posição na lista, escolhida pelo dono (23/11/2026). Sem ela, o cofre vai depois dos ordenados, por nome. */
   ordem?: number;
+  /** db/023: geração da chave do cofre; vai em toda escrita de item (o servidor recusa se girou). */
+  geracao?: number;
+}
+
+/**
+ * Cofre de outra conta aberto para esta (db/022): a chave veio selada para o par X25519 desta conta. `papel` diz se
+ * a pessoa só lê ou também escreve; `selo` é o que o servidor confere em cada escrita (a chave já girou?).
+ */
+export interface CofreCompartilhadoAberto extends CofreAberto {
+  papel: CofrePapel;
+  dono: string;
+  donoNome: string | null;
+  selo: string;
+  /** Código de verificação do DONO (da chave pública dele, autenticada pelo selo e fixada na 1ª abertura). */
+  donoCodigo: string;
+}
+
+/** Cofre compartilhado que NÃO abriu: o selo não autentica o remetente, ou o código do dono mudou desde que foi fixado. */
+export interface CofreNaoVerificado {
+  id: string;
+  dono: string;
+  donoNome: string | null;
+  motivo: 'selo' | 'codigo';
+  /** Só em `codigo`: o código novo (a pessoa pode confiar nele) e o que estava fixado. */
+  codigoNovo?: string;
+  codigoFixado?: string;
 }
 
 export interface ItemCofre {
@@ -76,7 +103,15 @@ const dono = (): string => {
 };
 const chaveConta = shallowRef<Uint8Array | null>(null);
 const cofres = ref<CofreAberto[]>([]);
+/** Cofres de outras contas compartilhados com esta (db/022). `cofres` continua sendo só os PRÓPRIOS. */
+const compartilhados = ref<CofreCompartilhadoAberto[]>([]);
+const naoVerificados = ref<CofreNaoVerificado[]>([]);
+/** Itens dos cofres próprios E dos compartilhados (`cofre_id` diz de qual). */
 const itens = ref<ItemAberto[]>([]);
+/** O par X25519 desta conta, aberto na memória enquanto o cofre estiver aberto. */
+const par = shallowRef<ParDoAparelho | null>(null);
+/** Só tenta criar o par uma vez por abertura: falha persistente não vira laço. */
+let tentouPar = false;
 /** Quantos registros não abriram (corrompidos ou mexidos no servidor). */
 const ilegiveis = ref(0);
 
@@ -121,7 +156,7 @@ async function sincronizar(): Promise<void> {
   try {
     await carregar();
     if (offline.value) throw new Error('OFFLINE');
-    if (chaveConta.value) abrirTudo();
+    if (chaveConta.value) await abrirTudo();
   } finally {
     sincronizando.value = false;
   }
@@ -137,27 +172,68 @@ async function restaurarSessao(): Promise<boolean> {
   const chave = await lerSessao(dono(), trancaMin.value * 60_000);
   if (!chave) return false;
   chaveConta.value = chave;
-  abrirTudo();
+  await abrirTudo();
   return aberto.value;
 }
 
-function abrirTudo(): void {
+/** Número da última abertura: uma abertura lenta (WebCrypto) que perdeu a corrida para outra não sobrescreve o resultado. */
+let geracaoAbertura = 0;
+
+async function abrirTudo(): Promise<void> {
   const conta = chaveConta.value;
   const estado = bruto.value;
   if (!conta || !estado) return;
+  const minha = ++geracaoAbertura;
   let falhas = 0;
   const abertos: CofreAberto[] = [];
   for (const c of estado.cofres) {
     try {
       const d = decifrarJson<{ nome: string; chave: string; icone?: string; cor?: string; imagem?: string; ordem?: number }>(conta, c.dados, adCofre(dono(), c.id));
-      abertos.push({ id: c.id, nome: d.nome, chave: deB64(d.chave), icone: d.icone, cor: d.cor, imagem: imagemDoCofreValida(d.imagem) ? d.imagem : undefined, ordem: typeof d.ordem === 'number' ? d.ordem : undefined });
+      abertos.push({ id: c.id, nome: d.nome, chave: deB64(d.chave), icone: d.icone, cor: d.cor, imagem: imagemDoCofreValida(d.imagem) ? d.imagem : undefined, ordem: typeof d.ordem === 'number' ? d.ordem : undefined, geracao: c.geracao });
     } catch {
       falhas++;
     }
   }
+  // Cofres de outras contas (db/022): o par X25519 desta conta abre o selo de cada um. A pública do par é DERIVADA da
+  // privada (`PAR_ADULTERADO` se o servidor entregou outra) e o selo tem de autenticar o dono (`REMETENTE_NAO_CONFERE`).
+  let parAberto: ParDoAparelho | null = null;
+  let regravarPar: { chave_publica: string; chave_privada: string } | undefined;
+  if (estado.pessoa) {
+    try {
+      const r = await abrirPar(conta, dono(), estado.pessoa);
+      parAberto = r.par;
+      regravarPar = r.regravar;
+    } catch {
+      falhas++;
+    }
+  }
+  const outros: CofreCompartilhadoAberto[] = [];
+  const recusados: CofreNaoVerificado[] = [];
+  for (const c of estado.compartilhados ?? []) {
+    const base = { id: c.id, dono: c.dono, donoNome: c.dono_nome };
+    if (!parAberto || !c.dono_chave_publica) {
+      recusados.push({ ...base, motivo: 'selo' });
+      continue;
+    }
+    try {
+      const d = await abrirCofreSelado(parAberto, c.chave_selada, { cofreId: c.id, dono: c.dono, membro: dono(), publicaDoDono: c.dono_chave_publica });
+      const codigo = codigoDaChave(c.dono_chave_publica);
+      const fixado = codigoFixadoDoDono(dono(), c.dono);
+      if (fixado && fixado !== codigo) {
+        recusados.push({ ...base, motivo: 'codigo', codigoNovo: codigo, codigoFixado: fixado });
+        continue;
+      }
+      if (!fixado) fixarCodigoDoDono(dono(), c.dono, codigo);
+      outros.push({ id: c.id, nome: d.nome, chave: deB64(d.chave), icone: d.icone, cor: d.cor, papel: c.papel, dono: c.dono, donoNome: c.dono_nome, selo: c.chave_selada, donoCodigo: codigo, geracao: c.geracao });
+    } catch {
+      recusados.push({ ...base, motivo: 'selo' });
+    }
+  }
   const lista: ItemAberto[] = [];
-  for (const i of estado.itens) {
-    const cofre = abertos.find((c) => c.id === i.cofre_id);
+  const abertosIds = new Set(outros.map((c) => c.id));
+  const todosItens = [...estado.itens, ...(estado.compartilhados ?? []).filter((c) => abertosIds.has(c.id)).flatMap((c) => c.itens)];
+  for (const i of todosItens) {
+    const cofre = abertos.find((c) => c.id === i.cofre_id) ?? outros.find((c) => c.id === i.cofre_id);
     if (!cofre) {
       falhas++;
       continue;
@@ -169,14 +245,38 @@ function abrirTudo(): void {
       falhas++;
     }
   }
+  if (minha !== geracaoAbertura || chaveConta.value !== conta) return;
   // Primeiro os que o dono pôs em ordem; os outros (cofre antigo, criado pelo CLI) depois, por nome.
   abertos.sort((a, b) => (a.ordem ?? Infinity) - (b.ordem ?? Infinity) || a.nome.localeCompare(b.nome, 'pt-BR'));
+  outros.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   lista.sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR'));
   cofres.value = abertos;
+  compartilhados.value = outros;
+  naoVerificados.value = recusados;
   itens.value = lista;
+  par.value = parAberto;
   ilegiveis.value = falhas;
   pedirPersistencia();
   void guardarSessao(dono(), conta);
+  // Conta que abriu o cofre antes desta versão ainda não tem par: ganha agora, no navegador (estado.pessoa === null).
+  if (estado.pessoa === null && !offline.value && !tentouPar) void garantirPar();
+  // Par criado antes de a pública entrar no dado associado: recifra e devolve ao servidor (a mesma chave pública).
+  if (regravarPar && !offline.value) void cofreApi.salvarPessoa(regravarPar).then(() => carregar()).catch(() => undefined);
+}
+
+/** Gera e guarda o par X25519 desta conta (a privada cifrada com a chave da conta). */
+async function garantirPar(): Promise<void> {
+  const conta = chaveConta.value;
+  if (!conta || tentouPar) return;
+  tentouPar = true;
+  try {
+    await cofreApi.salvarPessoa(protegerPar(conta, dono(), await novoParDaPessoa()));
+  } catch (e) {
+    // 409: outra aba já gerou. Qualquer outro erro: o cofre segue sem compartilhar (a folha avisa).
+    if ((e as { response?: { status?: number } }).response?.status !== 409) return;
+  }
+  await carregar();
+  await abrirTudo();
 }
 
 /** Cria o cofre: devolve o kit de recuperação, que a tela mostra UMA vez. */
@@ -212,7 +312,7 @@ async function abrirComSenha(palavraPasse: string): Promise<void> {
   } finally {
     mestra.fill(0);
   }
-  abrirTudo();
+  await abrirTudo();
 }
 
 /** Abre pelo kit de recuperação. Depois disso a tela pede uma palavra-passe nova. */
@@ -224,7 +324,7 @@ async function abrirComKit(kitTexto: string): Promise<void> {
   const kit = kitDeTexto(kitTexto);
   chaveConta.value = decifrar(chaveDoKit(kit), conta.chave_por_kit, adContaKit(dono()));
   kit.fill(0);
-  abrirTudo();
+  await abrirTudo();
 }
 
 /**
@@ -257,7 +357,7 @@ async function abrirComDigital(): Promise<void> {
     chave.fill(0);
   }
   lembrarDigitalLocal(d.credencial_id);
-  abrirTudo();
+  await abrirTudo();
   cofreApi.usouDigital(d.id).catch(() => undefined);
 }
 
@@ -342,8 +442,13 @@ function trancar(): void {
   digitalPendente.value = null;
   chaveConta.value?.fill(0);
   for (const c of cofres.value) c.chave.fill(0);
+  for (const c of compartilhados.value) c.chave.fill(0);
   chaveConta.value = null;
   cofres.value = [];
+  compartilhados.value = [];
+  naoVerificados.value = [];
+  par.value = null;
+  tentouPar = false;
   itens.value = [];
   ilegiveis.value = 0;
 }
@@ -405,6 +510,8 @@ async function salvarCofre(nome: string, id?: string, aparencia?: Partial<Aparen
   exigeRede();
   const conta = chaveConta.value;
   if (!conta) throw new Error('TRANCADO');
+  // Cofre compartilhado comigo não se renomeia: só o dono (o servidor também recusa).
+  if (id && compartilhados.value.some((c) => c.id === id)) throw new Error('SO_O_DONO');
   const existente = id ? cofres.value.find((c) => c.id === id) : undefined;
   const cofreId = existente?.id ?? novoId();
   const chave = existente?.chave ?? novaChave();
@@ -417,7 +524,9 @@ async function salvarCofre(nome: string, id?: string, aparencia?: Partial<Aparen
   const ordem = existente ? existente.ordem : ordens.length ? Math.max(...ordens) + 1 : undefined;
   await cofreApi.salvarCofre(cofreId, cifrarJson(conta, dadosDoCofre({ nome: nome.trim(), chave, icone, cor, imagem, ordem }), adCofre(dono(), cofreId)));
   await carregar();
-  abrirTudo();
+  await abrirTudo();
+  // Quem tem o cofre recebe o nome, o ícone e a cor dentro do selo: mudou algum, o selo é refeito.
+  if (existente && (existente.nome !== nome.trim() || existente.icone !== icone || existente.cor !== cor)) await atualizarSelos(cofreId);
   return cofreId;
 }
 
@@ -452,29 +561,64 @@ async function reordenarCofres(ids: string[]): Promise<void> {
   } finally {
     // Mesmo se uma gravação falhar no meio, a lista volta a mostrar o que ficou gravado.
     await carregar();
-    abrirTudo();
+    await abrirTudo();
   }
 }
 
 async function apagarCofre(id: string): Promise<void> {
   exigeRede();
+  // Cofre compartilhado comigo: quem não é o dono SAI dele, não o apaga.
+  if (compartilhados.value.some((c) => c.id === id)) throw new Error('SO_O_DONO');
   await cofreApi.apagarCofre(id);
   await carregar();
-  abrirTudo();
+  await abrirTudo();
 }
 
 async function salvarItem(cofreId: string, dados: ItemCofre, id?: string): Promise<void> {
   exigeRede();
-  const cofre = cofres.value.find((c) => c.id === cofreId);
+  const cofre = acharCofre(cofreId);
   if (!cofre) throw new Error('COFRE_NAO_ENCONTRADO');
+  if (cofre.papel === 'leitura') throw new Error('SOMENTE_LEITURA');
   const itemId = id ?? novoId();
-  await cofreApi.salvarItem(itemId, cofreId, cifrarJson(cofre.chave, dados, adItem(cofreId, itemId)));
+  // Mover item de outro cofre: o servidor também confere o selo e a geração do cofre de ORIGEM.
+  const origemId = id ? itens.value.find((i) => i.id === id)?.cofre_id : undefined;
+  const origem = origemId && origemId !== cofreId ? acharCofre(origemId) : undefined;
+  if (origem?.papel === 'leitura') throw new Error('SOMENTE_LEITURA');
+  try {
+    await cofreApi.salvarItem(itemId, cofreId, cifrarJson(cofre.chave, dados, adItem(cofreId, itemId)), {
+      selo: cofre.papel === 'escrita' ? cofre.selo : undefined,
+      geracao: cofre.geracao,
+      origem: origem ? { selo: origem.papel === 'escrita' ? origem.selo : undefined, geracao: origem.geracao } : undefined,
+    });
+  } catch (e) {
+    await aposChaveGirada(e);
+    throw e;
+  }
   await carregar();
-  abrirTudo();
+  await abrirTudo();
+}
+
+/** Os cofres próprios e os compartilhados, com o papel (`dono` para os próprios). */
+type CofreComPapel = CofreAberto & { papel: CofrePapel | 'dono'; selo?: string };
+function acharCofre(id: string): CofreComPapel | undefined {
+  const meu = cofres.value.find((c) => c.id === id);
+  if (meu) return { ...meu, papel: 'dono' };
+  return compartilhados.value.find((c) => c.id === id);
+}
+
+/** O servidor recusou a escrita porque a chave do cofre mudou (o dono girou ou refez o selo): baixa o estado novo e avisa. */
+async function aposChaveGirada(e: unknown): Promise<void> {
+  const r = (e as { response?: { status?: number; data?: { error?: string } } } | null)?.response;
+  if (r?.status === 409 && r.data?.error === 'CHAVE_GIRADA') {
+    await sincronizar().catch(() => undefined);
+    throw new Error('CHAVE_GIRADA');
+  }
 }
 
 async function apagarItem(id: string): Promise<void> {
   exigeRede();
+  const doItem = itens.value.find((i) => i.id === id);
+  if (doItem && acharCofre(doItem.cofre_id)?.papel === 'leitura') throw new Error('SOMENTE_LEITURA');
   // Item com chave de entrada: tira a entrada no hub antes (sem a privada ela não serve, mas não fica pendurada).
   const entrada = itens.value.find((i) => i.id === id)?.entrada;
   if (entrada) {
@@ -486,7 +630,7 @@ async function apagarItem(id: string): Promise<void> {
   }
   await cofreApi.apagarItem(id);
   await carregar();
-  abrirTudo();
+  await abrirTudo();
 }
 
 // ------------------------------------------------ máquinas do CLI aprovadas pelo navegador (db/017)
@@ -536,6 +680,148 @@ async function alterarAcessoDoAparelho(aparelho: CofreAparelho, cofreIds: string
   await cofreApi.alterarAcesso(aparelho.id, await acessoPara(aparelho.id, aparelho.chave_publica, cofreIds));
 }
 
+// ------------------------------------------------ cofre compartilhado (db/022)
+
+/** O pedido de selo de um cofre próprio para um membro: a chave, o que ele precisa para mostrá-lo e o par do dono (que assina a tag). */
+function pedidoDeSelo(c: CofreAberto, membro: string, publicaDoMembro: string) {
+  if (!par.value) throw new Error('SEM_PAR');
+  return { parDoDono: par.value, dono: dono(), membro, publicaDoMembro, cofreId: c.id, chave: b64(c.chave), nome: c.nome, icone: c.icone, cor: c.cor };
+}
+
+/** Quem mais abre um cofre PRÓPRIO. */
+const membrosDe = (cofreId: string): CofreMembro[] => (bruto.value?.membros ?? []).filter((m) => m.cofre_id === cofreId);
+
+/** O código que esta conta lê para quem a convida conferir (a chave pública dela). `null` até o par existir. */
+const meuCodigo = computed(() => (par.value ? codigoDaChave(par.value.publica) : null));
+/** Esta conta já tem par de chaves (sem ele não dá para receber um cofre)? */
+const podeCompartilhar = computed(() => !!par.value && !offline.value);
+
+/**
+ * Procura a conta pelo e-mail e devolve a chave pública dela com o CÓDIGO DE VERIFICAÇÃO: quem convida confere o código
+ * com a pessoa por outro canal antes de selar. 404 igual para "não existe" e "não tem cofre".
+ */
+async function buscarConvidado(email: string): Promise<{ dono: string; chave_publica: string; codigo: string }> {
+  exigeRede();
+  if (!chaveConta.value) throw new Error('TRANCADO');
+  const p = await cofreApi.pessoaPorEmail(email.trim().toLowerCase());
+  if (p.dono === dono()) throw new Error('SOU_EU');
+  return { ...p, codigo: codigoDaChave(p.chave_publica) };
+}
+
+/** Sela o cofre para o convidado e o põe no cofre com o papel escolhido. Só o dono. */
+async function convidar(cofreId: string, convidado: { dono: string; chave_publica: string }, papelEscolhido: CofrePapel): Promise<void> {
+  exigeRede();
+  const conta = chaveConta.value;
+  if (!conta) throw new Error('TRANCADO');
+  const c = cofres.value.find((x) => x.id === cofreId);
+  if (!c) throw new Error('SO_O_DONO');
+  if (!par.value) throw new Error('SEM_PAR');
+  await cofreApi.convidar(cofreId, {
+    membro: convidado.dono,
+    chave_publica: convidado.chave_publica,
+    chave_selada: await selarCofre(pedidoDeSelo(c, convidado.dono, convidado.chave_publica)),
+    papel: papelEscolhido,
+    prova: provaDoMembro(conta, dono(), cofreId, convidado.dono, convidado.chave_publica),
+  });
+  await carregar();
+  await abrirTudo();
+}
+
+/** Muda o papel de um membro (leitura ↔ escrita). A chave do cofre não muda. */
+async function mudarPapel(cofreId: string, membro: string, novo: CofrePapel): Promise<void> {
+  exigeRede();
+  if (!cofres.value.some((x) => x.id === cofreId)) throw new Error('SO_O_DONO');
+  await cofreApi.ajustarMembro(cofreId, membro, { papel: novo });
+  await carregar();
+  await abrirTudo();
+}
+
+/**
+ * Gira a chave do cofre: chave nova, nome e itens recifrados, selo novo para quem fica, tudo num pedido só (o servidor
+ * aplica numa transação). `remover` tira essa pessoa no mesmo golpe. Quem já copiou uma senha antes continua com ela.
+ */
+async function girar(cofreId: string, remover: string | null): Promise<void> {
+  exigeRede();
+  const conta = chaveConta.value;
+  if (!conta) throw new Error('TRANCADO');
+  // Parte do estado MAIS NOVO: o servidor recusa o giro se os itens ou as pessoas mudaram desde a última leitura.
+  await carregar();
+  if (offline.value) throw new Error('OFFLINE');
+  await abrirTudo();
+  const c = cofres.value.find((x) => x.id === cofreId);
+  if (!c) throw new Error('SO_O_DONO');
+  const brutos = (bruto.value?.itens ?? []).filter((i) => i.cofre_id === cofreId);
+  // Item que não abre não tem como ser recifrado: girar assim o perderia.
+  if (itens.value.filter((i) => i.cofre_id === cofreId).length !== brutos.length) throw new Error('ITENS_ILEGIVEIS');
+  const { chave: _chave, ...registro } = dadosDoCofre(c);
+  if (!par.value) throw new Error('SEM_PAR');
+  const { chaveNova, giro } = await prepararGiro({
+    dono: dono(),
+    parDoDono: par.value,
+    chaveDaConta: conta,
+    cofreId,
+    chaveAntiga: c.chave,
+    registro,
+    itens: brutos.map((i) => ({ id: i.id, dados: i.dados, atualizado_em: String(i.atualizado_em) })),
+    membros: membrosDe(cofreId).map((m) => ({ membro: m.membro, chave_publica: m.chave_publica, prova: m.prova })),
+    remover,
+  });
+  chaveNova.fill(0);
+  await cofreApi.girarChave(cofreId, giro);
+  await carregar();
+  await abrirTudo();
+}
+
+/** Tira uma pessoa do cofre E gira a chave (ela já viu a chave antiga: só tirar não bastaria). */
+const removerMembro = (cofreId: string, membro: string): Promise<void> => girar(cofreId, membro);
+/** Gira a chave sem tirar ninguém. */
+const girarChave = (cofreId: string): Promise<void> => girar(cofreId, null);
+
+/** A pessoa viu o código novo do dono e confia nele: fixa e reabre. */
+async function confiarNoCodigoNovo(donoDoCofreId: string): Promise<void> {
+  const r = naoVerificados.value.find((x) => x.dono === donoDoCofreId && x.motivo === 'codigo');
+  if (!r?.codigoNovo) return;
+  fixarCodigoDoDono(dono(), donoDoCofreId, r.codigoNovo);
+  await abrirTudo();
+}
+
+/** O membro sai do cofre: perde só o próprio acesso (a chave não gira). */
+async function sairDoCofre(cofreId: string): Promise<void> {
+  exigeRede();
+  if (!compartilhados.value.some((x) => x.id === cofreId)) throw new Error('COFRE_NAO_ENCONTRADO');
+  await cofreApi.sairDoCofre(cofreId);
+  await carregar();
+  await abrirTudo();
+}
+
+/**
+ * O dono renomeou o cofre (ou mudou ícone/cor): o selo de cada membro leva esse texto, então é refeito. Confere a prova
+ * de cada membro antes de selar (`MEMBRO_ADULTERADO` se o servidor trocou a chave pública de alguém).
+ */
+async function atualizarSelos(cofreId: string): Promise<void> {
+  const conta = chaveConta.value;
+  const c = cofres.value.find((x) => x.id === cofreId);
+  const membros = membrosDe(cofreId);
+  if (!conta || !c || membros.length === 0) return;
+  let falhou = false;
+  for (const m of membros) {
+    try {
+      if (m.prova !== provaDoMembro(conta, dono(), cofreId, m.membro, m.chave_publica)) throw new Error('MEMBRO_ADULTERADO');
+      await cofreApi.ajustarMembro(cofreId, m.membro, {
+        papel: m.papel,
+        chave_publica: m.chave_publica,
+        chave_selada: await selarCofre(pedidoDeSelo(c, m.membro, m.chave_publica)),
+        prova: m.prova,
+      });
+    } catch {
+      falhou = true;
+    }
+  }
+  await carregar();
+  await abrirTudo();
+  if (falhou) throw new Error('SELOS_NAO_ATUALIZADOS');
+}
+
 // ------------------------------------------------ entrada pelo cofre (db/016)
 
 /**
@@ -548,7 +834,7 @@ async function guardarEntrada(passe: string, pedido: CofreEntradaPedido, nome: s
   const conta = pedido.conta;
   if (pedido.acao !== 'cadastro' || !conta) throw new Error('PASSE_INVALIDO');
   if (!cofres.value.length) await salvarCofre('Geral');
-  const alvo = cofres.value[0];
+  const alvo = cofres.value[0]; // sempre um cofre PRÓPRIO: `cofres` não inclui os compartilhados
   if (!alvo) throw new Error('COFRE_NAO_ENCONTRADO');
   const { publica, privada } = await novaChaveDeEntrada();
   const id = novoId();
@@ -599,6 +885,9 @@ export function useCofre() {
     temDigital,
     digitais,
     cofres,
+    compartilhados,
+    naoVerificados,
+    confiarNoCodigoNovo,
     itens,
     ilegiveis,
     carregar,
@@ -625,5 +914,14 @@ export function useCofre() {
     guardarEntrada,
     entradasDoApp,
     assinarParaEntrar,
+    meuCodigo,
+    podeCompartilhar,
+    membrosDe,
+    buscarConvidado,
+    convidar,
+    mudarPapel,
+    removerMembro,
+    girarChave,
+    sairDoCofre,
   };
 }

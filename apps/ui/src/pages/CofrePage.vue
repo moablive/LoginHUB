@@ -21,6 +21,7 @@ import {
   ShieldCheckIcon,
   Squares2X2Icon,
   TrashIcon,
+  UserPlusIcon,
 } from '@heroicons/vue/24/outline';
 import UiNavBar from '@/components/ui/UiNavBar.vue';
 import UiButton from '@/components/ui/UiButton.vue';
@@ -35,6 +36,7 @@ import UiSpinner from '@/components/ui/UiSpinner.vue';
 import UiEmpty from '@/components/ui/UiEmpty.vue';
 import CofreItemIcone, { type LogoDeApp } from '@/components/CofreItemIcone.vue';
 import CofreAparelhos from '@/components/cofre/CofreAparelhos.vue';
+import CofreCompartilhar from '@/components/cofre/CofreCompartilhar.vue';
 import CofreFolha from '@/components/cofre/CofreFolha.vue';
 import CofreLista from '@/components/cofre/CofreLista.vue';
 import CofreIcone from '@/components/cofre/CofreIcone.vue';
@@ -62,7 +64,7 @@ const props = withDefaults(
 const emit = defineEmits<{ sair: [] }>();
 
 const cofre = useCofre();
-const { existe, aberto, cofres, itens, ilegiveis, temDigital, digitais, digitalPendente, offline, copiaEm, sincronizando } = cofre;
+const { existe, aberto, cofres, compartilhados, naoVerificados, itens, ilegiveis, temDigital, digitais, digitalPendente, offline, copiaEm, sincronizando } = cofre;
 
 const carregando = ref(true);
 const erro = ref<string | null>(null);
@@ -92,6 +94,11 @@ const mensagemDe = (e: unknown, padrao: string): string => {
   if (e instanceof Error && e.message === 'SEM_DIGITAL') return 'Nenhuma digital abre este cofre ainda.';
   if (e instanceof Error && e.message === 'OFFLINE_SEM_SENHA') return 'Sem internet: abra o cofre pela digital (Face ID). A palavra-passe só funciona com rede.';
   if (e instanceof Error && e.message === 'OFFLINE') return 'Sem internet: o cofre está só para leitura. Sincronize quando a rede voltar.';
+  if (e instanceof Error && e.message === 'SOMENTE_LEITURA') return 'Você só tem acesso de leitura a este cofre.';
+  if (e instanceof Error && e.message === 'SEM_PAR') return 'Esta conta ainda não tem as chaves de compartilhamento. Sincronize o cofre e tente de novo.';
+  if (e instanceof Error && e.message === 'SO_O_DONO') return 'Só o dono do cofre pode fazer isto.';
+  if (e instanceof Error && e.message === 'CHAVE_GIRADA') return 'O dono mudou o cofre. Já baixei a versão nova: tente de novo.';
+  if (axios.isAxiosError(e) && e.response?.data?.error === 'SEM_PERMISSAO') return String(e.response.data.message ?? 'Você não tem permissão para isto neste cofre.');
   if (e instanceof Error && e.message === 'CHAVE_ERRADA') return usarKit.value ? 'Kit de recuperação errado.' : 'Palavra-passe errada.';
   if (e instanceof Error && (e.message === 'KIT_INVALIDO' || e.message === 'BASE32_INVALIDO')) return 'Kit de recuperação incompleto ou com caractere errado.';
   if (axios.isAxiosError(e) && e.response?.data?.message) return String(e.response.data.message);
@@ -325,8 +332,8 @@ onBeforeUnmount(() => {
 
 // --- lista. `cofreAtual` nulo = "Todos os itens" (como o Proton Pass abre).
 const cofreAtual = ref<string | null>(null);
-watch(cofres, (lista) => {
-  if (cofreAtual.value && !lista.find((c) => c.id === cofreAtual.value)) cofreAtual.value = null;
+watch([cofres, compartilhados], () => {
+  if (cofreAtual.value && !todosCofres.value.find((c) => c.id === cofreAtual.value)) cofreAtual.value = null;
 });
 const busca = ref('');
 const visiveis = computed(() => {
@@ -337,13 +344,29 @@ const visiveis = computed(() => {
       (!termo || i.titulo.toLowerCase().includes(termo) || i.usuario.toLowerCase().includes(termo) || i.url.toLowerCase().includes(termo)),
   );
 });
-const nomeDoCofre = (id: string) => cofres.value.find((c) => c.id === id)?.nome ?? '';
+// Cofres próprios + os de outras contas compartilhados com esta (db/022). Só os próprios se ordenam, editam e apagam.
+const todosCofres = computed(() => [...cofres.value, ...compartilhados.value]);
+const nomeDoCofre = (id: string) => todosCofres.value.find((c) => c.id === id)?.nome ?? '';
+/** Papel nesse cofre: `dono` nos próprios; `leitura` ou `escrita` nos compartilhados. */
+const papelDoCofre = (id: string): 'dono' | 'leitura' | 'escrita' => compartilhados.value.find((c) => c.id === id)?.papel ?? 'dono';
+const podeEscrever = (id: string) => papelDoCofre(id) !== 'leitura';
+const compartilhadoAtual = computed(() => compartilhados.value.find((c) => c.id === cofreAtual.value) ?? null);
+const donoDoCofreNome = (id: string) => compartilhados.value.find((c) => c.id === id)?.donoNome ?? 'outra conta';
+/** Cofres onde dá para guardar item: os próprios e os compartilhados com escrita. */
+const cofresComEscrita = computed(() => todosCofres.value.filter((c) => podeEscrever(c.id)));
+const pessoasPorCofre = computed(() => {
+  const n: Record<string, number> = {};
+  for (const c of cofres.value) n[c.id] = cofre.membrosDe(c.id).length;
+  return n;
+});
 const contagem = computed(() => {
   const n: Record<string, number> = {};
   for (const i of itens.value) n[i.cofre_id] = (n[i.cofre_id] ?? 0) + 1;
   return n;
 });
-const cofreEscolhido = computed(() => cofres.value.find((c) => c.id === cofreAtual.value) ?? null);
+const cofreEscolhido = computed(() => todosCofres.value.find((c) => c.id === cofreAtual.value) ?? null);
+/** O cofre aberto na lista é de leitura: o botão "Item" fica desligado. */
+const cofreAtualSoLeitura = computed(() => !!cofreAtual.value && !podeEscrever(cofreAtual.value));
 const quantos = (n: number) => (n === 1 ? '1 item' : `${n} itens`);
 // No celular a lista dos cofres vem numa folha, aberta pelo botão do cofre atual.
 const mostrarCofres = ref(false);
@@ -395,7 +418,7 @@ const totpInvalido = computed(() => !!form.value.totp.trim() && !lerTotp(form.va
 function novoItem() {
   // Em "Todos os itens" o item nasce no primeiro cofre; a folha deixa trocar.
   const cofreId = cofreAtual.value ?? cofres.value[0]?.id;
-  if (!cofreId) return;
+  if (!cofreId || !podeEscrever(cofreId)) return;
   verSenhaEdicao.value = false;
   form.value = { ...VAZIO };
   editando.value = { cofreId };
@@ -484,6 +507,34 @@ async function reordenarCofres(ids: string[]) {
   }
 }
 const cofreParaApagar = ref<{ id: string; nome: string } | null>(null);
+
+// --- cofre compartilhado (db/022): a folha de compartilhar e o "sair" de quem recebeu
+const compartilhando = ref<{ id: string; nome: string } | null>(null);
+function compartilharCofre(id: string) {
+  const c = cofres.value.find((x) => x.id === id);
+  if (!c) return;
+  mostrarCofres.value = false;
+  compartilhando.value = { id: c.id, nome: c.nome };
+}
+const cofreParaSair = ref<{ id: string; nome: string } | null>(null);
+function pedirSair(id: string) {
+  mostrarCofres.value = false;
+  cofreParaSair.value = { id, nome: nomeDoCofre(id) };
+}
+async function sairDoCofre() {
+  const alvo = cofreParaSair.value;
+  if (!alvo) return;
+  ocupado.value = true;
+  erro.value = null;
+  try {
+    await cofre.sairDoCofre(alvo.id);
+  } catch (err) {
+    erro.value = mensagemDe(err, 'Não foi possível sair do cofre.');
+  } finally {
+    ocupado.value = false;
+    cofreParaSair.value = null;
+  }
+}
 async function apagarCofre() {
   const alvo = cofreParaApagar.value;
   if (!alvo) return;
@@ -643,7 +694,7 @@ async function confirmarTrocaSenha() {
     <div v-else class="mt-4 lg:grid lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start lg:gap-6">
       <!-- cofres: coluna no computador; no celular, a folha aberta pelo botão do cofre atual -->
       <aside class="hidden lg:sticky lg:top-4 lg:block">
-        <CofreLista :cofres="cofres" :contagem="contagem" :total="itens.length" :atual="cofreAtual" :ocupado="ocupado" @escolher="escolherCofre" @novo="novoCofre" @editar="editarCofre" @apagar="pedirApagarCofre" @reordenar="reordenarCofres" />
+        <CofreLista :cofres="cofres" :compartilhados="compartilhados" :pessoas="pessoasPorCofre" :contagem="contagem" :total="itens.length" :atual="cofreAtual" :ocupado="ocupado" @escolher="escolherCofre" @novo="novoCofre" @editar="editarCofre" @apagar="pedirApagarCofre" @reordenar="reordenarCofres" @compartilhar="compartilharCofre" @sair="pedirSair" />
       </aside>
 
       <div class="space-y-4">
@@ -655,6 +706,24 @@ async function confirmarTrocaSenha() {
           {{ ilegiveis }} registro(s) não abriram: foram alterados fora do cofre ou estão corrompidos.
         </p>
         <p v-if="erro" role="alert" class="rounded-celula bg-danger/10 p-3 text-subhead text-danger">{{ erro }}</p>
+
+        <!-- Cofres compartilhados que NÃO abriram (db/022): remetente não autenticado ou código do dono mudado. -->
+        <div v-for="n in naoVerificados" :key="n.id" role="alert" class="space-y-2 rounded-celula bg-danger/10 p-3 text-subhead text-danger">
+          <p v-if="n.motivo === 'selo'">
+            <strong>Não foi possível verificar</strong> um cofre que {{ n.donoNome ?? 'outra conta' }} compartilhou com você: ele não prova que veio dela. Não foi aberto.
+          </p>
+          <template v-else>
+            <p>
+              <strong>Atenção:</strong> o código de verificação de {{ n.donoNome ?? 'quem compartilhou este cofre' }} mudou. Fixado antes:
+              <span class="font-mono">{{ n.codigoFixado }}</span>; agora: <span class="font-mono">{{ n.codigoNovo }}</span>. O cofre não foi aberto. Só confie se ela confirmar o código novo por outro canal.
+            </p>
+            <UiButton variante="destructive-tinted" tamanho="small" @click="cofre.confiarNoCodigoNovo(n.dono)">Confiar no código novo</UiButton>
+          </template>
+        </div>
+        <p v-if="compartilhadoAtual" class="rounded-celula bg-fill-2 p-3 text-footnote text-label-2">
+          Compartilhado por <strong>{{ compartilhadoAtual.donoNome ?? 'outra conta' }}</strong>. Código de verificação dela:
+          <span class="select-all font-mono">{{ compartilhadoAtual.donoCodigo }}</span> (confira por outro canal; se mudar, o cofre avisa).
+        </p>
 
         <button type="button" class="flex w-full items-center gap-3 rounded-celula bg-surface p-2 text-left lg:hidden" aria-haspopup="dialog" @click="mostrarCofres = true">
           <CofreIcone v-if="cofreEscolhido" :icone="cofreEscolhido.icone" :cor="cofreEscolhido.cor" :imagem="cofreEscolhido.imagem" />
@@ -670,7 +739,10 @@ async function confirmarTrocaSenha() {
 
         <div class="flex items-center gap-2">
           <UiSearchField v-model="busca" placeholder="Buscar em todos os cofres" />
-          <UiButton tamanho="small" :disabled="cofres.length === 0 || offline" @click="novoItem"><PlusIcon class="h-4 w-4" />Item</UiButton>
+          <UiButton v-if="cofreAtual && papelDoCofre(cofreAtual) === 'dono'" tamanho="small" variante="gray" title="Compartilhar este cofre com outra conta" @click="compartilharCofre(cofreAtual)">
+            <UserPlusIcon class="h-4 w-4" />Compartilhar
+          </UiButton>
+          <UiButton tamanho="small" :disabled="cofres.length === 0 || offline || cofreAtualSoLeitura" :title="cofreAtualSoLeitura ? 'Você só tem acesso de leitura a este cofre' : undefined" @click="novoItem"><PlusIcon class="h-4 w-4" />Item</UiButton>
         </div>
 
         <UiEmpty
@@ -688,6 +760,9 @@ async function confirmarTrocaSenha() {
                 <p class="flex flex-wrap items-center gap-2 text-headline font-semibold">
                   <span class="truncate">{{ item.titulo }}</span>
                   <UiBadge v-if="busca || cofreAtual === null">{{ nomeDoCofre(item.cofre_id) }}</UiBadge>
+                  <UiBadge v-if="papelDoCofre(item.cofre_id) !== 'dono'" :tom="papelDoCofre(item.cofre_id) === 'escrita' ? 'accent' : 'neutro'" :title="`Cofre de ${donoDoCofreNome(item.cofre_id)}`">
+                    {{ papelDoCofre(item.cofre_id) === 'escrita' ? 'compartilhado · escrita' : 'compartilhado · somente leitura' }}
+                  </UiBadge>
                   <UiBadge v-if="item.entrada" title="Chave de entrada pelo cofre (db/016): o app entra com ela">entrada pelo cofre</UiBadge>
                 </p>
                 <a v-if="item.url" :href="/^https?:\/\//i.test(item.url) ? item.url : undefined" target="_blank" rel="noopener noreferrer" class="block truncate text-footnote text-accent">{{ item.url }}</a>
@@ -726,8 +801,8 @@ async function confirmarTrocaSenha() {
                 <p v-if="item.notas" class="max-h-24 overflow-y-auto whitespace-pre-wrap break-all text-footnote text-label-2">{{ item.notas }}</p>
               </div>
               <div class="flex shrink-0 flex-col gap-1">
-                <UiButton variante="plain" icone :disabled="offline" :aria-label="`Editar ${item.titulo}`" @click="editarItem(item)"><PencilSquareIcon class="h-5 w-5" /></UiButton>
-                <UiButton variante="plain" icone :disabled="offline" class="!text-danger hover:!bg-danger/10" :aria-label="`Apagar ${item.titulo}`" @click="itemParaApagar = item">
+                <UiButton variante="plain" icone :disabled="offline || !podeEscrever(item.cofre_id)" :title="podeEscrever(item.cofre_id) ? undefined : 'Somente leitura'" :aria-label="`Editar ${item.titulo}`" @click="editarItem(item)"><PencilSquareIcon class="h-5 w-5" /></UiButton>
+                <UiButton variante="plain" icone :disabled="offline || !podeEscrever(item.cofre_id)" :title="podeEscrever(item.cofre_id) ? undefined : 'Somente leitura'" class="!text-danger hover:!bg-danger/10" :aria-label="`Apagar ${item.titulo}`" @click="itemParaApagar = item">
                   <TrashIcon class="h-5 w-5" />
                 </UiButton>
               </div>
@@ -739,14 +814,14 @@ async function confirmarTrocaSenha() {
 
     <!-- FOLHA: cofres (celular) -->
     <UiSheet :aberto="mostrarCofres" titulo="Trocar de cofre" largura="sm" @fechar="mostrarCofres = false">
-      <CofreLista :cofres="cofres" :contagem="contagem" :total="itens.length" :atual="cofreAtual" :ocupado="ocupado" @escolher="escolherCofre" @novo="novoCofre" @editar="editarCofre" @apagar="pedirApagarCofre" @reordenar="reordenarCofres" />
+      <CofreLista :cofres="cofres" :compartilhados="compartilhados" :pessoas="pessoasPorCofre" :contagem="contagem" :total="itens.length" :atual="cofreAtual" :ocupado="ocupado" @escolher="escolherCofre" @novo="novoCofre" @editar="editarCofre" @apagar="pedirApagarCofre" @reordenar="reordenarCofres" @compartilhar="compartilharCofre" @sair="pedirSair" />
     </UiSheet>
 
     <!-- FOLHA: item -->
     <UiSheet :aberto="!!editando" :titulo="editando?.id ? 'Editar item' : 'Novo item'" :subtitulo="editando ? nomeDoCofre(editando.cofreId) : ''" :bloqueado="ocupado" @fechar="editando = null">
       <form v-if="editando" id="form-item" class="space-y-3" @submit.prevent="salvarItem">
         <!-- Trocar o cofre de um item que já existe move o item: ele é recifrado com a chave do cofre novo. -->
-        <UiSelect v-if="cofres.length > 1" v-model="editando.cofreId" rotulo="Cofre" :opcoes="cofres.map((c) => ({ valor: c.id, rotulo: c.nome }))" />
+        <UiSelect v-if="cofresComEscrita.length > 1" v-model="editando.cofreId" rotulo="Cofre" :opcoes="cofresComEscrita.map((c) => ({ valor: c.id, rotulo: papelDoCofre(c.id) === 'dono' ? c.nome : `${c.nome} (compartilhado)` }))" />
         <UiTextField v-model="form.titulo" rotulo="Título" placeholder="Ex.: GitHub, Cloudflare, awlsrv sudo" required />
         <UiTextField v-model="form.usuario" rotulo="Usuário / e-mail" autocomplete="off" />
         <div class="space-y-1">
@@ -777,6 +852,22 @@ async function confirmarTrocaSenha() {
         <UiButton type="submit" form="form-item" :carregando="ocupado" :disabled="!form.titulo.trim() || totpInvalido">Salvar</UiButton>
       </template>
     </UiSheet>
+
+    <!-- FOLHA: compartilhar o cofre com outra conta (db/022) -->
+    <CofreCompartilhar :cofre="compartilhando" @fechar="compartilhando = null" />
+
+    <UiAlert
+      :aberto="!!cofreParaSair"
+      tom="danger"
+      titulo="Sair deste cofre?"
+      :destaque="cofreParaSair?.nome"
+      confirmar="Sair"
+      :carregando="ocupado"
+      @fechar="cofreParaSair = null"
+      @confirmar="sairDoCofre"
+    >
+      Você perde o acesso a ele. O dono continua com tudo e pode convidar você de novo.
+    </UiAlert>
 
     <!-- FOLHA: cofre (nome, cor e ícone) -->
     <CofreFolha :cofre="editandoCofre" :ocupado="ocupado" @fechar="editandoCofre = null" @salvar="salvarCofre" />
