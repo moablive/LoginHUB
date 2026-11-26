@@ -227,6 +227,10 @@ export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
     roleLabel: "DJ / Artista",
     roleDescription:
       "Cria o artista na Astral Wave Label e o login do DJ no LoginHUB, amarrados. O convite leva o PDF do contrato escolhido, e o painel só libera depois que o artista assinar esse contrato no LibreSign.",
+    // Na label, `user` É o artista (os 22 DJs do app têm esse papel; o convite
+    // grava `role: "user"`). O papel já aparece como "DJ / Artista", então o
+    // "Usuário Padrão" fica fora do menu (26/11/2026, pedido do dono).
+    hubRoles: { operador: "", admin: "", suporte: "" },
     endpoint: `${ASTRALWAVE_API}/admin/artists/invite`,
     fields: [
       {

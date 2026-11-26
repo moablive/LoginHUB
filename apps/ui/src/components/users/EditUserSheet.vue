@@ -75,7 +75,7 @@ async function salvar() {
       <UiTextField v-model="form.email" rotulo="E-mail de acesso" type="email" required autocomplete="off" />
 
       <UiSelect v-model="form.role" rotulo="Nível de acesso">
-        <option v-if="oferece('user')" value="user">Usuário</option>
+        <option v-if="oferece('user')" value="user">{{ provisioned?.roleLabel ?? 'Usuário' }}</option>
         <option v-if="oferece('operador')" value="operador">Operador</option>
         <option v-if="oferece('admin')" value="admin">Administrador</option>
         <option v-if="oferece('suporte')" value="suporte">Suporte</option>

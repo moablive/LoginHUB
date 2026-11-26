@@ -59,6 +59,8 @@ const busca = ref('');
 // porque é assim que o app acha o cadastro a partir do token.
 const roster = ref<Set<string>>(new Set());
 const rosterCfg = computed(() => getProvisionedApp(props.id)?.roster ?? null);
+// Em app provisionado o papel `user` é o do convite (DJ / Artista, Vendedor).
+const papelPadrao = computed(() => getProvisionedApp(props.id)?.roleLabel ?? 'Usuário');
 
 // --- folhas e alertas ---
 const showFormModal = ref(false);
@@ -574,7 +576,7 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
               <!-- `motorista` é papel da Sul Alimentos (28/10/2026); sem esta
                    linha os motoristas apareciam como "Usuário". -->
               <UiBadge v-else-if="user.role === 'motorista'" tom="accent">Motorista</UiBadge>
-              <UiBadge v-else>Usuário</UiBadge>
+              <UiBadge v-else>{{ papelPadrao }}</UiBadge>
               <UiBadge v-for="org in organizacoesDoUsuario(user)" :key="org" tom="accent" title="Organização e apps que ele administra">{{ org }}</UiBadge>
               <UiBadge v-if="ehDoRoster(user)" tom="accent">{{ rosterCfg?.label }}</UiBadge>
               <UiBadge v-if="app?.usaLoginHub === false">2FA não se aplica</UiBadge>
@@ -646,7 +648,7 @@ const iniciais = (nome: string) => nome.charAt(0).toUpperCase();
                     <UiBadge v-if="user.role === 'admin'" tom="indigo"><ShieldCheckIcon class="h-3 w-3" /> Admin</UiBadge>
                     <UiBadge v-else-if="user.role === 'operador'" tom="warning">Operador</UiBadge>
                     <UiBadge v-else-if="user.role === 'motorista'" tom="accent">Motorista</UiBadge>
-                    <UiBadge v-else>Usuário</UiBadge>
+                    <UiBadge v-else>{{ papelPadrao }}</UiBadge>
                     <UiBadge v-for="org in organizacoesDoUsuario(user)" :key="org" tom="accent" title="Organização e apps que ele administra">{{ org }}</UiBadge>
                     <UiBadge v-if="ehDoRoster(user)" tom="accent">{{ rosterCfg?.label }}</UiBadge>
                   </div>
