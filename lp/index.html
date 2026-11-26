@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/A-LOGOS/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/A-LOGOS/favicon-192.png" />
+    <link rel="apple-touch-icon" href="/A-LOGOS/apple-touch-icon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#07070c" />
+
+    <!-- A fonte é o único recurso de terceiros da página; o preconnect economiza
+         o handshake no caminho crítico do LCP. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!-- Estático em PT-BR: é o que preview de link (WhatsApp, Telegram, X) e
+         crawler sem JS enxergam. O src/composables/useSeo.ts reescreve estas
+         mesmas chaves quando o visitante troca para inglês. -->
+    <title>LoginHUB — Technology Astrał wave</title>
+    <meta
+      name="description"
+      content="O cofre de senhas e a identidade central da Astrał wave, agora para você: senhas cifradas de ponta a ponta, Google Authenticator obrigatório, abertura pela digital e app no celular. R$ 24,99 por mês."
+    />
+    <link rel="canonical" href="https://loginhub.astralwavelabel.com/" />
+    <link rel="alternate" hreflang="pt-BR" href="https://loginhub.astralwavelabel.com/" />
+    <link rel="alternate" hreflang="en" href="https://loginhub.astralwavelabel.com/?lang=en" />
+    <link rel="alternate" hreflang="x-default" href="https://loginhub.astralwavelabel.com/" />
+    <meta name="robots" content="index, follow" />
+
+    <meta property="og:site_name" content="LoginHUB — Technology Astrał wave" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="LoginHUB — Technology Astrał wave" />
+    <meta
+      property="og:description"
+      content="Cofre de senhas cifrado de ponta a ponta, Google Authenticator obrigatório e app no celular. R$ 24,99 por mês."
+    />
+    <meta property="og:url" content="https://loginhub.astralwavelabel.com/" />
+    <meta property="og:image" content="https://astralwavelabel.com/A-LOGOS/logo-light.png" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:locale:alternate" content="en_US" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="LoginHUB — Technology Astrał wave" />
+    <meta
+      name="twitter:description"
+      content="Cofre de senhas cifrado de ponta a ponta, Google Authenticator obrigatório e app no celular. R$ 24,99 por mês."
+    />
+    <meta name="twitter:image" content="https://astralwavelabel.com/A-LOGOS/logo-light.png" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

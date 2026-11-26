@@ -182,6 +182,23 @@ services:
     networks:
       - awl_network
 
+  # --- Página de venda (home do hub) ------------------------------------------
+  # Vue 3 + Vite + Tailwind v4 estática (pasta lp/, fora dos workspaces npm), servida por nginx.
+  # O nginx do hub (apps/ui/nginx.conf) repassa `/` (exato) e `/assine/` para cá; a venda usa o
+  # /api/venda do próprio hub. Sem porta no host nem rota própria na Cloudflare.
+  login-hub-lp:
+    build: ./lp
+    container_name: server_loginhub_lp
+    restart: always
+    # Regra 14 do Ômega: camada e tecnologia (tela Gocker do Escritórios 3D)
+    labels:
+      awl.camada: "front"
+      awl.tecnologia: "vue"
+    environment:
+      - TZ=America/Sao_Paulo
+    networks:
+      - awl_network
+
 networks:
   awl_network:
     external: true
