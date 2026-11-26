@@ -9,6 +9,7 @@ import {
   ChevronDownIcon,
   ClipboardDocumentIcon,
   CommandLineIcon,
+  EllipsisHorizontalCircleIcon,
   EyeIcon,
   EyeSlashIcon,
   FingerPrintIcon,
@@ -27,6 +28,7 @@ import UiTextField from '@/components/ui/UiTextField.vue';
 import UiSearchField from '@/components/ui/UiSearchField.vue';
 import UiSelect from '@/components/ui/UiSelect.vue';
 import UiSheet from '@/components/ui/UiSheet.vue';
+import UiRow from '@/components/ui/UiRow.vue';
 import UiAlert from '@/components/ui/UiAlert.vue';
 import UiBadge from '@/components/ui/UiBadge.vue';
 import UiSpinner from '@/components/ui/UiSpinner.vue';
@@ -290,6 +292,12 @@ function trancar() {
 const route = useRoute();
 const codigoParaAprovar = typeof route.query.aprovar === 'string' ? route.query.aprovar : '';
 const mostrarAparelhos = ref(false);
+/** Folha "Mais" do celular: as ações que não cabem na barra em telas estreitas. */
+const mostrarMais = ref(false);
+const doMais = (acao: () => void) => {
+  mostrarMais.value = false;
+  acao();
+};
 watch(
   aberto,
   (abriu) => {
@@ -509,31 +517,41 @@ async function confirmarTrocaSenha() {
       <template #subtitulo>Cifrado no seu navegador · o servidor só guarda o que ninguém lê</template>
       <template #acoes>
         <template v-if="aberto">
-          <UiButton variante="plain" icone aria-label="Digitais" title="Abrir o cofre com a digital (Touch ID, Face ID)" @click="abrirDigitais">
-            <FingerPrintIcon class="h-6 w-6" />
+          <!-- Celular (25/11/2026): a barra tem ~390px e 6 controles não cabem (vazava para fora da tela).
+               Fica só Trancar (ícone) e "Mais"; o resto vai para a folha. sm+ segue igual. -->
+          <UiButton class="sm:hidden" variante="plain" icone aria-label="Trancar" title="Trancar o cofre" @click="trancar">
+            <LockClosedIcon class="h-6 w-6" />
           </UiButton>
-          <UiButton variante="plain" icone aria-label="Aparelhos do CLI" title="Máquinas aprovadas do CLI hub-pass" @click="mostrarAparelhos = true">
-            <CommandLineIcon class="h-6 w-6" />
+          <UiButton class="sm:hidden" variante="plain" icone aria-label="Mais opções" title="Digital, CLI, palavra-passe e tranca automática" @click="mostrarMais = true">
+            <EllipsisHorizontalCircleIcon class="h-6 w-6" />
           </UiButton>
-          <UiButton variante="plain" icone aria-label="Trocar palavra-passe" title="Trocar a palavra-passe" @click="abrirTrocaSenha">
-            <KeyIcon class="h-6 w-6" />
-          </UiButton>
-          <UiButton tamanho="small" variante="gray" :disabled="offline || sincronizando" :carregando="sincronizando" title="Baixar do servidor os itens mais novos" @click="sincronizar">
-            <ArrowPathIcon class="h-4 w-4" />
-            Sincronizar
-          </UiButton>
-          <select
-            v-model.number="trancaMin"
-            aria-label="Trancar o cofre sozinho depois de"
-            title="Trancar o cofre sozinho (pedir a digital de novo) depois deste tempo sem uso"
-            class="rounded-lg bg-fill-2 px-2 py-1 text-footnote text-label outline-none focus:ring-2 focus:ring-accent/40"
-          >
-            <option v-for="m in TEMPOS_TRANCA_MIN" :key="m" :value="m">Trancar em {{ rotuloTempo(m) }}</option>
-          </select>
-          <UiButton tamanho="small" variante="gray" @click="trancar">
-            <LockClosedIcon class="h-4 w-4" />
-            Trancar
-          </UiButton>
+          <div class="hidden items-center gap-1 sm:flex">
+            <UiButton variante="plain" icone aria-label="Digitais" title="Abrir o cofre com a digital (Touch ID, Face ID)" @click="abrirDigitais">
+              <FingerPrintIcon class="h-6 w-6" />
+            </UiButton>
+            <UiButton variante="plain" icone aria-label="Aparelhos do CLI" title="Máquinas aprovadas do CLI hub-pass" @click="mostrarAparelhos = true">
+              <CommandLineIcon class="h-6 w-6" />
+            </UiButton>
+            <UiButton variante="plain" icone aria-label="Trocar palavra-passe" title="Trocar a palavra-passe" @click="abrirTrocaSenha">
+              <KeyIcon class="h-6 w-6" />
+            </UiButton>
+            <UiButton tamanho="small" variante="gray" :disabled="offline || sincronizando" :carregando="sincronizando" title="Baixar do servidor os itens mais novos" @click="sincronizar">
+              <ArrowPathIcon class="h-4 w-4" />
+              Sincronizar
+            </UiButton>
+            <select
+              v-model.number="trancaMin"
+              aria-label="Trancar o cofre sozinho depois de"
+              title="Trancar o cofre sozinho (pedir a digital de novo) depois deste tempo sem uso"
+              class="rounded-lg bg-fill-2 px-2 py-1 text-footnote text-label outline-none focus:ring-2 focus:ring-accent/40"
+            >
+              <option v-for="m in TEMPOS_TRANCA_MIN" :key="m" :value="m">Trancar em {{ rotuloTempo(m) }}</option>
+            </select>
+            <UiButton tamanho="small" variante="gray" @click="trancar">
+              <LockClosedIcon class="h-4 w-4" />
+              Trancar
+            </UiButton>
+          </div>
         </template>
         <UiButton v-if="props.modo === 'usuario'" variante="plain" tamanho="small" @click="emit('sair')">Sair</UiButton>
       </template>
@@ -828,6 +846,35 @@ async function confirmarTrocaSenha() {
     </UiAlert>
 
     <!-- FOLHA: aparelhos do CLI (lista, revoga e aprova máquina nova pelo código do hub-pass login) -->
+    <UiSheet :aberto="mostrarMais" titulo="Cofre" largura="sm" @fechar="mostrarMais = false">
+      <div class="divide-y overflow-hidden rounded-celula bg-surface [&>*]:border-separator">
+        <UiRow clicavel :titulo="sincronizando ? 'Sincronizando…' : 'Sincronizar'" subtitulo="Baixar do servidor os itens mais novos" :class="offline ? 'pointer-events-none opacity-40' : ''" @click="doMais(sincronizar)">
+          <template #icone><ArrowPathIcon class="text-accent" /></template>
+        </UiRow>
+        <UiRow clicavel chevron titulo="Digital" subtitulo="Abrir com Touch ID ou Face ID" @click="doMais(abrirDigitais)">
+          <template #icone><FingerPrintIcon class="text-accent" /></template>
+        </UiRow>
+        <UiRow clicavel chevron titulo="Aparelhos do CLI" subtitulo="Máquinas aprovadas do hub-pass" @click="doMais(() => (mostrarAparelhos = true))">
+          <template #icone><CommandLineIcon class="text-accent" /></template>
+        </UiRow>
+        <UiRow clicavel chevron titulo="Trocar a palavra-passe" @click="doMais(abrirTrocaSenha)">
+          <template #icone><KeyIcon class="text-accent" /></template>
+        </UiRow>
+        <UiRow titulo="Trancar sozinho">
+          <template #icone><LockClosedIcon class="text-accent" /></template>
+          <template #direita>
+            <select
+              v-model.number="trancaMin"
+              aria-label="Trancar o cofre sozinho depois de"
+              class="rounded-lg bg-fill-2 px-2 py-1 text-subhead text-label outline-none focus:ring-2 focus:ring-accent/40"
+            >
+              <option v-for="m in TEMPOS_TRANCA_MIN" :key="m" :value="m">em {{ rotuloTempo(m) }}</option>
+            </select>
+          </template>
+        </UiRow>
+      </div>
+    </UiSheet>
+
     <CofreAparelhos :aberto="mostrarAparelhos" :codigo-inicial="codigoParaAprovar" @fechar="mostrarAparelhos = false" />
 
     <UiAlert
