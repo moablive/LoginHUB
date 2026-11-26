@@ -247,7 +247,7 @@ const seta =
     >
       <template #acoes>
         <!-- Celular: só "Mais" e "Novo"; o resto vai para a folha. sm+ segue igual. -->
-        <UiButton class="sm:hidden" variante="plain" icone aria-label="Mais opções" title="Categorias, digital e sair" @click="mostrarMaisTopo = true">
+        <UiButton v-if="master" class="sm:hidden" variante="plain" icone aria-label="Mais opções" title="Categorias e digital do master" @click="mostrarMaisTopo = true">
           <EllipsisHorizontalCircleIcon class="h-6 w-6" />
         </UiButton>
         <div class="hidden items-center gap-1 sm:flex">
@@ -263,9 +263,6 @@ const seta =
           </UiButton>
           <!-- O "Convidar admin" do topo saiu (19/11/2026, pedido do dono): cada app e cada
                organização tem o próprio botão Admins, já presos à organização certa. -->
-          <UiButton variante="plain" icone aria-label="Sair" title="Sair" class="!text-danger hover:!bg-danger/10" @click="mostrarSair = true">
-            <ArrowRightOnRectangleIcon class="h-6 w-6" />
-          </UiButton>
         </div>
         <UiButton v-if="master" class="sm:hidden" variante="gray" tamanho="small" to="/cofre" title="Cofre de senhas e códigos 2FA">
           <LockClosedIcon class="h-4 w-4" />
@@ -274,6 +271,10 @@ const seta =
         <UiButton v-if="master" tamanho="small" to="/apps/new" title="Novo aplicativo">
           <PlusIcon class="h-4 w-4" stroke-width="2.5" />
           App
+        </UiButton>
+        <!-- Sair é sempre o último controle da barra (26/11/2026, pedido do dono). -->
+        <UiButton variante="plain" icone aria-label="Sair" title="Sair" class="!text-danger hover:!bg-danger/10" @click="mostrarSair = true">
+          <ArrowRightOnRectangleIcon class="h-6 w-6" />
         </UiButton>
       </template>
     </UiNavBar>
@@ -502,9 +503,6 @@ const seta =
             <template #icone><FingerPrintIcon class="text-accent" /></template>
           </UiRow>
         </template>
-        <UiRow clicavel titulo="Sair" @click="noMenu(() => (mostrarSair = true))">
-          <template #icone><ArrowRightOnRectangleIcon class="text-danger" /></template>
-        </UiRow>
       </div>
     </UiSheet>
 

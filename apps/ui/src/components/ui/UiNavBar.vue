@@ -41,7 +41,7 @@ onBeforeUnmount(() => observador?.disconnect());
       class="sticky top-0 z-30 pt-[env(safe-area-inset-top)] transition-colors duration-200"
       :class="compacto ? 'material linha-fina' : 'bg-canvas'"
     >
-      <div class="mx-auto grid h-[52px] max-w-[1200px] grid-cols-[1fr_auto_1fr] items-center gap-2 px-2 sm:px-4 lg:px-6">
+      <div class="mx-auto grid h-[52px] max-w-[1200px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-2 sm:px-4 lg:px-6">
         <div class="flex min-w-0 items-center">
           <RouterLink
             v-if="voltar"
@@ -54,7 +54,7 @@ onBeforeUnmount(() => observador?.disconnect());
         </div>
 
         <p
-          class="max-w-[50vw] truncate text-headline font-semibold transition-opacity duration-200"
+          class="min-w-0 truncate text-center text-headline font-semibold transition-opacity duration-200"
           :class="compacto ? 'opacity-100' : 'opacity-0'"
           :aria-hidden="!compacto"
         >
