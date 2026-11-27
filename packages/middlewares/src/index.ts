@@ -889,3 +889,23 @@ export const ipDoCliente = (req: { headers: Record<string, unknown>; ip?: string
     if (xff) return xff.slice(0, 64);
     return (req.ip || 'sem-ip').replace(/^::ffff:/, '').slice(0, 64);
 };
+
+/**
+ * Código de login por e-mail (db/024). `start`: por IP real, folgado, porque o
+ * limite de verdade (1/min e 5/h por e-mail) mora no serviço e é silencioso.
+ * `verify`: por desafio, que é o que importa contra força bruta de 6 dígitos
+ * (o serviço ainda corta em 5 tentativas por código).
+ */
+export const rateLimitCodigoEmailStart = criarRateLimit({
+    nome: 'codigo-email-start',
+    janelaMs: 15 * 60 * 1000,
+    max: 20,
+    chave: (req) => ipDoCliente(req as any),
+});
+
+export const rateLimitCodigoEmailVerify = criarRateLimit({
+    nome: 'codigo-email-verify',
+    janelaMs: 15 * 60 * 1000,
+    max: 15,
+    chave: (req: any) => (typeof req.body?.challengeId === 'string' ? `c:${req.body.challengeId.slice(0, 40)}` : ipDoCliente(req)),
+});

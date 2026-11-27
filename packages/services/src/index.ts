@@ -18,6 +18,7 @@ export { AssinaturaService, assinaturaService, iniciarConferenciaDeAssinaturas }
 export { PasskeyService, passkeyService } from './PasskeyService';
 export { MasterPasskeyService, masterPasskeyService } from './MasterPasskeyService';
 export { CofreService, cofreService } from './CofreService';
+export { CodigoEmailService, codigoEmailService, CODIGO_TTL_SEGUNDOS, CODIGO_REENVIO_SEGUNDOS } from './CodigoEmailService';
 import {
     LoginInputDTO,
     AparelhoDoLogin,
@@ -209,6 +210,20 @@ export class AuthService {
         // administrativo basta). Ver db/004_apps_sem_login_hub.sql.
         if (user.app_usa_login_hub === false) throw new Error('APP_NAO_AUTENTICA_NO_HUB');
 
+        return this.concluirLogin(user, data, ip, navegador);
+    }
+
+    /**
+     * Do primeiro fator provado em diante: aparelho, 2FA e sessão. Um lugar só para
+     * a senha e o código de e-mail (db/024) terminarem IGUAL — o código de e-mail
+     * nunca pula o TOTP de quem o ativou.
+     */
+    private async concluirLogin(
+        user: any,
+        data: { aparelho_id?: string | undefined; aparelho_nome?: string | undefined; aparelho_confianca?: string | undefined },
+        ip: string | null,
+        navegador?: { userAgent?: string; mobile?: string; telegram?: boolean; cofre?: boolean },
+    ): Promise<LoginResponseDTO | TwoFactorChallengeResponse | TwoFactorSetupRequiredResponse> {
         // Um aparelho por conta de CPF (04/11/2026): outro aparelho é recusado já
         // aqui, antes do 2FA — mas só o login completo prende (ver AparelhoService).
         // Duas vagas desde 05/11/2026 (celular + computador): a vaga sai do
@@ -242,6 +257,44 @@ export class AuthService {
         if (estado === 'enrolar') return this.emitirTokenDeEnrolamento(user.id.toString(), user.email, appId, user.role_nome);
 
         return this.emitirSessao(user, 86400, await aparelhoService.prender(user, aparelho));
+    }
+
+    /**
+     * Login por código de e-mail (db/024): o código já foi conferido pelo
+     * `CodigoEmailService`; aqui a conta passa pelas mesmas recusas e pelo mesmo
+     * fim do login por senha.
+     */
+    public async loginComCodigoEmail(
+        usuarioId: number,
+        data: { aparelho_id?: string | undefined; aparelho_nome?: string | undefined; aparelho_confianca?: string | undefined },
+        ip: string | null = null,
+        navegador?: { userAgent?: string; mobile?: string; telegram?: boolean; cofre?: boolean },
+    ): Promise<LoginResponseDTO | TwoFactorChallengeResponse | TwoFactorSetupRequiredResponse> {
+        const [user] = await db.select({
+            id: usuarios.id,
+            nome: usuarios.nome,
+            email: usuarios.email,
+            senha_hash: usuarios.senhaHash,
+            app_id: usuarios.appId,
+            app_nome: aplicativos.nome,
+            app_logo: aplicativos.logo,
+            app_status: aplicativos.status,
+            app_usa_login_hub: aplicativos.usaLoginHub,
+            app_aparelho_confiavel: aplicativos.aparelhoConfiavel,
+            status: usuarios.status,
+            role_nome: niveisAcesso.nome,
+        })
+            .from(usuarios)
+            .innerJoin(aplicativos, eq(usuarios.appId, aplicativos.id))
+            .innerJoin(niveisAcesso, eq(usuarios.nivelAcessoId, niveisAcesso.id))
+            .where(eq(usuarios.id, usuarioId))
+            .limit(1);
+        if (!user) throw new Error('CODIGO_INVALIDO');
+        if (user.app_status !== 'ativo') throw new Error('APP_BLOQUEADO');
+        if (user.status !== 'ativo') throw new Error('USUARIO_BLOQUEADO');
+        if (user.app_usa_login_hub === false) throw new Error('APP_NAO_AUTENTICA_NO_HUB');
+        if (ehContaDeCpf(user.email)) throw new Error('CODIGO_INVALIDO');
+        return this.concluirLogin(user, data, ip, navegador);
     }
 
     /**

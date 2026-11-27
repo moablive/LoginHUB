@@ -22,6 +22,8 @@ import {
   exigirOrganizacaoNoEscopo,
   delegationMiddleware,
   authMiddleware,
+  rateLimitCodigoEmailStart,
+  rateLimitCodigoEmailVerify,
   authMiddlewareEnrolamento,
   rateLimitLogin,
   rateLimitVerificacao2FA,
@@ -42,6 +44,8 @@ export const mainRouter = Router();
 // ==========================================
 const authRouter = Router();
 authRouter.post('/login', rateLimitLogin as any, AuthController.login);
+authRouter.post('/email/start', rateLimitCodigoEmailStart as any, AuthController.emailStart);
+authRouter.post('/email/verify', rateLimitCodigoEmailVerify as any, AuthController.emailVerify);
 authRouter.post('/logout', AuthController.logout);
 authRouter.post('/refresh', AuthController.refresh);
 // Introspeccao de revogacao: o app cliente valida assinatura/action/tenant

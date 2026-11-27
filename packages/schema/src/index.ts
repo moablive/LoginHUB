@@ -720,3 +720,6 @@ export * from './organizacoes';
 
 // Cofre de senhas cifrado de ponta a ponta (db/013_cofre.sql).
 export * from './cofre';
+
+// Login por código de e-mail (db/024_login_codigo_email.sql).
+export * from './codigoEmail';

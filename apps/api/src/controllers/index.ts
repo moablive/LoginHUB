@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { createHash, timingSafeEqual } from 'crypto';
-import { AuthService, AppService, UserService, CategoriaService, twoFactorService, bloqueioService, aparelhoService, organizacaoService } from '@loginhub/services';
+import { codigoEmailService, AuthService, AppService, UserService, CategoriaService, twoFactorService, bloqueioService, aparelhoService, organizacaoService } from '@loginhub/services';
 import { ipDoCliente, escopoDe } from '@loginhub/middlewares';
 import { LoginInputDTO, CreateAppDTO, UpdateAppDTO, CreateUserDTO, UpdateUserDTO, DbError, DirecaoMovimento, CreateCategoriaDTO, UpdateCategoriaDTO } from '@loginhub/schema';
 
@@ -118,6 +118,70 @@ export class AuthController {
                         availableApps: err.availableApps ?? [],
                     });
                 default:
+                    return res.status(500).json({ error: 'Erro Interno', message: 'Erro ao processar login.' });
+            }
+        }
+    }
+
+    /**
+     * POST /auth/email/start — pede o código de login por e-mail (db/024).
+     * Resposta idêntica exista a conta ou não (e barrado ou não pelo limite de reenvio).
+     */
+    static async emailStart(req: Request, res: Response) {
+        const { email } = req.body ?? {};
+        if (typeof email !== 'string' || !/^[^\s@]{1,64}@[^\s@]{1,255}$/.test(email.trim()) || email.length > 320) {
+            return res.status(400).json({ error: 'Dados incompletos', message: 'Informe um e-mail válido.' });
+        }
+        try {
+            const appId = req.body.painel === true ? await organizacaoService.idDoPainel() : (Number(req.body.app_id) || undefined);
+            const ip = ipDoCliente(req);
+            if (await bloqueioService.estaBloqueado(appId ?? 0, ip, email)) return responderBloqueado(res);
+            return res.status(200).json(await codigoEmailService.iniciar(email, ip, appId));
+        } catch (error: unknown) {
+            console.error('[AuthController] emailStart:', (error as Error).message);
+            return res.status(500).json({ error: 'Erro Interno', message: 'Erro ao enviar o código.' });
+        }
+    }
+
+    /** POST /auth/email/verify — confere o código e segue o mesmo caminho do login por senha. */
+    static async emailVerify(req: Request, res: Response) {
+        const { challengeId, code, aparelho_id, aparelho_nome, aparelho_confianca } = req.body ?? {};
+        if (typeof challengeId !== 'string' || typeof code !== 'string') {
+            return res.status(400).json({ error: 'Dados incompletos', message: 'Informe o código recebido.' });
+        }
+        try {
+            const appId = req.body.painel === true ? await organizacaoService.idDoPainel() : (Number(req.body.app_id) || undefined);
+            const ip = ipDoCliente(req);
+            const { usuarioId, resolvido } = await codigoEmailService.verificar(challengeId, code.trim(), appId);
+            if (await bloqueioService.estaBloqueado(resolvido.appId ?? 0, ip, resolvido.email)) return responderBloqueado(res);
+            const ua = req.get('user-agent');
+            const mobile = req.get('sec-ch-ua-mobile');
+            const navegador: { userAgent?: string; mobile?: string } = { ...(ua ? { userAgent: ua } : {}), ...(mobile ? { mobile } : {}) };
+            const result = await authService.loginComCodigoEmail(usuarioId, { aparelho_id, aparelho_nome, aparelho_confianca }, ip, navegador);
+            await bloqueioService.registrarSucesso(resolvido.appId ?? 0, ip, resolvido.email);
+            return res.status(200).json(result);
+        } catch (error: unknown) {
+            const err = error as Error & { availableApps?: Array<{ id: string; nome: string; logo: string | null }> };
+            switch (err.message) {
+                case 'CODIGO_INVALIDO':
+                    return res.status(401).json({ error: 'CODIGO_INVALIDO', message: 'Código inválido ou expirado. Peça um novo.' });
+                case 'AMBIGUOUS_EMAIL':
+                    return res.status(409).json({
+                        error: 'AMBIGUOUS_EMAIL',
+                        message: 'Este e-mail está vinculado a mais de um aplicativo. Selecione qual deseja acessar.',
+                        availableApps: err.availableApps ?? [],
+                    });
+                case 'APP_BLOQUEADO':
+                    return res.status(403).json({ error: 'Acesso Suspenso', message: 'Sua app está inativa. Contate o suporte.' });
+                case 'USUARIO_BLOQUEADO':
+                    return res.status(403).json({ error: 'Conta Inativa', message: 'Seu usuário foi desativado.' });
+                case 'APP_NAO_AUTENTICA_NO_HUB':
+                    return res.status(403).json({ error: 'APP_NAO_AUTENTICA_NO_HUB', message: 'Este aplicativo nao usa o login do LoginHUB. Entre pelo proprio aplicativo.' });
+                case 'APARELHO_EM_USO':
+                case 'APARELHO_DESCONHECIDO':
+                    return responderAparelho(res, err);
+                default:
+                    console.error('[AuthController] emailVerify:', err.message);
                     return res.status(500).json({ error: 'Erro Interno', message: 'Erro ao processar login.' });
             }
         }

@@ -440,6 +440,62 @@ export const authApi = {
     return { redirect: '/dashboard' };
   },
 
+  /**
+   * Login por código de e-mail (db/024). Dois passos: `emailStart` manda o código
+   * (a resposta é igual exista a conta ou não) e `emailVerify` o confere. O
+   * desfecho de `emailVerify` é o mesmo de `loginPainel`: sessão, `requires2FA`
+   * (conta com Google Authenticator ativo segue pedindo o código dele) ou
+   * `require2FASetup`.
+   */
+  emailStart: async (
+    email: string,
+    opcoes: { painel?: boolean; appId?: string } = {},
+  ): Promise<{ challengeId: string; expiresIn: number; reenvioEm: number }> => {
+    const { data } = await api.post('/auth/email/start', {
+      email: email.trim().toLowerCase(),
+      ...(opcoes.painel ? { painel: true } : {}),
+      ...(opcoes.appId ? { app_id: opcoes.appId } : {}),
+    });
+    return data;
+  },
+
+  emailVerify: async (
+    challengeId: string,
+    code: string,
+    opcoes: { painel?: boolean; appId?: string } = {},
+  ): Promise<AuthResult> => {
+    localStorage.removeItem('awl_token');
+    localStorage.removeItem('awl_user');
+    localStorage.removeItem('awl_app');
+    limparSuperAdmin();
+
+    const { data } = await api.post<LoginResponse | TwoFactorChallengeResponse | TwoFactorSetupRequiredResponse>('/auth/email/verify', {
+      challengeId,
+      code: code.replace(/\s+/g, ''),
+      ...(opcoes.painel ? { painel: true } : {}),
+      ...(opcoes.appId ? { app_id: opcoes.appId } : {}),
+    });
+
+    if ('require2FASetup' in data && data.require2FASetup) {
+      return { redirect: `/enrolar-2fa?token=${encodeURIComponent(data.setupToken)}`, require2FASetup: true };
+    }
+    if ('requires2FA' in data && data.requires2FA) {
+      return {
+        redirect: '/login',
+        requires2FA: true,
+        challengeToken: data.challengeToken,
+        challengeExpiresIn: data.expiresIn,
+        methods: data.methods,
+      };
+    }
+    const sessao = data as LoginResponse;
+    guardarConfianca(sessao);
+    localStorage.setItem('awl_token', sessao.token);
+    localStorage.setItem('awl_user', JSON.stringify(sessao.usuario));
+    if (opcoes.painel) marcarAdminDeOrganizacao();
+    return { redirect: '/dashboard' };
+  },
+
   logout: () => {
     localStorage.removeItem('awl_token');
     localStorage.removeItem('awl_user');
