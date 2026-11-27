@@ -186,6 +186,8 @@ export class CodigoEmailService {
      * foi escolhido — nesse caso o código NÃO é consumido.
      */
     public async verificar(challengeId: string, codigo: string, appId?: number): Promise<{ usuarioId: number; resolvido: ContaElegivel }> {
+        // Quem cola o código do e-mail pode trazer espaço ou quebra no meio: tira antes de conferir.
+        codigo = String(codigo ?? '').replace(/\s+/g, '');
         if (!/^[0-9a-f-]{36}$/i.test(challengeId) || !/^\d{6}$/.test(codigo)) throw new Error('CODIGO_INVALIDO');
 
         // Gasta a tentativa ANTES de comparar, atomicamente: duas requisições em

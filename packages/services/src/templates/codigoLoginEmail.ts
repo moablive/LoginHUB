@@ -25,8 +25,9 @@ export const buildCodigoLoginEmail = ({ appName, appLogo, nome, codigo, minutos 
     const logo = appLogo
         ? `<img src="${escapeHtml(appLogo)}" alt="${app}" height="80" style="height:80px;width:auto;display:block;margin:0 auto 12px;border:0;" />`
         : '';
-    // Espaço entre os grupos de 3 dígitos só para a leitura; o código é o mesmo.
-    const legivel = `${codigo.slice(0, 3)} ${codigo.slice(3)}`;
+    // Os 6 dígitos juntos (a leitura vem do espaçamento de letras do CSS): com um espaço
+    // no meio, quem copiava o código levava "123 456" e o campo de 6 casas o cortava.
+    const legivel = codigo;
 
     return `
 <!doctype html>
