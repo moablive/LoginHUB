@@ -64,7 +64,26 @@ const emit = defineEmits<{
   compartilhar: [id: string];
   /** O membro sai de um cofre compartilhado com ele. */
   sair: [id: string];
+  /** Um item foi arrastado e solto neste cofre (27/11/2026): mover o item para ele. */
+  soltar: [cofreId: string, itemId: string];
 }>();
+
+// Arrastar item para um cofre (27/11/2026, pedido do dono): o cartão do item leva o id no `dataTransfer`.
+const TIPO_ITEM = 'text/x-loginhub-item';
+const alvoDrop = ref<string | null>(null);
+function aoArrastar(e: DragEvent, cofreId: string) {
+  if (!e.dataTransfer?.types.includes(TIPO_ITEM)) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  alvoDrop.value = cofreId;
+}
+function aoSoltar(e: DragEvent, cofreId: string) {
+  const itemId = e.dataTransfer?.getData(TIPO_ITEM);
+  alvoDrop.value = null;
+  if (!itemId) return;
+  e.preventDefault();
+  emit('soltar', cofreId, itemId);
+}
 
 const pessoasDe = (id: string): string => {
   const n = props.pessoas?.[id] ?? 0;
@@ -165,7 +184,15 @@ function salvarOrdem() {
         </button>
       </li>
 
-      <li v-for="(c, i) in visiveis" :key="c.id" class="relative">
+      <li
+        v-for="(c, i) in visiveis"
+        :key="c.id"
+        class="relative rounded-controle transition duration-150"
+        :class="alvoDrop === c.id ? 'scale-[1.03] bg-accent/20 ring-2 ring-accent' : ''"
+        @dragover="aoArrastar($event, c.id)"
+        @dragleave="alvoDrop === c.id && (alvoDrop = null)"
+        @drop="aoSoltar($event, c.id)"
+      >
         <!-- ordenar: subir, descer, topo -->
         <div v-if="ordem" class="flex items-center gap-2 rounded-controle py-1 pl-2">
           <CofreIcone :icone="c.icone" :cor="c.cor" :imagem="c.imagem" />
@@ -242,7 +269,15 @@ function salvarOrdem() {
       <!-- Cofres de outras contas (db/022): só se escolhe e se sai; o dono é quem edita e apaga. -->
       <template v-if="!ordem && compartilhados && compartilhados.length > 0">
         <li class="px-2 pt-3 text-subhead font-semibold text-label-2">Compartilhados comigo</li>
-        <li v-for="c in compartilhados" :key="c.id" class="relative">
+        <li
+          v-for="c in compartilhados"
+          :key="c.id"
+          class="relative rounded-controle transition duration-150"
+          :class="alvoDrop === c.id ? 'scale-[1.03] bg-accent/20 ring-2 ring-accent' : ''"
+          @dragover="c.papel === 'escrita' && aoArrastar($event, c.id)"
+          @dragleave="alvoDrop === c.id && (alvoDrop = null)"
+          @drop="c.papel === 'escrita' && aoSoltar($event, c.id)"
+        >
           <div class="flex items-center rounded-controle" :class="c.id === atual ? 'bg-accent/15' : 'hover:bg-fill-2'">
             <span class="ml-2 flex h-10 w-10 shrink-0 items-center justify-center">
               <CofreIcone :icone="c.icone" :cor="c.cor" :imagem="c.imagem" />

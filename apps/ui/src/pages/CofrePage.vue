@@ -17,6 +17,7 @@ import {
   LockClosedIcon,
   LockOpenIcon,
   PencilSquareIcon,
+  FolderArrowDownIcon,
   PhotoIcon,
   XMarkIcon,
   PlusIcon,
@@ -533,6 +534,37 @@ async function salvarItem() {
     ocupado.value = false;
   }
 }
+// Mover item entre cofres (27/11/2026): pelo botão do cartão ou arrastando para o cofre na lista. O item é recifrado
+// com a chave do cofre de destino (o mesmo caminho do seletor "Cofre" da edição).
+const itemParaMover = ref<ItemAberto | null>(null);
+const destinosDoItem = computed(() => cofresComEscrita.value.filter((c) => c.id !== itemParaMover.value?.cofre_id));
+async function moverItem(itemId: string, destinoId: string) {
+  const item = itens.value.find((i) => i.id === itemId);
+  itemParaMover.value = null;
+  if (!item || item.cofre_id === destinoId || offline.value) return;
+  if (!podeEscrever(item.cofre_id) || !podeEscrever(destinoId)) {
+    erro.value = 'Você só pode mover entre cofres onde tem acesso de escrita.';
+    return;
+  }
+  const { id, cofre_id: _origem, atualizado_em: _em, ...dados } = item;
+  ocupado.value = true;
+  erro.value = null;
+  try {
+    await cofre.salvarItem(destinoId, dados, id);
+  } catch (err) {
+    erro.value = mensagemDe(err, 'Não foi possível mover o item.');
+  } finally {
+    ocupado.value = false;
+  }
+}
+function arrastarItem(e: DragEvent, item: ItemAberto) {
+  if (!e.dataTransfer || offline.value || !podeEscrever(item.cofre_id)) {
+    e.preventDefault();
+    return;
+  }
+  e.dataTransfer.setData('text/x-loginhub-item', item.id);
+  e.dataTransfer.effectAllowed = 'move';
+}
 const itemParaApagar = ref<ItemAberto | null>(null);
 // Apagar item pede a palavra-passe do cofre (27/11/2026). Mesma regra do login: 3 erradas e o cofre tranca.
 const MAX_ERROS_APAGAR = 3;
@@ -812,7 +844,7 @@ async function confirmarTrocaSenha() {
     <div v-else class="mt-4 lg:grid lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start lg:gap-6">
       <!-- cofres: coluna no computador; no celular, a folha aberta pelo botão do cofre atual -->
       <aside class="hidden lg:sticky lg:top-4 lg:block">
-        <CofreLista :cofres="cofres" :compartilhados="compartilhados" :pessoas="pessoasPorCofre" :contagem="contagem" :total="itens.length" :atual="cofreAtual" :ocupado="ocupado" @escolher="escolherCofre" @novo="novoCofre" @editar="editarCofre" @apagar="pedirApagarCofre" @reordenar="reordenarCofres" @compartilhar="compartilharCofre" @sair="pedirSair" />
+        <CofreLista :cofres="cofres" :compartilhados="compartilhados" :pessoas="pessoasPorCofre" :contagem="contagem" :total="itens.length" :atual="cofreAtual" :ocupado="ocupado" @escolher="escolherCofre" @novo="novoCofre" @editar="editarCofre" @apagar="pedirApagarCofre" @reordenar="reordenarCofres" @compartilhar="compartilharCofre" @sair="pedirSair" @soltar="(cofreId, itemId) => moverItem(itemId, cofreId)" />
       </aside>
 
       <div class="space-y-4">
@@ -871,7 +903,7 @@ async function confirmarTrocaSenha() {
         />
 
         <ul v-else class="space-y-2">
-          <li v-for="item in visiveis" :key="item.id" class="item-cofre cursor-pointer overflow-hidden rounded-celula bg-surface p-4" @click="abrirItem($event, item)">
+          <li v-for="item in visiveis" :key="item.id" class="item-cofre cursor-pointer overflow-hidden rounded-celula bg-surface p-4" :draggable="!offline && podeEscrever(item.cofre_id)" @dragstart="arrastarItem($event, item)" @click="abrirItem($event, item)">
             <div class="flex items-start gap-3">
               <CofreItemIcone :titulo="item.titulo" :url="item.url" :apps="logosDosApps" :icone="item.icone" />
               <div class="min-w-0 flex-1 space-y-1">
@@ -931,6 +963,7 @@ async function confirmarTrocaSenha() {
                 <p v-if="item.notas" class="whitespace-pre-wrap break-all text-footnote text-label-2">{{ item.notas }}</p>
               </div>
               <div class="flex shrink-0 flex-col gap-1">
+                <UiButton variante="plain" icone :disabled="offline || !podeEscrever(item.cofre_id) || cofresComEscrita.length < 2" :title="cofresComEscrita.length < 2 ? 'Precisa de outro cofre' : 'Mover para outro cofre (ou arraste o item até o cofre)'" :aria-label="`Mover ${item.titulo} para outro cofre`" @click="itemParaMover = item"><FolderArrowDownIcon class="h-5 w-5" /></UiButton>
                 <UiButton variante="plain" icone :disabled="offline || !podeEscrever(item.cofre_id)" :title="podeEscrever(item.cofre_id) ? undefined : 'Somente leitura'" :aria-label="`Editar ${item.titulo}`" @click="editarItem(item)"><PencilSquareIcon class="h-5 w-5" /></UiButton>
                 <UiButton variante="plain" icone :disabled="offline || !podeEscrever(item.cofre_id)" :title="podeEscrever(item.cofre_id) ? undefined : 'Somente leitura'" class="!text-danger hover:!bg-danger/10" :aria-label="`Apagar ${item.titulo}`" @click="pedirApagar(item)">
                   <TrashIcon class="h-5 w-5" />
@@ -944,7 +977,20 @@ async function confirmarTrocaSenha() {
 
     <!-- FOLHA: cofres (celular) -->
     <UiSheet :aberto="mostrarCofres" titulo="Trocar de cofre" largura="sm" @fechar="mostrarCofres = false">
-      <CofreLista :cofres="cofres" :compartilhados="compartilhados" :pessoas="pessoasPorCofre" :contagem="contagem" :total="itens.length" :atual="cofreAtual" :ocupado="ocupado" @escolher="escolherCofre" @novo="novoCofre" @editar="editarCofre" @apagar="pedirApagarCofre" @reordenar="reordenarCofres" @compartilhar="compartilharCofre" @sair="pedirSair" />
+      <CofreLista :cofres="cofres" :compartilhados="compartilhados" :pessoas="pessoasPorCofre" :contagem="contagem" :total="itens.length" :atual="cofreAtual" :ocupado="ocupado" @escolher="escolherCofre" @novo="novoCofre" @editar="editarCofre" @apagar="pedirApagarCofre" @reordenar="reordenarCofres" @compartilhar="compartilharCofre" @sair="pedirSair" @soltar="(cofreId, itemId) => moverItem(itemId, cofreId)" />
+    </UiSheet>
+
+    <!-- FOLHA: mover o item para outro cofre -->
+    <UiSheet :aberto="!!itemParaMover" titulo="Mover para…" :subtitulo="itemParaMover?.titulo ?? ''" largura="sm" @fechar="itemParaMover = null">
+      <ul class="space-y-1">
+        <li v-for="c in destinosDoItem" :key="c.id">
+          <button type="button" class="flex w-full items-center gap-3 rounded-controle px-2 py-2 text-left hover:bg-fill-2" @click="itemParaMover && moverItem(itemParaMover.id, c.id)">
+            <CofreIcone :icone="c.icone" :cor="c.cor" :imagem="c.imagem" />
+            <span class="min-w-0 flex-1 truncate text-headline font-semibold">{{ c.nome }}</span>
+            <span v-if="papelDoCofre(c.id) !== 'dono'" class="text-footnote text-label-2">compartilhado</span>
+          </button>
+        </li>
+      </ul>
     </UiSheet>
 
     <!-- FOLHA: item -->
