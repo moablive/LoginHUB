@@ -169,6 +169,7 @@ orgRouter.get('/categorias', CategoriaController.listar as any);
 // -- Usuários dos apps da organização
 orgRouter.get('/apps/:id/users', exigirAppNoEscopo(doParam) as any, UserController.getUsersByApp as any);
 orgRouter.post('/users', exigirAppNoEscopo(doCorpo) as any, UserController.addUser as any);
+orgRouter.post('/users/operador', exigirAppNoEscopo(doCorpo) as any, UserController.criarOperador as any);
 orgRouter.put('/users/:id', exigirUsuarioNoEscopo('id') as any, UserController.updateUser as any);
 orgRouter.patch('/users/:id/status', exigirUsuarioNoEscopo('id') as any, UserController.toggleUserStatus as any);
 orgRouter.post('/users/:id/reset-password', exigirUsuarioNoEscopo('id') as any, UserController.resetPassword as any);

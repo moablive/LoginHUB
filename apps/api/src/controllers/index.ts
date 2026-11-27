@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { createHash, timingSafeEqual } from 'crypto';
-import { codigoEmailService, AuthService, AppService, UserService, CategoriaService, twoFactorService, bloqueioService, aparelhoService, organizacaoService } from '@loginhub/services';
+import { operadorService, codigoEmailService, AuthService, AppService, UserService, CategoriaService, twoFactorService, bloqueioService, aparelhoService, organizacaoService } from '@loginhub/services';
 import { ipDoCliente, escopoDe } from '@loginhub/middlewares';
 import { LoginInputDTO, CreateAppDTO, UpdateAppDTO, CreateUserDTO, UpdateUserDTO, DbError, DirecaoMovimento, CreateCategoriaDTO, UpdateCategoriaDTO } from '@loginhub/schema';
 
@@ -783,6 +783,24 @@ export class UserController {
             if (error.code === 'VALIDATION') {
                 return res.status(400).json({ error: 'Dados Inválidos', message: error.message });
             }
+            return res.status(500).json({ error: 'Erro Interno' });
+        }
+    }
+
+    /** POST /admin/users/operador — operador por CPF + 2FA do Google gerado e guardado no servidor. */
+    static async criarOperador(req: Request, res: Response) {
+        try {
+            const { app_id, cpf } = req.body ?? {};
+            if (typeof cpf !== 'string') return res.status(400).json({ error: 'Dados Inválidos', message: 'Informe o CPF.' });
+            const r = await operadorService.criar(Number(app_id), cpf);
+            // O segredo NÃO sai do servidor: só o caminho do arquivo.
+            return res.status(201).json({ message: 'Operador criado.', user: { id: r.usuarioId, cpf: r.cpf }, arquivo: r.arquivo });
+        } catch (err) {
+            const error = err as DbError;
+            console.error('[UserController] criarOperador:', error.message);
+            if (error.code === 'DUPLICATE_ENTRY') return res.status(409).json({ error: 'Conflito de Dados', message: 'Já existe uma conta com este CPF neste aplicativo.' });
+            if (error.code === 'RELATION_ERROR') return res.status(400).json({ error: 'Dados Inválidos', message: error.message });
+            if (error.code === 'VALIDATION') return res.status(400).json({ error: 'Dados Inválidos', message: error.message });
             return res.status(500).json({ error: 'Erro Interno' });
         }
     }

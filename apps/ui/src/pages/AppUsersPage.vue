@@ -414,10 +414,11 @@ async function handleConfirmResetPassword() {
   }
 }
 
-function aoConvidar({ email, emailSent, magicLinkToken }: { email: string; emailSent: boolean; magicLinkToken?: string }) {
+function aoConvidar({ email, emailSent, magicLinkToken, aviso }: { email: string; emailSent: boolean; magicLinkToken?: string; aviso?: string }) {
   void fetchData();
   showFormModal.value = false;
-  if (emailSent) showAlert('Convite enviado', `O convite foi enviado por e-mail para ${email}.`, 'info');
+  if (aviso) showAlert('Operador criado', aviso, 'info');
+  else if (emailSent) showAlert('Convite enviado', `O convite foi enviado por e-mail para ${email}.`, 'info');
   else if (magicLinkToken) mostrarLinkManual('Convite gerado (envio falhou)', magicLinkToken);
   else showSuccessModal.value = true;
 }

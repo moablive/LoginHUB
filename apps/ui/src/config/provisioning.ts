@@ -95,6 +95,12 @@ export interface ProvisionedApp {
    */
   hubRoles?: Partial<Record<"admin" | "operador" | "user" | "suporte", string>>;
   /**
+   * Oferece "Operador" como tipo que pede SÓ o CPF (27/11/2026, Sul): a conta nasce
+   * CPF + CPF e o servidor já gera o 2FA do Google, guardado na pasta `2fa-operador`
+   * (fora do git). O papel `operador` comum do hub sai do menu quando isto está ligado.
+   */
+  operadorCpf?: { descricao: string };
+  /**
    * De onde o painel descobre quais usuários do app TAMBÉM têm cadastro nele
    * (07/10/2026), para marcá-los na lista.
    *
@@ -193,9 +199,11 @@ export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
     // Os outros dois papéis da Sul entram pelo fluxo padrão do hub — não têm
     // cadastro local a criar. `user` e `suporte` ficam de fora: na Sul, quem
     // não é vendedor provisionado nem operador/admin não tem tela para entrar.
+    operadorCpf: {
+      descricao:
+        "Opera o balcão da Sul Alimentos: estoque, tabelas de preço, pesagem, emissão de NF-e, pedidos e cadastro de vendedores. Não vê o financeiro. Pede só o CPF: o login é CPF + CPF e o código do Google Authenticator é gerado pelo servidor.",
+    },
     hubRoles: {
-      operador:
-        "Opera o balcão da Sul Alimentos: estoque, tabelas de preço, pesagem, emissão de NF-e, pedidos e cadastro de vendedores. Não vê o financeiro.",
       admin:
         "Tudo o que o operador faz, mais o financeiro (títulos, calendário de vencimento, baixa) e a limpeza do mural.",
     },

@@ -10,3 +10,5 @@ npm-debug.log
 # Em runtime o .env chega pelo bind mount (.:/app) e pelo `env_file` do compose.
 .env
 .env.*
+
+2fa-operador/

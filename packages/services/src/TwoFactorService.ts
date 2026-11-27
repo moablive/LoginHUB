@@ -232,6 +232,34 @@ export class TwoFactorService {
     }
 
     /**
+     * Gera o 2FA do Google JÁ ATIVO, sem o QR e sem a confirmação por código
+     * (27/11/2026, operador da Sul): quem cadastra o operador não tem o celular
+     * dele. O segredo volta aqui para o chamador guardar (arquivo no servidor,
+     * fora do git); o login do operador passa a pedir o código normalmente.
+     * Conta que já tem 2FA ativo é recusada: isto nunca troca um autenticador em uso.
+     */
+    public async provisionarAtivo(usuarioId: string): Promise<TwoFactorSetupResponse & { backupCodes: string[] }> {
+        const conta = await this.carregarConta(usuarioId);
+        const atual = await this.carregarConfig(usuarioId);
+        if (atual?.ativo) throw new Error('JA_ATIVO');
+
+        const secret = base32Encode(crypto.randomBytes(20));
+        const agora = new Date();
+        const valores = { secretCifrado: cifrar(secret), ativo: true, obrigatorio: true, ultimoStep: null, confirmadoEm: agora, sessoesValidasDesde: agora };
+        if (atual) await db.update(usuarios2fa).set(valores).where(eq(usuarios2fa.usuarioId, Number(usuarioId)));
+        else await db.insert(usuarios2fa).values({ usuarioId: Number(usuarioId), ...valores });
+
+        const issuer = conta.appNome?.trim() || ISSUER_PADRAO;
+        const label = conta.email;
+        const otpauthUri =
+            `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(label)}` +
+            `?secret=${secret}&issuer=${encodeURIComponent(issuer)}` +
+            `&algorithm=SHA1&digits=${DIGITOS}&period=${STEP_SEGUNDOS}`;
+        const backupCodes = await this.regravarBackupCodes(usuarioId);
+        return { secret, otpauthUri, label, issuer, appLogo: conta.appLogo ?? null, backupCodes };
+    }
+
+    /**
      * A conta do app no "Meu cofre" (24/11/2026, db/021, pedido do dono da Sul): o
      * item que mostra o código 2FA ao vivo, sem a pessoa cadastrar nada nem digitar
      * palavra-passe. Só para a PRÓPRIA conta, numa sessão já aberta (o login dela

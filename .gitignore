@@ -102,3 +102,6 @@ pids/
 
 # Cache incremental do tsc (05/11/2026)
 *.tsbuildinfo
+
+# --- 2FA dos operadores (segredos do Google Authenticator gerados pelo servidor) — NUNCA no git ---
+2fa-operador/

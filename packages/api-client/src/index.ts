@@ -792,6 +792,11 @@ export const userApi = {
     const { data } = await api.post<{ message: string; emailSent: boolean; magicLinkToken?: string }>(USERS_BASE_URL, payload);
     return data;
   },
+  /** Operador por CPF: o 2FA do Google é gerado e guardado no servidor (o segredo não volta). */
+  criarOperador: async (appId: string, cpf: string): Promise<{ message: string; user: { id: string; cpf: string }; arquivo: string }> => {
+    const { data } = await api.post(`${USERS_BASE_URL}/operador`, { app_id: appId, cpf });
+    return data;
+  },
   update: async (id: string, payload: UpdateUserPayload): Promise<User> => {
     const { data } = await api.put<User>(`${USERS_BASE_URL}/${id}`, payload);
     return data;

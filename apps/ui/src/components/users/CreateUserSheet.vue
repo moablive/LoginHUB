@@ -15,6 +15,7 @@ import { InviteEmailTemplate, MoneyAppInviteEmail } from '@/templates/emails';
 import { getProvisionedApp, hubRolesDoApp, type ProvisionField } from '@/config/provisioning';
 import { fundoDoLogo } from '@/config/logoFundo';
 import { masks } from '@/utils/masks';
+import { cpfValido } from '@/utils/cpf';
 import UiSheet from '@/components/ui/UiSheet.vue';
 import UiButton from '@/components/ui/UiButton.vue';
 import UiTextField from '@/components/ui/UiTextField.vue';
@@ -38,13 +39,15 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   fechar: [];
-  sucesso: [resultado: { email: string; emailSent: boolean; magicLinkToken?: string }];
+  sucesso: [resultado: { email: string; emailSent: boolean; magicLinkToken?: string; aviso?: string }];
 }>();
 
 type Step = 'form' | 'preview';
 
 /** Valor sentinela do select quando o convite deve criar o cadastro no app. */
 const PROVISION_ROLE = '__provision__';
+/** Valor sentinela do tipo "Operador" que pede só o CPF (app com `operadorCpf`). */
+const OPERADOR_CPF = '__operador_cpf__';
 
 const MAGIC_LINK_PLACEHOLDER = '__MAGIC_LINK__';
 const PREVIEW_FAKE_TOKEN = 'preview-token-xyz';
@@ -60,6 +63,7 @@ const roleOptions = computed(() => hubRolesDoApp(provisioned.value, ROLE_OPTIONS
 const step = ref<Step>('form');
 const formData = ref({ nome: '', email: '', role: defaultRole.value });
 const extraData = ref<Record<string, string>>({});
+const cpf = ref('');
 const fieldErrors = ref<Record<string, string>>({});
 const isLoading = ref(false);
 const error = ref<string | null>(null);
@@ -125,6 +129,7 @@ watch(
   (aberto) => {
     if (!aberto) return;
     formData.value = { nome: '', email: '', role: defaultRole.value };
+    cpf.value = '';
     extraData.value = blankExtras();
     fieldErrors.value = {};
     step.value = 'form';
@@ -140,6 +145,9 @@ watch(
 // (admin, suporte...) continuam no fluxo normal do LoginHUB — sem isso não
 // haveria como convidar um administrador para um app provisionado.
 const provisionMode = computed(() => !!provisioned.value && formData.value.role === PROVISION_ROLE);
+
+/** Tipo "Operador": só o CPF; o 2FA do Google nasce no servidor. */
+const cpfMode = computed(() => !!provisioned.value?.operadorCpf && formData.value.role === OPERADOR_CPF);
 
 const isMoneyApp = computed(() => props.appName?.toLowerCase().includes('money'));
 
@@ -223,6 +231,17 @@ function alternarOpcao(field: ProvisionField, value: string) {
 }
 
 function avancar() {
+  if (cpfMode.value) {
+    if (!cpfValido(cpf.value)) {
+      fieldErrors.value = { cpf: 'CPF inválido' };
+      error.value = 'Informe um CPF válido.';
+      return;
+    }
+    fieldErrors.value = {};
+    error.value = null;
+    void criarOperador();
+    return;
+  }
   if (!formData.value.nome.trim() || !formData.value.email.trim()) {
     error.value = 'Preencha nome e e-mail.';
     return;
@@ -317,6 +336,28 @@ async function enviarProvisionado() {
   }
 }
 
+/** Operador por CPF: a API cria a conta, gera o 2FA do Google e grava o segredo no servidor. */
+async function criarOperador() {
+  isLoading.value = true;
+  error.value = null;
+  try {
+    const r = await userApi.criarOperador(props.appId, cpf.value.replace(/\D/g, ''));
+    emit('sucesso', {
+      email: masks.cpf(cpf.value),
+      emailSent: false,
+      aviso: `Operador ${masks.cpf(cpf.value)} criado. Entra com CPF + CPF e o código do Google Authenticator. O segredo do Google foi salvo no servidor, em ${r.arquivo} (fora do git): cadastre-o no celular do operador.`,
+    });
+    emit('fechar');
+  } catch (err: unknown) {
+    console.error(err);
+    const response = axios.isAxiosError(err) ? err.response : undefined;
+    const msg = (response?.data as { message?: string } | undefined)?.message;
+    error.value = response?.status === 409 ? 'Já existe uma conta com este CPF neste aplicativo.' : msg || 'Não foi possível criar o operador.';
+  } finally {
+    isLoading.value = false;
+  }
+}
+
 async function enviar() {
   isLoading.value = true;
   error.value = null;
@@ -355,13 +396,16 @@ async function enviar() {
 
 const titulo = computed(() => {
   if (step.value === 'preview') return 'Pré-visualizar convite';
+  if (cpfMode.value) return `Cadastrar operador${props.appName ? ` — ${props.appName}` : ''}`;
   if (provisionMode.value && provisioned.value)
     return `Convidar ${provisioned.value.roleLabel}${props.appName ? ` — ${props.appName}` : ''}`;
   return 'Convidar usuário';
 });
 
 const descricaoPapel = computed(() =>
-  provisionMode.value
+  cpfMode.value
+    ? provisioned.value?.operadorCpf?.descricao
+    : provisionMode.value
     ? provisioned.value?.roleDescription
     : roleOptions.value.find((opt) => opt.value === formData.value.role)?.description,
 );
@@ -395,7 +439,29 @@ const descricaoPapel = computed(() =>
       </div>
 
       <div class="space-y-4">
+        <UiSelect v-model="formData.role" rotulo="Tipo de usuário" :dica="descricaoPapel">
+          <option v-if="provisioned" :value="PROVISION_ROLE">
+            {{ provisioned.roleLabel }}{{ appName ? ` da ${appName}` : '' }}
+          </option>
+          <option v-if="provisioned?.operadorCpf" :value="OPERADOR_CPF">Operador (só o CPF)</option>
+          <option v-for="opt in roleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+        </UiSelect>
+
+        <!-- Operador: só o CPF. O 2FA do Google é gerado e guardado pelo servidor. -->
         <UiTextField
+          v-if="cpfMode"
+          :model-value="cpf"
+          rotulo="CPF do operador"
+          required
+          inputmode="numeric"
+          placeholder="000.000.000-00"
+          autocomplete="off"
+          :erro="fieldErrors.cpf || null"
+          @update:model-value="(v: string) => { cpf = masks.cpf(v); limparErro('cpf'); }"
+        />
+
+        <UiTextField
+          v-if="!cpfMode"
           :model-value="formData.nome"
           rotulo="Nome completo"
           required
@@ -407,7 +473,7 @@ const descricaoPapel = computed(() =>
           @update:model-value="(v: string) => setBase('nome', v)"
         />
 
-        <div>
+        <div v-if="!cpfMode">
           <UiTextField
             :model-value="formData.email"
             rotulo="E-mail de acesso"
@@ -538,21 +604,18 @@ const descricaoPapel = computed(() =>
           </template>
         </template>
 
-        <UiSelect v-model="formData.role" rotulo="Nível de acesso" :dica="descricaoPapel">
-          <option v-if="provisioned" :value="PROVISION_ROLE">
-            {{ provisioned.roleLabel }}{{ appName ? ` da ${appName}` : '' }}
-          </option>
-          <option v-for="opt in roleOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-        </UiSelect>
       </div>
 
       <div class="flex items-start gap-3 rounded-celula bg-fill-2 p-3">
         <ShieldCheckIcon class="mt-0.5 h-5 w-5 shrink-0 text-accent" />
         <div>
           <p class="text-subhead font-semibold">Verificação em duas etapas</p>
-          <p class="mt-0.5 text-footnote text-label-2">
-            Exigida em todas as contas. Ao abrir o convite, a pessoa define a senha e escaneia o QR Code na mesma tela —
-            então precisa estar com o celular à mão. O QR aparece no navegador, nunca no e-mail.
+          <p v-if="cpfMode" class="mt-0.5 text-footnote text-label-2">
+            O servidor gera o código do Google Authenticator do operador agora e o guarda na pasta
+            <code>2fa-operador</code> (fora do git). Depois é só cadastrar esse segredo no celular dele.
+          </p>
+          <p v-else class="mt-0.5 text-footnote text-label-2">
+            A pessoa entra com o e-mail e um código de 6 dígitos enviado a esse mesmo e-mail, sem aplicativo extra.
           </p>
         </div>
       </div>
@@ -578,8 +641,12 @@ const descricaoPapel = computed(() =>
     <template #acoes>
       <template v-if="step === 'form'">
         <UiButton variante="gray" :disabled="isLoading" @click="emit('fechar')">Cancelar</UiButton>
-        <UiButton type="submit" form="form-convidar" :carregando="isLoading && provisionMode">
-          <template v-if="provisionMode">
+        <UiButton type="submit" form="form-convidar" :carregando="isLoading && (provisionMode || cpfMode)">
+          <template v-if="cpfMode">
+            <template v-if="isLoading">Criando…</template>
+            <template v-else>Criar operador</template>
+          </template>
+          <template v-else-if="provisionMode">
             <template v-if="isLoading">Enviando…</template>
             <template v-else><PaperAirplaneIcon class="h-5 w-5" /> Enviar convite</template>
           </template>
