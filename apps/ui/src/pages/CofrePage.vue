@@ -413,6 +413,23 @@ const VAZIO: ItemCofre = { titulo: '', usuario: '', senha: '', url: '', totp: ''
 const editando = ref<{ id?: string; cofreId: string } | null>(null);
 const form = ref<ItemCofre>({ ...VAZIO });
 const verSenhaEdicao = ref(false);
+// Campos opcionais que o formulário mostra: os que já têm valor + os que o "+" acrescentou.
+type CampoExtra = 'usuario' | 'senha' | 'url' | 'totp' | 'notas';
+const CAMPOS_EXTRA: { id: CampoExtra; rotulo: string }[] = [
+  { id: 'usuario', rotulo: 'Usuário / e-mail' },
+  { id: 'senha', rotulo: 'Senha' },
+  { id: 'url', rotulo: 'Endereço (URL)' },
+  { id: 'totp', rotulo: 'Código 2FA' },
+  { id: 'notas', rotulo: 'Nota' },
+];
+const camposAdicionados = ref<Set<CampoExtra>>(new Set());
+const menuCampos = ref(false);
+const temCampo = (c: CampoExtra) => camposAdicionados.value.has(c) || !!form.value[c].trim();
+const camposFaltando = computed(() => CAMPOS_EXTRA.filter((c) => !temCampo(c.id)));
+function adicionarCampo(c: CampoExtra) {
+  camposAdicionados.value = new Set(camposAdicionados.value).add(c);
+  menuCampos.value = false;
+}
 const totpInvalido = computed(() => !!form.value.totp.trim() && !lerTotp(form.value.totp));
 
 function novoItem() {
@@ -420,15 +437,25 @@ function novoItem() {
   const cofreId = cofreAtual.value ?? cofres.value[0]?.id;
   if (!cofreId || !podeEscrever(cofreId)) return;
   verSenhaEdicao.value = false;
+  menuCampos.value = false;
+  camposAdicionados.value = new Set<CampoExtra>(['usuario', 'senha']);
   form.value = { ...VAZIO };
   editando.value = { cofreId };
 }
 function editarItem(item: ItemAberto) {
   verSenhaEdicao.value = false;
+  menuCampos.value = false;
+  camposAdicionados.value = new Set();
   // `entrada` (chave de entrada pelo cofre, db/016) vai junto: o formulário não mostra, mas salvar não pode perdê-la.
   const { titulo, usuario, senha, url, totp, notas, entrada } = item;
   form.value = { titulo, usuario, senha, url, totp, notas, ...(entrada ? { entrada } : {}) };
   editando.value = { id: item.id, cofreId: item.cofre_id };
+}
+// Clicar no cartão abre a janela do item; botões e links de dentro seguem com a ação própria.
+function abrirItem(e: MouseEvent, item: ItemAberto) {
+  if ((e.target as HTMLElement).closest('button, a, input, textarea')) return;
+  if (offline.value || !podeEscrever(item.cofre_id)) return;
+  editarItem(item);
 }
 function gerarNaEdicao() {
   form.value.senha = gerarSenha();
@@ -753,7 +780,7 @@ async function confirmarTrocaSenha() {
         />
 
         <ul v-else class="space-y-2">
-          <li v-for="item in visiveis" :key="item.id" class="overflow-hidden rounded-celula bg-surface p-4">
+          <li v-for="item in visiveis" :key="item.id" class="cursor-pointer overflow-hidden rounded-celula bg-surface p-4 transition-colors hover:bg-fill-2" @click="abrirItem($event, item)">
             <div class="flex items-start gap-3">
               <CofreItemIcone :titulo="item.titulo" :url="item.url" :apps="logosDosApps" />
               <div class="min-w-0 flex-1 space-y-1">
@@ -823,8 +850,8 @@ async function confirmarTrocaSenha() {
         <!-- Trocar o cofre de um item que já existe move o item: ele é recifrado com a chave do cofre novo. -->
         <UiSelect v-if="cofresComEscrita.length > 1" v-model="editando.cofreId" rotulo="Cofre" :opcoes="cofresComEscrita.map((c) => ({ valor: c.id, rotulo: papelDoCofre(c.id) === 'dono' ? c.nome : `${c.nome} (compartilhado)` }))" />
         <UiTextField v-model="form.titulo" rotulo="Título" placeholder="Ex.: GitHub, Cloudflare, awlsrv sudo" required />
-        <UiTextField v-model="form.usuario" rotulo="Usuário / e-mail" autocomplete="off" />
-        <div class="space-y-1">
+        <UiTextField v-if="temCampo('usuario')" v-model="form.usuario" rotulo="Usuário / e-mail" autocomplete="off" />
+        <div v-if="temCampo('senha')" class="space-y-1">
           <UiTextField v-model="form.senha" rotulo="Senha" :type="verSenhaEdicao ? 'text' : 'password'" autocomplete="new-password" />
           <div class="flex gap-2">
             <UiButton variante="plain" tamanho="small" @click="verSenhaEdicao = !verSenhaEdicao">{{ verSenhaEdicao ? 'Esconder' : 'Mostrar' }}</UiButton>
@@ -833,19 +860,26 @@ async function confirmarTrocaSenha() {
             </UiButton>
           </div>
         </div>
-        <UiTextField v-model="form.url" rotulo="Endereço (URL)" placeholder="https://…" autocomplete="off" />
+        <UiTextField v-if="temCampo('url')" v-model="form.url" rotulo="Endereço (URL)" placeholder="https://…" autocomplete="off" />
         <UiTextField
+          v-if="temCampo('totp')"
           v-model="form.totp"
-          rotulo="Chave do 2FA (opcional)"
+          rotulo="Chave do 2FA"
           placeholder="JBSW Y3DP… ou otpauth://totp/…"
           autocomplete="off"
           dica="A chave que o site mostra ao ativar o 2FA (texto embaixo do QR). O cofre passa a mostrar o código de 6 dígitos."
           :erro="totpInvalido ? 'Chave de 2FA inválida.' : null"
         />
-        <label class="block text-footnote text-label-2">
+        <label v-if="temCampo('notas')" class="block text-footnote text-label-2">
           Notas
-          <textarea v-model="form.notas" rows="3" class="mt-1 w-full rounded-lg bg-fill-2 p-3 text-body text-label outline-none focus:ring-2 focus:ring-accent/40" />
+          <textarea v-model="form.notas" rows="4" class="mt-1 w-full rounded-lg bg-fill-2 p-3 text-body text-label outline-none focus:ring-2 focus:ring-accent/40" />
         </label>
+        <div v-if="camposFaltando.length" class="pt-1">
+          <UiButton variante="plain" tamanho="small" :aria-expanded="menuCampos" @click="menuCampos = !menuCampos"><PlusIcon class="h-4 w-4" />Adicionar campo</UiButton>
+          <div v-if="menuCampos" class="mt-2 flex flex-wrap gap-2">
+            <UiButton v-for="c in camposFaltando" :key="c.id" variante="gray" tamanho="small" @click="adicionarCampo(c.id)"><PlusIcon class="h-4 w-4" />{{ c.rotulo }}</UiButton>
+          </div>
+        </div>
       </form>
       <template #acoes>
         <UiButton variante="gray" @click="editando = null">Cancelar</UiButton>
