@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import axios from 'axios';
 import { UserIcon } from '@heroicons/vue/24/outline';
 import { authApi, cofreApi } from '@loginhub/api-client';
@@ -11,6 +11,7 @@ import UiSegmented from '@/components/ui/UiSegmented.vue';
 import TwoFactorChallenge from '@/features/twoFactor/TwoFactorChallenge.vue';
 import { aparelhoAtual } from '@/features/aparelho';
 import CofrePage from './CofrePage.vue';
+import MasterEntrada from '@/components/MasterEntrada.vue';
 import ContaDoAppCartao from '@/components/cofre/ContaDoAppCartao.vue';
 
 /**
@@ -47,16 +48,23 @@ const senhaNormalizada = (bruta: string): string => {
   return /^\d{11}$/.test(digitos) ? digitos : bruta;
 };
 const router = useRouter();
-const aba = ref<'admin' | 'cofre' | 'master'>('cofre');
+const route = useRoute();
+const aba = ref<'admin' | 'cofre'>('cofre');
 const ABAS = [
-  { valor: 'admin' as const, rotulo: 'Admin' },
-  { valor: 'cofre' as const, rotulo: 'Meu cofre' },
-  { valor: 'master' as const, rotulo: 'Master Key' },
+  { valor: 'admin' as const, rotulo: 'Organização' },
+  { valor: 'cofre' as const, rotulo: 'Cofre' },
 ];
-function trocarAba(v: 'admin' | 'cofre' | 'master') {
+function trocarAba(v: 'admin' | 'cofre') {
   if (v === 'cofre') return;
-  void router.push(v === 'master' ? { path: '/login', query: { modo: 'master' } } : '/login');
+  void router.push('/login');
 }
+// Entrada do master (27/11/2026): fica aqui, junto do cofre, atrás de um botão.
+const mostrarMaster = ref(false);
+// Volta da entrada pelo cofre (/cofre/entrada?…): só caminho interno, como no /login.
+const voltaMaster = ((): string | null => {
+  const v = typeof route.query.volta === 'string' ? route.query.volta : '';
+  return v.startsWith('/cofre/entrada?') ? v : null;
+})();
 const etapa = ref<'carregando' | 'login' | 'desafio' | 'cofre'>('carregando');
 const email = ref('');
 const senha = ref('');
@@ -160,6 +168,12 @@ function sair() {
       </div>
       <UiButton v-else type="submit" tamanho="large" bloco :carregando="enviando" :disabled="!email || !senha">Entrar</UiButton>
     </form>
+    <div class="mt-5 border-t border-separator pt-4">
+      <button type="button" class="w-full text-center text-footnote font-semibold text-accent" :aria-expanded="mostrarMaster" @click="mostrarMaster = !mostrarMaster">
+        {{ mostrarMaster ? 'Esconder a entrada do master' : 'Entrar como master' }}
+      </button>
+      <div v-if="mostrarMaster" class="mt-4"><MasterEntrada :volta="voltaMaster" /></div>
+    </div>
     <template #rodape>&copy; 2026 Astral Wave · LoginHub</template>
   </AuthShell>
 

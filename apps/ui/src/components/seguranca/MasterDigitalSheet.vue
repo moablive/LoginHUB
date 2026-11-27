@@ -59,7 +59,7 @@ async function ativar() {
   aviso.value = null;
   try {
     await ativarDigitalDoMaster(nome.value);
-    aviso.value = 'Pronto: neste aparelho, a aba Master Key da tela de login passa a ter o botão Entrar com a digital.';
+    aviso.value = 'Pronto: neste aparelho, a aba Cofre da tela de login passa a ter, em "Entrar como master", o botão Entrar com a digital.';
     await carregar();
   } catch (e) {
     erro.value = mensagemDe(e, 'Não foi possível cadastrar a digital.');

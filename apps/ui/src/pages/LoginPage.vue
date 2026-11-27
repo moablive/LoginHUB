@@ -1,54 +1,43 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onBeforeUnmount, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import axios from 'axios';
-import { EnvelopeIcon, FingerPrintIcon, KeyIcon, LockClosedIcon } from '@heroicons/vue/24/outline';
-import { authApi, marcarAdminDeOrganizacao, masterDigitalApi } from '@loginhub/api-client';
+import { EnvelopeIcon, KeyIcon, LockClosedIcon } from '@heroicons/vue/24/outline';
+import { authApi, marcarAdminDeOrganizacao } from '@loginhub/api-client';
 import AuthShell from '@/components/AuthShell.vue';
 import UiButton from '@/components/ui/UiButton.vue';
 import UiTextField from '@/components/ui/UiTextField.vue';
 import UiSegmented from '@/components/ui/UiSegmented.vue';
 import TwoFactorChallenge from '@/features/twoFactor/TwoFactorChallenge.vue';
-import { digitalMasterSuportada, entrarComADigitalDoMaster, ErroDigitalMaster } from '@/features/masterDigital';
 
 /**
  * Duas portas para o painel (19/11/2026, admins de organização, db/012):
  *
- *   Administrador → e-mail + senha + Google Authenticator. É a conta de quem
+ *   Organização   → e-mail + senha + Google Authenticator. É a conta de quem
  *                   foi convidado para cuidar de uma organização (LBS, Sul…).
- *   Master Key    → o master do hub: pela digital do aparelho (db/020), quando
- *                   cadastrada, ou pela chave, como sempre foi.
+ *   Cofre         → /meu-cofre; a Master Key e a digital do master moram lá (MasterEntrada, 27/11/2026).
  */
 const router = useRouter();
 const route = useRoute();
-/**
- * `?volta=` (19/11/2026): a entrada pelo cofre (/cofre/entrada) manda para cá
- * quando o navegador não tem sessão do hub e volta depois do login. Só caminho
- * interno da própria entrada pelo cofre: nada de mandar para outro site.
- */
-const volta = (): string | null => {
-  const v = typeof route.query.volta === 'string' ? route.query.volta : '';
-  return v.startsWith('/cofre/entrada?') ? v : null;
-};
-const modo = ref<'admin' | 'cofre' | 'master'>(route.query.modo === 'master' ? 'master' : 'admin');
+const modo = ref<'admin' | 'cofre'>('admin');
+// Links antigos (?modo=master) caem na aba Cofre, onde a entrada do master mora agora.
+if (route.query.modo === 'master') void router.replace({ path: '/meu-cofre', query: route.query.volta ? { volta: String(route.query.volta) } : {} });
 /**
  * "Meu cofre" (21/11/2026, pedido do dono): qualquer pessoa com conta num app
  * de cofre liberado entra por aqui com a PRÓPRIA conta e a própria palavra-passe.
  * A tela é a /meu-cofre — a aba só leva até ela, sem misturar com o login do painel.
  */
 const MODOS = [
-  { valor: 'admin' as const, rotulo: 'Admin' },
-  { valor: 'cofre' as const, rotulo: 'Meu cofre' },
-  { valor: 'master' as const, rotulo: 'Master Key' },
+  { valor: 'admin' as const, rotulo: 'Organização' },
+  { valor: 'cofre' as const, rotulo: 'Cofre' },
 ];
-function trocarModo(v: 'admin' | 'cofre' | 'master') {
+function trocarModo(v: 'admin' | 'cofre') {
   erro.value = null;
   if (v === 'cofre') void router.push('/meu-cofre');
 }
 
 const email = ref('');
 const senha = ref('');
-const chave = ref('');
 const desafio = ref<string | null>(null);
 const erro = ref<string | null>(null);
 const enviando = ref(false);
@@ -65,52 +54,6 @@ function mensagemDoErro(e: unknown, invalido: string): string {
   return e instanceof Error ? e.message : 'Ocorreu um erro inesperado. Tente novamente.';
 }
 
-async function entrarMaster() {
-  erro.value = null;
-  enviando.value = true;
-  try {
-    // A chave digitada vai inteira para o servidor, que é quem a compara com
-    // a MASTER_API_KEY. O painel não conhece a chave — antes ele a tinha no
-    // bundle (`VITE_MASTER_KEY`) e comparava no navegador.
-    await authApi.loginMaster(chave.value);
-    await router.push(volta() ?? '/dashboard');
-  } catch (e: unknown) {
-    console.error('Erro no login:', e);
-    erro.value = mensagemDoErro(e, 'Master Key inválida ou acesso negado.');
-  } finally {
-    enviando.value = false;
-  }
-}
-
-// Digital do master (24/11/2026, db/020): com alguma digital cadastrada, a aba Master Key mostra o botão em
-// cima e a chave fica embaixo, como reserva.
-const digitalDoMaster = ref(false);
-onMounted(async () => {
-  if (!digitalMasterSuportada()) return;
-  try {
-    digitalDoMaster.value = await masterDigitalApi.disponivel();
-  } catch {
-    /* sem resposta: fica só a Master Key */
-  }
-});
-async function entrarComDigital() {
-  erro.value = null;
-  enviando.value = true;
-  try {
-    await entrarComADigitalDoMaster();
-    await router.push(volta() ?? '/dashboard');
-  } catch (e: unknown) {
-    erro.value =
-      e instanceof ErroDigitalMaster
-        ? e.codigo === 'CANCELADO'
-          ? 'A digital não foi lida: o leitor foi fechado ou este aparelho não tem a digital do master. Tente de novo ou use a Master Key.'
-          : 'Este navegador não conseguiu usar a digital. Use a Master Key.'
-        : mensagemDoErro(e, 'Não foi possível confirmar a digital. Entre com a Master Key.');
-  } finally {
-    enviando.value = false;
-  }
-}
-
 async function entrarAdmin() {
   erro.value = null;
   enviando.value = true;
@@ -124,6 +67,66 @@ async function entrarAdmin() {
   } catch (e: unknown) {
     console.error('Erro no login:', e);
     erro.value = mensagemDoErro(e, 'E-mail ou senha incorretos.');
+  } finally {
+    enviando.value = false;
+  }
+}
+
+// Código por e-mail (db/024): entrada sem senha e sem app de terceiros. Quem tem o
+// Google Authenticator ativo continua passando por ele depois do código.
+const usarCodigo = ref(false);
+const codigoChallenge = ref<string | null>(null);
+const codigo = ref('');
+const reenvioEm = ref(0);
+let relogio: ReturnType<typeof setInterval> | null = null;
+
+function iniciarRelogio(segundos: number) {
+  reenvioEm.value = segundos;
+  if (relogio) clearInterval(relogio);
+  relogio = setInterval(() => {
+    reenvioEm.value = Math.max(0, reenvioEm.value - 1);
+    if (reenvioEm.value === 0 && relogio) { clearInterval(relogio); relogio = null; }
+  }, 1000);
+}
+onBeforeUnmount(() => { if (relogio) clearInterval(relogio); });
+
+function alternarCodigo() {
+  usarCodigo.value = !usarCodigo.value;
+  codigoChallenge.value = null;
+  codigo.value = '';
+  erro.value = null;
+}
+
+async function pedirCodigo() {
+  erro.value = null;
+  enviando.value = true;
+  try {
+    const r = await authApi.emailStart(email.value, { painel: true });
+    codigoChallenge.value = r.challengeId;
+    codigo.value = '';
+    iniciarRelogio(r.reenvioEm);
+  } catch (e: unknown) {
+    erro.value = axios.isAxiosError(e) && e.response?.status === 429
+      ? 'Muitos pedidos. Aguarde alguns minutos.'
+      : mensagemDoErro(e, 'Não foi possível enviar o código.');
+  } finally {
+    enviando.value = false;
+  }
+}
+
+async function confirmarCodigo() {
+  if (!codigoChallenge.value) return;
+  erro.value = null;
+  enviando.value = true;
+  try {
+    const r = await authApi.emailVerify(codigoChallenge.value, codigo.value, { painel: true });
+    if (r.requires2FA && r.challengeToken) {
+      desafio.value = r.challengeToken;
+      return;
+    }
+    await router.push(r.redirect);
+  } catch (e: unknown) {
+    erro.value = mensagemDoErro(e, 'Código inválido ou expirado. Peça um novo.');
   } finally {
     enviando.value = false;
   }
@@ -153,11 +156,38 @@ function cancelarDesafio() {
   <AuthShell
     v-else
     titulo="LoginHub"
-    :texto="modo === 'admin' ? 'Entre com a conta de administrador da sua organização.' : digitalDoMaster ? 'Acesso total com a digital deste aparelho ou com a Master Key.' : 'Acesso total com a Master Key.'"
+    texto="Entre com a conta de administrador da sua organização."
   >
     <UiSegmented v-model="modo" :opcoes="MODOS" rotulo="Tipo de acesso" class="mb-5" @update:model-value="trocarModo" />
 
-    <form v-if="modo === 'admin'" class="space-y-4" @submit.prevent="entrarAdmin">
+    <form v-if="modo === 'admin' && usarCodigo" class="space-y-4" @submit.prevent="codigoChallenge ? confirmarCodigo() : pedirCodigo()">
+      <UiTextField v-model="email" rotulo="E-mail" type="email" placeholder="voce@empresa.com" autocomplete="username" inputmode="email" :disabled="!!codigoChallenge" required>
+        <template #icone><EnvelopeIcon /></template>
+      </UiTextField>
+      <template v-if="codigoChallenge">
+        <UiTextField v-model="codigo" rotulo="Código recebido por e-mail" placeholder="000000" autocomplete="one-time-code" inputmode="numeric" maxlength="7" required>
+          <template #icone><KeyIcon /></template>
+        </UiTextField>
+        <p class="text-center text-footnote text-label-2">
+          Enviamos um código de 6 dígitos para o seu e-mail. Vale por 5 minutos.
+          <button type="button" class="font-semibold text-accent disabled:opacity-50" :disabled="reenvioEm > 0 || enviando" @click="pedirCodigo">
+            {{ reenvioEm > 0 ? `Reenviar em ${reenvioEm}s` : 'Reenviar código' }}
+          </button>
+        </p>
+      </template>
+
+      <div v-if="erro" role="alert" class="rounded-celula bg-danger/10 p-3">
+        <p class="text-subhead font-semibold text-danger">Falha na autenticação</p>
+        <p class="mt-0.5 text-subhead text-danger">{{ erro }}</p>
+      </div>
+
+      <UiButton type="submit" tamanho="large" bloco :carregando="enviando" :disabled="!email || (!!codigoChallenge && codigo.replace(/\s/g, '').length !== 6)">
+        {{ enviando ? 'Verificando…' : codigoChallenge ? 'Entrar' : 'Enviar código' }}
+      </UiButton>
+      <button type="button" class="block w-full text-center text-footnote font-semibold text-accent" @click="alternarCodigo">Entrar com senha</button>
+    </form>
+
+    <form v-else-if="modo === 'admin'" class="space-y-4" @submit.prevent="entrarAdmin">
       <UiTextField v-model="email" rotulo="E-mail" type="email" placeholder="voce@empresa.com" autocomplete="username" inputmode="email" required>
         <template #icone><EnvelopeIcon /></template>
       </UiTextField>
@@ -173,40 +203,12 @@ function cancelarDesafio() {
       <UiButton type="submit" tamanho="large" bloco :carregando="enviando" :disabled="!email || !senha">
         {{ enviando ? 'Verificando…' : 'Entrar' }}
       </UiButton>
+      <button type="button" class="block w-full text-center text-footnote font-semibold text-accent" @click="alternarCodigo">Entrar com código por e-mail</button>
       <p class="text-center text-footnote text-label-2">
         Recebeu um convite? Abra o link do e-mail para criar a senha e ativar o Google Authenticator.
       </p>
     </form>
 
-    <form v-else class="space-y-4" @submit.prevent="entrarMaster">
-      <template v-if="digitalDoMaster">
-        <UiButton tamanho="large" bloco :carregando="enviando" @click="entrarComDigital">
-          <FingerPrintIcon class="h-5 w-5" />{{ enviando ? 'Verificando…' : 'Entrar com a digital' }}
-        </UiButton>
-        <p class="text-center text-footnote text-label-2">ou com a Master Key</p>
-      </template>
-      <UiTextField
-        v-model="chave"
-        rotulo="Master Key"
-        rotulo-oculto
-        type="password"
-        revelar
-        placeholder="Master Key"
-        autocomplete="current-password"
-        required
-      >
-        <template #icone><KeyIcon /></template>
-      </UiTextField>
-
-      <div v-if="erro" role="alert" class="rounded-celula bg-danger/10 p-3">
-        <p class="text-subhead font-semibold text-danger">Falha na autenticação</p>
-        <p class="mt-0.5 text-subhead text-danger">{{ erro }}</p>
-      </div>
-
-      <UiButton type="submit" tamanho="large" bloco :variante="digitalDoMaster ? 'gray' : 'filled'" :carregando="enviando && !!chave" :disabled="!chave">
-        {{ enviando && chave ? 'Verificando…' : 'Acessar painel' }}
-      </UiButton>
-    </form>
 
     <template #rodape>&copy; 2026 Astral Wave · LoginHub</template>
   </AuthShell>
