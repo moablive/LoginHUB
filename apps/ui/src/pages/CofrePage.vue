@@ -534,17 +534,50 @@ async function salvarItem() {
   }
 }
 const itemParaApagar = ref<ItemAberto | null>(null);
+// Apagar item pede a palavra-passe do cofre (27/11/2026). Mesma regra do login: 3 erradas e o cofre tranca.
+const MAX_ERROS_APAGAR = 3;
+const senhaDoApagar = ref('');
+const erroDoApagar = ref<string | null>(null);
+let errosAoApagar = 0;
+function pedirApagar(item: ItemAberto) {
+  senhaDoApagar.value = '';
+  erroDoApagar.value = null;
+  itemParaApagar.value = item;
+}
+function fecharApagar() {
+  itemParaApagar.value = null;
+  senhaDoApagar.value = '';
+  erroDoApagar.value = null;
+}
 async function apagarItem() {
   const alvo = itemParaApagar.value;
-  if (!alvo) return;
+  if (!alvo || !senhaDoApagar.value) return;
   ocupado.value = true;
   try {
+    try {
+      await cofre.conferirSenha(senhaDoApagar.value);
+    } catch (err) {
+      if (!(err instanceof Error) || err.message !== 'CHAVE_ERRADA') throw err;
+      errosAoApagar += 1;
+      if (errosAoApagar >= MAX_ERROS_APAGAR) {
+        errosAoApagar = 0;
+        fecharApagar();
+        trancar();
+        erro.value = 'Palavra-passe errada 3 vezes: o cofre foi trancado.';
+        return;
+      }
+      senhaDoApagar.value = '';
+      erroDoApagar.value = `Palavra-passe errada. Resta${MAX_ERROS_APAGAR - errosAoApagar === 1 ? '' : 'm'} ${MAX_ERROS_APAGAR - errosAoApagar} tentativa${MAX_ERROS_APAGAR - errosAoApagar === 1 ? '' : 's'}.`;
+      return;
+    }
+    errosAoApagar = 0;
     await cofre.apagarItem(alvo.id);
+    fecharApagar();
   } catch (err) {
     erro.value = mensagemDe(err, 'Não foi possível apagar.');
+    fecharApagar();
   } finally {
     ocupado.value = false;
-    itemParaApagar.value = null;
   }
 }
 
@@ -899,7 +932,7 @@ async function confirmarTrocaSenha() {
               </div>
               <div class="flex shrink-0 flex-col gap-1">
                 <UiButton variante="plain" icone :disabled="offline || !podeEscrever(item.cofre_id)" :title="podeEscrever(item.cofre_id) ? undefined : 'Somente leitura'" :aria-label="`Editar ${item.titulo}`" @click="editarItem(item)"><PencilSquareIcon class="h-5 w-5" /></UiButton>
-                <UiButton variante="plain" icone :disabled="offline || !podeEscrever(item.cofre_id)" :title="podeEscrever(item.cofre_id) ? undefined : 'Somente leitura'" class="!text-danger hover:!bg-danger/10" :aria-label="`Apagar ${item.titulo}`" @click="itemParaApagar = item">
+                <UiButton variante="plain" icone :disabled="offline || !podeEscrever(item.cofre_id)" :title="podeEscrever(item.cofre_id) ? undefined : 'Somente leitura'" class="!text-danger hover:!bg-danger/10" :aria-label="`Apagar ${item.titulo}`" @click="pedirApagar(item)">
                   <TrashIcon class="h-5 w-5" />
                 </UiButton>
               </div>
@@ -1102,10 +1135,11 @@ async function confirmarTrocaSenha() {
       :destaque="itemParaApagar?.titulo"
       confirmar="Apagar"
       :carregando="ocupado"
-      @fechar="itemParaApagar = null"
+      @fechar="fecharApagar"
       @confirmar="apagarItem"
     >
-      Some do cofre para sempre.
+      Some do cofre para sempre. Digite a palavra-passe do cofre para confirmar.
+      <UiTextField v-model="senhaDoApagar" class="mt-3" rotulo="Palavra-passe do cofre" type="password" autocomplete="current-password" :erro="erroDoApagar" @keyup.enter="apagarItem" />
     </UiAlert>
 
     <UiAlert

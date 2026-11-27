@@ -325,6 +325,21 @@ async function abrirComSenha(palavraPasse: string): Promise<void> {
   await abrirTudo();
 }
 
+/**
+ * Confere a palavra-passe SEM mexer no cofre aberto (27/11/2026: apagar item pede a palavra-passe). Lança
+ * `CHAVE_ERRADA` se não bate. A conferência é local: o servidor só tem texto cifrado.
+ */
+async function conferirSenha(palavraPasse: string): Promise<void> {
+  const conta = bruto.value?.conta;
+  if (!conta) throw new Error('SEM_COFRE');
+  const mestra = await chaveMestraDe(palavraPasse, conta.kdf);
+  try {
+    decifrar(mestra, conta.chave_por_senha, adContaSenha(dono())).fill(0);
+  } finally {
+    mestra.fill(0);
+  }
+}
+
 /** Abre pelo kit de recuperação. Depois disso a tela pede uma palavra-passe nova. */
 async function abrirComKit(kitTexto: string): Promise<void> {
   await carregar();
@@ -903,6 +918,7 @@ export function useCofre() {
     carregar,
     criar,
     abrirComSenha,
+    conferirSenha,
     abrirComKit,
     abrirComDigital,
     ativarDigital,
