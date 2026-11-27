@@ -428,6 +428,23 @@ const camposAdicionados = ref<Set<CampoExtra>>(new Set());
 const menuCampos = ref(false);
 const temCampo = (c: CampoExtra) => camposAdicionados.value.has(c) || !!form.value[c].trim();
 const camposFaltando = computed(() => CAMPOS_EXTRA.filter((c) => !temCampo(c.id)));
+// Campos personalizados (rótulo + valor, com opção de esconder): o "+" sempre oferece, mesmo com tudo preenchido.
+const camposVistos = ref<Set<number>>(new Set());
+function novoCampoPersonalizado() {
+  form.value = { ...form.value, campos: [...(form.value.campos ?? []), { rotulo: '', valor: '', secreto: false }] };
+  menuCampos.value = false;
+}
+function tirarCampoPersonalizado(i: number) {
+  const campos = (form.value.campos ?? []).filter((_, j) => j !== i);
+  const { campos: _antigos, ...resto } = form.value;
+  form.value = campos.length ? { ...resto, campos } : resto;
+  camposVistos.value = new Set();
+}
+function alternarCampoVisto(i: number) {
+  const n = new Set(camposVistos.value);
+  if (!n.delete(i)) n.add(i);
+  camposVistos.value = n;
+}
 function adicionarCampo(c: CampoExtra) {
   camposAdicionados.value = new Set(camposAdicionados.value).add(c);
   menuCampos.value = false;
@@ -447,10 +464,11 @@ function novoItem() {
 function editarItem(item: ItemAberto) {
   verSenhaEdicao.value = false;
   menuCampos.value = false;
+  camposVistos.value = new Set();
   camposAdicionados.value = new Set();
   // `entrada` (chave de entrada pelo cofre, db/016) vai junto: o formulário não mostra, mas salvar não pode perdê-la.
-  const { titulo, usuario, senha, url, totp, notas, icone, entrada } = item;
-  form.value = { titulo, usuario, senha, url, totp, notas, ...(icone ? { icone } : {}), ...(entrada ? { entrada } : {}) };
+  const { titulo, usuario, senha, url, totp, notas, icone, campos, entrada } = item;
+  form.value = { titulo, usuario, senha, url, totp, notas, ...(icone ? { icone } : {}), ...(campos?.length ? { campos: campos.map((c) => ({ ...c })) } : {}), ...(entrada ? { entrada } : {}) };
   editando.value = { id: item.id, cofreId: item.cofre_id };
 }
 // Clicar no cartão abre a janela do item; botões e links de dentro seguem com a ação própria.
@@ -865,6 +883,18 @@ async function confirmarTrocaSenha() {
                   <span v-if="copiado === item.id + ':t'" class="text-caption-1 text-success">copiado</span>
                 </div>
 
+                <div v-for="(c, i) in item.campos ?? []" :key="i" class="flex items-center gap-2 text-subhead">
+                  <span class="w-16 shrink-0 truncate text-label-2" :title="c.rotulo">{{ c.rotulo }}</span>
+                  <span class="min-w-0 truncate font-mono">{{ c.secreto && !revelados.has(item.id + ':c' + i) ? '••••••••••' : c.valor }}</span>
+                  <button v-if="c.secreto" type="button" class="text-label-2" :title="revelados.has(item.id + ':c' + i) ? 'Esconder' : 'Mostrar'" @click="alternarRevelar(item.id + ':c' + i)">
+                    <EyeSlashIcon v-if="revelados.has(item.id + ':c' + i)" class="h-4 w-4" /><EyeIcon v-else class="h-4 w-4" />
+                  </button>
+                  <button type="button" class="text-accent" title="Copiar" @click="copiar(c.valor, item.id + ':c' + i)">
+                    <ClipboardDocumentIcon class="h-4 w-4" />
+                  </button>
+                  <span v-if="copiado === item.id + ':c' + i" class="text-caption-1 text-success">copiado</span>
+                </div>
+
                 <p v-if="item.notas" class="whitespace-pre-wrap break-all text-footnote text-label-2">{{ item.notas }}</p>
               </div>
               <div class="flex shrink-0 flex-col gap-1">
@@ -903,7 +933,9 @@ async function confirmarTrocaSenha() {
         <div v-if="temCampo('senha')" class="space-y-1">
           <UiTextField v-model="form.senha" rotulo="Senha" :type="verSenhaEdicao ? 'text' : 'password'" autocomplete="new-password" />
           <div class="flex gap-2">
-            <UiButton variante="plain" tamanho="small" @click="verSenhaEdicao = !verSenhaEdicao">{{ verSenhaEdicao ? 'Esconder' : 'Mostrar' }}</UiButton>
+            <UiButton variante="plain" icone :title="verSenhaEdicao ? 'Esconder a senha' : 'Mostrar a senha'" :aria-label="verSenhaEdicao ? 'Esconder a senha' : 'Mostrar a senha'" @click="verSenhaEdicao = !verSenhaEdicao">
+              <EyeSlashIcon v-if="verSenhaEdicao" class="h-5 w-5" /><EyeIcon v-else class="h-5 w-5" />
+            </UiButton>
             <UiButton variante="plain" tamanho="small" @click="gerarNaEdicao">
               <ArrowPathIcon class="h-4 w-4" />Gerar senha forte
             </UiButton>
@@ -923,10 +955,21 @@ async function confirmarTrocaSenha() {
           Notas
           <textarea v-model="form.notas" rows="4" class="mt-1 w-full rounded-lg bg-fill-2 p-3 text-body text-label outline-none focus:ring-2 focus:ring-accent/40" />
         </label>
-        <div v-if="camposFaltando.length" class="pt-1">
+        <div v-for="(c, i) in form.campos ?? []" :key="i" class="space-y-1 rounded-controle bg-fill-2 p-2">
+          <div class="flex items-center gap-2">
+            <input v-model="c.rotulo" type="text" placeholder="Nome do campo" autocomplete="off" class="min-w-0 flex-1 rounded-lg bg-transparent px-2 py-1 text-footnote text-label-2 outline-none focus:ring-2 focus:ring-accent/40" />
+            <UiButton variante="plain" icone title="Esconder ou mostrar o valor" aria-label="Esconder ou mostrar o valor" @click="c.secreto = !c.secreto">
+              <EyeSlashIcon v-if="c.secreto" class="h-5 w-5" /><EyeIcon v-else class="h-5 w-5" />
+            </UiButton>
+            <UiButton variante="plain" icone class="!text-danger" title="Remover o campo" aria-label="Remover o campo" @click="tirarCampoPersonalizado(i)"><TrashIcon class="h-5 w-5" /></UiButton>
+          </div>
+          <input v-model="c.valor" :type="c.secreto && !camposVistos.has(i) ? 'password' : 'text'" placeholder="Valor" autocomplete="off" class="w-full rounded-lg bg-surface p-2 text-body text-label outline-none focus:ring-2 focus:ring-accent/40" @dblclick="alternarCampoVisto(i)" />
+        </div>
+        <div class="pt-1">
           <UiButton variante="plain" tamanho="small" :aria-expanded="menuCampos" @click="menuCampos = !menuCampos"><PlusIcon class="h-4 w-4" />Adicionar campo</UiButton>
           <div v-if="menuCampos" class="mt-2 flex flex-wrap gap-2">
             <UiButton v-for="c in camposFaltando" :key="c.id" variante="gray" tamanho="small" @click="adicionarCampo(c.id)"><PlusIcon class="h-4 w-4" />{{ c.rotulo }}</UiButton>
+            <UiButton variante="gray" tamanho="small" @click="novoCampoPersonalizado"><PlusIcon class="h-4 w-4" />Campo personalizado</UiButton>
           </div>
         </div>
       </form>

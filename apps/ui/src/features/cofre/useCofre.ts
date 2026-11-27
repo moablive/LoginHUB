@@ -74,6 +74,12 @@ export interface CofreNaoVerificado {
   codigoFixado?: string;
 }
 
+export interface CampoExtraItem {
+  rotulo: string;
+  valor: string;
+  secreto: boolean;
+}
+
 export interface ItemCofre {
   titulo: string;
   usuario: string;
@@ -84,6 +90,8 @@ export interface ItemCofre {
   notas: string;
   /** Ícone escolhido pelo usuário (data:image/png reduzido a 64 px), vai cifrado junto do item; vence o favicon do site. */
   icone?: string;
+  /** Campos extras que o usuário criou pelo "+" (rótulo, valor e se o valor fica escondido); vão cifrados com o item. */
+  campos?: CampoExtraItem[];
   /** Item que guarda a chave de entrada de uma conta de app (db/016). */
   entrada?: EntradaDoItem;
 }
