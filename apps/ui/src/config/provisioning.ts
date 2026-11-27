@@ -149,12 +149,12 @@ export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
   "2": {
     roleLabel: "Vendedor",
     roleDescription:
-      "Acessa o portal do vendedor da Sul Alimentos. Escolha um vendedor já cadastrado que ainda não tem login, ou cadastre um novo — nesse caso CPF e telefone são informados pelo próprio vendedor ao abrir o convite.",
+      "Acessa o portal do vendedor da Sul Alimentos. Informe o nome e o e-mail do vendedor: ele entra com o e-mail e um código de 6 dígitos enviado a esse mesmo e-mail (sem Google Authenticator). Se o vendedor já está cadastrado na Sul e só falta o acesso, use \"Vincular a vendedor já cadastrado\" mais abaixo.",
     endpoint: `${SUL_ALIMENTOS_API}/vendedor`,
     fields: [
       {
         name: "sellerId",
-        label: "Vendedor",
+        label: "Vincular a vendedor já cadastrado",
         type: "remote-select",
         // `semLogin=1` devolve todos os vendedores sem login, e não os 20 mais
         // recentes da listagem padrão — com o teto, quem foi cadastrado há mais
@@ -166,12 +166,15 @@ export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
         optionLabel: "label",
         allowNew: true,
         newValue: "__new__",
-        newLabel: "+ Cadastrar novo vendedor",
+        newLabel: "Não — cadastrar como novo vendedor",
+        // Abre já em "novo": o convite pede nome e e-mail logo de cara e a comissão
+        // aparece junto. Só quem vincula um cadastro existente mexe neste campo.
+        defaultValue: "__new__",
         required: true,
         // O convite de quem já existe usa o e-mail do cadastro, não o do
         // formulário; preencher daqui evita o 409 por divergência.
         fillsBase: { nome: "name", email: "email" },
-        help: "Só aparecem vendedores ainda sem login. Escolhendo um, o nome e o e-mail vêm do cadastro dele.",
+        help: "Deixe em \"cadastrar como novo\" para um vendedor novo. Para quem já está na Sul e só falta o acesso, escolha o nome dele: nome e e-mail vêm do cadastro.",
       },
       {
         name: "commissionRate",
@@ -180,7 +183,7 @@ export const PROVISIONED_APPS: Record<string, ProvisionedApp> = {
         defaultValue: "0",
         suffix: "%",
         required: true,
-        help: "Definida por você. Os dados pessoais quem informa é o vendedor.",
+        help: "Definida por você. CPF e telefone, o próprio vendedor informa ao abrir o convite.",
         // Só no cadastro novo. Vinculando alguém que já existe, a comissão é a
         // que está no cadastro dele — mandar o campo aqui a sobrescreveria com
         // o valor do formulário, que é 0 por padrão.
