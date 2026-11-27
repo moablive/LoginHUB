@@ -7,6 +7,7 @@ import { computed, ref, watch } from 'vue';
  * `#rrggbb`. O script inline do index.html aplica a classe `dark` antes do primeiro desenho — sem
  * ele a tela piscava branca no escuro.
  *
+ * A cor da fonte (`theme-fonte`) tem o mesmo esquema: automática, branca, preta, uma das cores ou personalizada.
  * O modo colorido é o escuro com o fundo tingido pela cor escolhida; nos outros modos a cor só muda
  * o destaque (`--acento`).
  */
@@ -31,6 +32,11 @@ export const CORES_TEMA: CorTema[] = [
 const MODOS: Record<string, ModoTema> = { light: 'claro', dark: 'escuro', color: 'colorido' };
 const GRAVA: Record<ModoTema, string> = { claro: 'light', escuro: 'dark', colorido: 'color' };
 const HEX = /^#[0-9a-f]{6}$/i;
+
+// Cor da fonte: `auto` segue o modo; branca e preta são fixas; qualquer outra é uma cor do tema (id) ou `#rrggbb`.
+export const FONTE_AUTO = 'auto';
+export const FONTE_BRANCA = '#ffffff';
+export const FONTE_PRETA = '#000000';
 
 function ler(chave: string): string | null {
   try {
@@ -58,6 +64,13 @@ function corInicial(): string {
   return 'azul';
 }
 
+function fonteInicial(): string {
+  const salva = ler('theme-fonte');
+  if (salva && (salva === FONTE_AUTO || HEX.test(salva) || CORES_TEMA.some((c) => c.id === salva))) return salva;
+  return FONTE_AUTO;
+}
+
+const fonte = ref<string>(typeof window !== 'undefined' ? fonteInicial() : FONTE_AUTO);
 const modo = ref<ModoTema>(typeof window !== 'undefined' ? modoInicial() : 'claro');
 const cor = ref<string>(typeof window !== 'undefined' ? corInicial() : 'azul');
 
@@ -86,12 +99,30 @@ function aplicar() {
   }
 }
 
-watch([modo, cor], () => {
+function aplicarFonte() {
+  const estilo = document.documentElement.style;
+  const f = fonte.value;
+  if (f === FONTE_AUTO) {
+    for (const v of ['--label-1', '--label-2', '--label-3']) estilo.removeProperty(v);
+    return;
+  }
+  const hex = hexDe(f, modo.value !== 'claro');
+  estilo.setProperty('--label-1', hex);
+  estilo.setProperty('--label-2', `color-mix(in srgb, ${hex} 72%, transparent)`);
+  estilo.setProperty('--label-3', `color-mix(in srgb, ${hex} 40%, transparent)`);
+}
+
+watch([modo, cor, fonte], () => {
   aplicar();
+  aplicarFonte();
   gravar('theme', GRAVA[modo.value]);
   gravar('theme-cor', cor.value);
+  gravar('theme-fonte', fonte.value);
 }, { flush: 'sync' });
-if (typeof window !== 'undefined') aplicar();
+if (typeof window !== 'undefined') {
+  aplicar();
+  aplicarFonte();
+}
 
 export function useTema() {
   const escuro = computed({
@@ -103,9 +134,11 @@ export function useTema() {
   return {
     modo,
     cor,
+    fonte,
     escuro,
     alternar: () => (escuro.value = !escuro.value),
     definirModo: (m: ModoTema) => (modo.value = m),
     definirCor: (c: string) => (cor.value = c),
+    definirFonte: (c: string) => (fonte.value = c),
   };
 }

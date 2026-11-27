@@ -10,7 +10,7 @@ import { fundoDoLogo } from '@/config/logoFundo';
  *   1. o endereço é o do próprio LoginHUB → o logo oficial dele (o ícone do PWA; o hub não está na lista de apps
  *      e não tem `/favicon.ico`, só o `.svg`);
  *   2. o endereço é de um aplicativo do hub → o logo cadastrado no hub (nada sai daqui);
- *   3. outro site → o `/favicon.ico` do próprio site, sem referrer (nenhum serviço de terceiros fica sabendo);
+ *   3. outro site → o ícone do endereço onde se faz o login (favicon.ico, apple-touch-icon e o domínio principal), sem referrer (nenhum serviço de terceiros fica sabendo);
  *   4. sem endereço, ou o site não tem o arquivo → as iniciais do título.
  */
 const LOGO_DO_HUB = '/pwa-192x192.png';
@@ -23,7 +23,6 @@ export interface LogoDeApp {
 const props = defineProps<{ titulo: string; url: string; apps: LogoDeApp[]; icone?: string }>();
 // Só imagem embutida: o dado vem de dentro do cofre, mas nunca vira outro esquema de URL.
 const proprio = computed(() => (props.icone && /^data:image\/(png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(props.icone) ? props.icone : null));
-const CAMINHOS_FAVICON = ['/favicon.ico', '/apple-touch-icon.png'];
 const tentativa = ref(0);
 
 const host = computed<string | null>(() => {
@@ -36,6 +35,25 @@ const host = computed<string | null>(() => {
   }
 });
 
+// Domínio principal (account.proton.me → proton.me): muito site só serve o ícone na raiz, e o subdomínio de
+// login responde 200 com HTML no lugar do arquivo (o <img> falha). Sem consultar ninguém: só tenta os endereços.
+const SEGUNDO_NIVEL = new Set(['com', 'net', 'org', 'gov', 'edu', 'co']);
+function dominioRaiz(h: string): string {
+  const p = h.split('.');
+  if (p.length <= 2) return h;
+  const n = p.length >= 3 && p[p.length - 1]!.length === 2 && SEGUNDO_NIVEL.has(p[p.length - 2]!) ? 3 : 2;
+  return p.slice(-n).join('.');
+}
+const candidatos = computed<string[]>(() => {
+  const h = host.value;
+  if (!h) return [];
+  const raiz = dominioRaiz(h);
+  const lista = [`https://${h}/favicon.ico`, `https://${h}/apple-touch-icon.png`];
+  if (raiz !== h) lista.push(`https://${raiz}/favicon.ico`, `https://www.${raiz}/favicon.ico`, `https://${raiz}/apple-touch-icon.png`);
+  else lista.push(`https://www.${h}/favicon.ico`);
+  return lista;
+});
+
 const doHub = computed(() => props.apps.find((a) => a.host === host.value) ?? null);
 const falhou = ref(false);
 watch(host, () => {
@@ -43,7 +61,7 @@ watch(host, () => {
   tentativa.value = 0;
 });
 function erroNoIcone() {
-  if (tentativa.value + 1 < CAMINHOS_FAVICON.length) tentativa.value += 1;
+  if (tentativa.value + 1 < candidatos.value.length) tentativa.value += 1;
   else falhou.value = true;
 }
 
@@ -53,7 +71,7 @@ const src = computed(() => {
   if (proprio.value) return proprio.value;
   if (ehOHub.value) return LOGO_DO_HUB;
   if (doHub.value) return doHub.value.logo;
-  return host.value && !falhou.value ? `https://${host.value}${CAMINHOS_FAVICON[tentativa.value]}` : null;
+  return host.value && !falhou.value ? (candidatos.value[tentativa.value] ?? null) : null;
 });
 const iniciais = computed(() => props.titulo.trim().substring(0, 2).toUpperCase() || '··');
 </script>

@@ -17,6 +17,8 @@ import {
   LockClosedIcon,
   LockOpenIcon,
   PencilSquareIcon,
+  PhotoIcon,
+  XMarkIcon,
   PlusIcon,
   ShieldCheckIcon,
   Squares2X2Icon,
@@ -890,17 +892,12 @@ async function confirmarTrocaSenha() {
         <UiTextField v-model="form.titulo" rotulo="Título" placeholder="Ex.: GitHub, Cloudflare, awlsrv sudo" required />
         <div class="flex items-center gap-3">
           <CofreItemIcone :titulo="form.titulo" :url="form.url" :apps="logosDosApps" :icone="form.icone" />
-          <div class="min-w-0 flex-1">
-            <p class="text-footnote text-label-2">Ícone: {{ form.icone ? 'imagem sua' : 'o do site (favicon) ou as iniciais' }}</p>
-            <div class="flex flex-wrap gap-2">
-              <label class="inline-flex cursor-pointer items-center rounded-lg px-2 py-1 text-footnote text-accent hover:bg-accent/10">
-                {{ form.icone ? 'Trocar imagem' : 'Escolher imagem' }}
-                <input type="file" accept="image/*" class="sr-only" @change="escolherIcone" />
-              </label>
-              <UiButton v-if="form.icone" variante="plain" tamanho="small" @click="tirarIcone">Usar o do site</UiButton>
-            </div>
-            <p v-if="erroIcone" class="text-caption-1 text-danger">{{ erroIcone }}</p>
-          </div>
+          <label class="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-accent hover:bg-accent/10" title="Escolher uma imagem para o ícone" aria-label="Escolher imagem do ícone">
+            <PhotoIcon class="h-5 w-5" />
+            <input type="file" accept="image/*" class="sr-only" @change="escolherIcone" />
+          </label>
+          <UiButton v-if="form.icone" variante="plain" icone title="Voltar ao ícone do site" aria-label="Voltar ao ícone do site" @click="tirarIcone"><XMarkIcon class="h-5 w-5" /></UiButton>
+          <p v-if="erroIcone" class="text-caption-1 text-danger">{{ erroIcone }}</p>
         </div>
         <UiTextField v-if="temCampo('usuario')" v-model="form.usuario" rotulo="Usuário / e-mail" autocomplete="off" />
         <div v-if="temCampo('senha')" class="space-y-1">
