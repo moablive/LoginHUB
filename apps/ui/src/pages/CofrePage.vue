@@ -798,7 +798,7 @@ async function confirmarTrocaSenha() {
                   <span v-if="copiado === item.id + ':t'" class="text-caption-1 text-success">copiado</span>
                 </div>
 
-                <p v-if="item.notas" class="max-h-24 overflow-y-auto whitespace-pre-wrap break-all text-footnote text-label-2">{{ item.notas }}</p>
+                <p v-if="item.notas" class="whitespace-pre-wrap break-all text-footnote text-label-2">{{ item.notas }}</p>
               </div>
               <div class="flex shrink-0 flex-col gap-1">
                 <UiButton variante="plain" icone :disabled="offline || !podeEscrever(item.cofre_id)" :title="podeEscrever(item.cofre_id) ? undefined : 'Somente leitura'" :aria-label="`Editar ${item.titulo}`" @click="editarItem(item)"><PencilSquareIcon class="h-5 w-5" /></UiButton>
