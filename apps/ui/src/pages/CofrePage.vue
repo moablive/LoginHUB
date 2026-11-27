@@ -17,6 +17,7 @@ import {
   LockClosedIcon,
   LockOpenIcon,
   PencilSquareIcon,
+  ChevronLeftIcon,
   FolderArrowDownIcon,
   PhotoIcon,
   XMarkIcon,
@@ -472,12 +473,21 @@ function editarItem(item: ItemAberto) {
   form.value = { titulo, usuario, senha, url, totp, notas, ...(icone ? { icone } : {}), ...(campos?.length ? { campos: campos.map((c) => ({ ...c })) } : {}), ...(entrada ? { entrada } : {}) };
   editando.value = { id: item.id, cofreId: item.cofre_id };
 }
-// Clicar no cartão abre a janela do item; botões e links de dentro seguem com a ação própria.
-function abrirItem(e: MouseEvent, item: ItemAberto) {
-  if ((e.target as HTMLElement).closest('button, a, input, textarea')) return;
-  if (offline.value || !podeEscrever(item.cofre_id)) return;
-  editarItem(item);
-}
+// Três colunas (27/11/2026, pedido do dono, no molde do Proton Pass): cofres | lista | detalhe do item escolhido.
+// No celular o detalhe abre por cima da lista e o "Voltar" fecha.
+const selecionadoId = ref<string | null>(null);
+const selecionado = computed(() => (selecionadoId.value ? (itens.value.find((i) => i.id === selecionadoId.value) ?? null) : null));
+const MEDIA_TRES_COLUNAS = '(min-width: 1024px)';
+const emTresColunas = ref(typeof window !== 'undefined' && window.matchMedia(MEDIA_TRES_COLUNAS).matches);
+const aoMudarTela = (e: MediaQueryListEvent) => (emTresColunas.value = e.matches);
+onMounted(() => window.matchMedia(MEDIA_TRES_COLUNAS).addEventListener('change', aoMudarTela));
+onBeforeUnmount(() => window.matchMedia(MEDIA_TRES_COLUNAS).removeEventListener('change', aoMudarTela));
+// No computador o primeiro item já vem aberto (e o que sumiu da lista, por busca, cofre ou exclusão, cede o lugar).
+watch([visiveis, emTresColunas], () => {
+  const lista = visiveis.value;
+  if (selecionadoId.value && !lista.some((i) => i.id === selecionadoId.value)) selecionadoId.value = null;
+  if (!selecionadoId.value && emTresColunas.value && lista.length > 0) selecionadoId.value = lista[0]!.id;
+}, { immediate: true });
 // Ícone próprio do item: a imagem é reduzida a 64 px (PNG) no navegador e vai cifrada junto do item.
 const erroIcone = ref<string | null>(null);
 async function escolherIcone(e: Event) {
@@ -841,7 +851,7 @@ async function confirmarTrocaSenha() {
     </div>
 
     <!-- ABERTO -->
-    <div v-else class="mt-4 lg:grid lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start lg:gap-6">
+    <div v-else class="mt-4 lg:grid lg:grid-cols-[15rem_minmax(15rem,20rem)_minmax(0,1fr)] lg:items-start lg:gap-5 xl:grid-cols-[18rem_minmax(18rem,24rem)_minmax(0,1fr)]">
       <!-- cofres: coluna no computador; no celular, a folha aberta pelo botão do cofre atual -->
       <aside class="hidden lg:sticky lg:top-4 lg:block">
         <CofreLista :cofres="cofres" :compartilhados="compartilhados" :pessoas="pessoasPorCofre" :contagem="contagem" :total="itens.length" :atual="cofreAtual" :ocupado="ocupado" @escolher="escolherCofre" @novo="novoCofre" @editar="editarCofre" @apagar="pedirApagarCofre" @reordenar="reordenarCofres" @compartilhar="compartilharCofre" @sair="pedirSair" @soltar="(cofreId, itemId) => moverItem(itemId, cofreId)" />
@@ -902,8 +912,35 @@ async function confirmarTrocaSenha() {
           :texto="busca ? undefined : cofres.length === 0 ? 'Crie um cofre pelo + da lista de cofres.' : 'Guarde aqui senhas e códigos 2FA.'"
         />
 
-        <ul v-else class="space-y-2">
-          <li v-for="item in visiveis" :key="item.id" class="item-cofre cursor-pointer overflow-hidden rounded-celula bg-surface p-4" :draggable="!offline && podeEscrever(item.cofre_id)" @dragstart="arrastarItem($event, item)" @click="abrirItem($event, item)">
+        <ul v-else class="space-y-1">
+          <li
+            v-for="it in visiveis"
+            :key="it.id"
+            class="item-cofre flex cursor-pointer items-center gap-3 rounded-controle p-2"
+            :class="selecionadoId === it.id ? 'bg-accent/15' : 'bg-surface'"
+            :draggable="!offline && podeEscrever(it.cofre_id)"
+            :aria-current="selecionadoId === it.id ? 'true' : undefined"
+            @dragstart="arrastarItem($event, it)"
+            @click="selecionadoId = it.id"
+          >
+            <CofreItemIcone :titulo="it.titulo" :url="it.url" :apps="logosDosApps" :icone="it.icone" />
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-headline font-semibold">{{ it.titulo }}</span>
+              <span class="block truncate text-footnote text-label-2">{{ it.usuario || it.url || 'sem usuário' }}{{ busca || cofreAtual === null ? ` · ${nomeDoCofre(it.cofre_id)}` : '' }}</span>
+            </span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- DETALHE do item escolhido: terceira coluna no computador; no celular cobre a lista e o Voltar fecha. -->
+      <section
+        v-if="selecionado || emTresColunas"
+        class="fixed inset-0 z-40 overflow-y-auto bg-canvas p-4 lg:sticky lg:top-4 lg:z-auto lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto lg:bg-transparent lg:p-0"
+        aria-label="Detalhe do item"
+      >
+        <UiButton v-if="selecionado" class="mb-3 lg:hidden" variante="plain" tamanho="small" @click="selecionadoId = null"><ChevronLeftIcon class="h-4 w-4" />Voltar</UiButton>
+        <template v-for="item in selecionado ? [selecionado] : []" :key="item.id">
+          <div class="rounded-celula bg-surface p-5">
             <div class="flex items-start gap-3">
               <CofreItemIcone :titulo="item.titulo" :url="item.url" :apps="logosDosApps" :icone="item.icone" />
               <div class="min-w-0 flex-1 space-y-1">
@@ -970,9 +1007,10 @@ async function confirmarTrocaSenha() {
                 </UiButton>
               </div>
             </div>
-          </li>
-        </ul>
-      </div>
+          </div>
+        </template>
+        <p v-if="!selecionado" class="hidden rounded-celula bg-surface p-6 text-center text-subhead text-label-2 lg:block">Escolha um item na lista para ver os dados.</p>
+      </section>
     </div>
 
     <!-- FOLHA: cofres (celular) -->
