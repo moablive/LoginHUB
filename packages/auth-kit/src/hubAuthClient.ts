@@ -85,6 +85,18 @@ export interface TwoFactorStatusData {
     obrigatorio: boolean;
     confirmadoEm?: string | null;
     backupCodesRestantes: number;
+    /** O app autenticador está ativo e a própria pessoa pode desligá-lo (não é exigência do convite). */
+    podeDesativar?: boolean;
+    /** Segundo fator em uso: código do e-mail ('email') ou app autenticador ('app'). */
+    metodo?: 'email' | 'app';
+    /** Conta de CPF (sem e-mail): o app é o único caminho. */
+    contaDeCpf?: boolean;
+}
+
+/** Prova da caixa de e-mail: o `challengeId` de `twoFactor.pedirCodigoEmail()` + o código recebido. */
+export interface ProvaDoEmail {
+    challengeId: string;
+    codigoEmail: string;
 }
 
 /** Erro com o código estável do hub (`CODIGO_INVALIDO`, `MUITAS_TENTATIVAS`...). */
@@ -306,6 +318,38 @@ export function createHubAuth(config: HubAuthConfig) {
         },
 
         /**
+         * Entrada pelo código de e-mail (27/11/2026): `emailStart` manda 6 dígitos para o e-mail (a resposta é
+         * igual exista a conta ou não) e `emailVerify` os confere. O desfecho é o mesmo do `login`: sessão,
+         * desafio (conta com app autenticador ativo ainda pede o código do app) ou enrolar.
+         */
+        async emailStart(email: string): Promise<{ challengeId: string; expiresIn: number; reenvioEm: number }> {
+            const body: Record<string, unknown> = { email: email.trim().toLowerCase() };
+            if (config.appId !== undefined && config.appId !== null && config.appId !== '') body.app_id = String(config.appId);
+            return chamar<{ challengeId: string; expiresIn: number; reenvioEm: number }>('/auth/email/start', { body });
+        },
+
+        async emailVerify(challengeId: string, code: string): Promise<LoginResult> {
+            const body: Record<string, unknown> = { challengeId, code: code.replace(/\s+/g, '') };
+            if (config.appId !== undefined && config.appId !== null && config.appId !== '') body.app_id = String(config.appId);
+            if (config.aparelho) {
+                const a = await config.aparelho();
+                body.aparelho_id = a.id;
+                body.aparelho_nome = a.nome;
+            }
+            const data = await chamar<Record<string, unknown>>('/auth/email/verify', { body });
+            if (data.requires2FA === true && textoUtil(data.challengeToken)) {
+                return { status: 'desafio', challengeToken: data.challengeToken, expiresIn: Number(data.expiresIn ?? 300), methods: (data.methods as MetodoSegundoFator[]) ?? ['totp', 'backup'] };
+            }
+            if (data.require2FASetup === true && textoUtil(data.setupToken)) {
+                return { status: 'enrolar', setupToken: data.setupToken, expiresIn: Number(data.expiresIn ?? 600) };
+            }
+            if (!textoUtil(data.token)) throw new HubApiError(500, 'RESPOSTA_INESPERADA', 'O servidor de login devolveu uma resposta que este app não reconhece.');
+            const session = data as unknown as HubSessionData;
+            salvarSessao(session);
+            return { status: 'sessao', session };
+        },
+
+        /**
          * Define a senha a partir do magic link (convite ou reset).
          *
          * Mesmos três desfechos do login, pela mesma razão: numa conta que já
@@ -420,9 +464,20 @@ export function createHubAuth(config: HubAuthConfig) {
                 return data;
             },
 
-            /** Passo 1 do enrolamento: secret + URI `otpauth://` para o QR. */
-            async setup(token?: string): Promise<TwoFactorSetupData> {
-                return chamar<TwoFactorSetupData>('/auth/2fa/setup', { body: {}, token: token ?? getToken() ?? undefined });
+            /**
+             * Passo 1 do enrolamento: secret + URI `otpauth://` para o QR.
+             *
+             * Com o passe de enrolamento do convite (`token`) não há mais nada a provar. Com a SESSÃO aberta
+             * (botão "Ativar app autenticador" nas configurações) o hub exige antes o código novo do e-mail
+             * (`prova`, de `pedirCodigoEmail`): sessão roubada não troca o fator da conta.
+             */
+            async setup(token?: string, prova?: ProvaDoEmail): Promise<TwoFactorSetupData> {
+                return chamar<TwoFactorSetupData>('/auth/2fa/setup', { body: prova ?? {}, token: token ?? getToken() ?? undefined });
+            },
+
+            /** Manda um código novo ao e-mail da conta (sessão aberta). Devolve o `challengeId` da prova. */
+            async pedirCodigoEmail(): Promise<{ challengeId: string; expiresIn: number }> {
+                return chamar<{ challengeId: string; expiresIn: number }>('/auth/2fa/email-code', { body: {}, token: getToken() ?? undefined });
             },
 
             /**
@@ -473,7 +528,7 @@ export function createHubAuth(config: HubAuthConfig) {
              * administrativa: `POST /admin/users/:id/reset-2fa`. Mantido aqui
              * porque a rota existe no hub, não porque haja caso de uso.
              */
-            async disable(prova: { codigo?: string; backupCode?: string }): Promise<{ ativo: false }> {
+            async disable(prova: { codigo?: string; backupCode?: string } | ProvaDoEmail): Promise<{ ativo: false }> {
                 return chamar<{ ativo: false }>('/auth/2fa/disable', { body: prova, token: getToken() ?? undefined });
             },
         },

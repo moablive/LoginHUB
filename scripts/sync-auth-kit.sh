@@ -28,6 +28,10 @@ SERVER="$FONTE/hubAuthServer.ts"
 CLIENT="$FONTE/hubAuthClient.ts"
 BOT="$FONTE/hubAuthBot.ts"
 PASSKEY="$FONTE/hubPasskeyClient.ts"
+# Cartão "Segurança da conta" (27/11/2026): componente Vue que cada frontend põe nas configurações.
+SEGURANCA="$FONTE/SegurancaConta.vue"
+# SO_TIPOS="client seguranca" ./scripts/sync-auth-kit.sh  → propaga só esses tipos (o resto fica como está).
+SO_TIPOS="${SO_TIPOS:-}"
 
 MODO="${1:-sync}"
 
@@ -68,6 +72,14 @@ projects/LifeBusinessSuit/LBS_TodoAPP/apps/bot/src/lib/hubAuthClient.ts|client
 projects/LifeBusinessSuit/LBS_TodoAPP/apps/bot/src/lib/hubAuthBot.ts|bot
 projects/LifeBusinessSuit/LBS_NotesAPP/apps/bot/src/lib/hubAuthClient.ts|client
 projects/LifeBusinessSuit/LBS_NotesAPP/apps/bot/src/lib/hubAuthBot.ts|bot
+projects/LifeBusinessSuit/LBS_MoneyAPP/apps/frontend/src/components/SegurancaConta.vue|seguranca
+projects/LifeBusinessSuit/LBS_TodoAPP/apps/frontend/src/components/SegurancaConta.vue|seguranca
+projects/LifeBusinessSuit/LBS_NaoTeEsquece/apps/frontend/src/components/SegurancaConta.vue|seguranca
+projects/LifeBusinessSuit/LBS_NotesAPP/apps/frontend/src/components/SegurancaConta.vue|seguranca
+projects/Astral_Wave/astralwavelabel/apps/artist/src/components/SegurancaConta.vue|seguranca
+projects/Astral_Wave/astralwavelabel/apps/cloudshell/web/src/components/SegurancaConta.vue|seguranca
+projects/moabinhoia/apps/web/src/components/SegurancaConta.vue|seguranca
+projects/Moving/MovingUP/apps/web/src/components/SegurancaConta.vue|seguranca
 LISTA
 )
 
@@ -81,6 +93,9 @@ for linha in $DESTINOS; do
     [ "$tipo" = "client" ] && origem="$CLIENT"
     [ "$tipo" = "bot" ] && origem="$BOT"
     [ "$tipo" = "passkey" ] && origem="$PASSKEY"
+    [ "$tipo" = "seguranca" ] && origem="$SEGURANCA"
+    # Filtro opcional por tipo (SO_TIPOS): pula o que não foi pedido.
+    if [ -n "$SO_TIPOS" ] && ! printf ' %s ' "$SO_TIPOS" | grep -q " $tipo "; then continue; fi
     destino="$BASE/$rel"
 
     if [ "$MODO" = "--check" ]; then
