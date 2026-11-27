@@ -148,6 +148,45 @@
 }
 
 @layer components {
+  /* Item do cofre (27/11/2026): ao passar o mouse sobe um pouco, ganha o contorno e a barra na cor de destaque. */
+  .item-cofre {
+    position: relative;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  }
+  .item-cofre::before {
+    content: '';
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: rgb(var(--acento));
+    transform: scaleY(0);
+    transition: transform 0.25s ease;
+  }
+  .item-cofre:hover,
+  .item-cofre:focus-visible {
+    transform: translateY(-2px);
+    background-color: rgb(var(--acento) / 0.08);
+    box-shadow: 0 0 0 1px rgb(var(--acento) / 0.45), 0 8px 20px -8px rgb(var(--acento) / 0.45);
+  }
+  .item-cofre:hover::before,
+  .item-cofre:focus-visible::before {
+    transform: scaleY(1);
+  }
+  .item-cofre:active {
+    transform: translateY(0) scale(0.995);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .item-cofre,
+    .item-cofre::before {
+      transition: none;
+    }
+    .item-cofre:hover {
+      transform: none;
+    }
+  }
+}
+
+@layer components {
   /* Material translúcido das barras e folhas flutuantes. */
   .material {
     background: var(--material);

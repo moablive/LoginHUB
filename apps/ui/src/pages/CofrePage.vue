@@ -447,8 +447,8 @@ function editarItem(item: ItemAberto) {
   menuCampos.value = false;
   camposAdicionados.value = new Set();
   // `entrada` (chave de entrada pelo cofre, db/016) vai junto: o formulário não mostra, mas salvar não pode perdê-la.
-  const { titulo, usuario, senha, url, totp, notas, entrada } = item;
-  form.value = { titulo, usuario, senha, url, totp, notas, ...(entrada ? { entrada } : {}) };
+  const { titulo, usuario, senha, url, totp, notas, icone, entrada } = item;
+  form.value = { titulo, usuario, senha, url, totp, notas, ...(icone ? { icone } : {}), ...(entrada ? { entrada } : {}) };
   editando.value = { id: item.id, cofreId: item.cofre_id };
 }
 // Clicar no cartão abre a janela do item; botões e links de dentro seguem com a ação própria.
@@ -456,6 +456,44 @@ function abrirItem(e: MouseEvent, item: ItemAberto) {
   if ((e.target as HTMLElement).closest('button, a, input, textarea')) return;
   if (offline.value || !podeEscrever(item.cofre_id)) return;
   editarItem(item);
+}
+// Ícone próprio do item: a imagem é reduzida a 64 px (PNG) no navegador e vai cifrada junto do item.
+const erroIcone = ref<string | null>(null);
+async function escolherIcone(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const arquivo = input.files?.[0];
+  input.value = '';
+  if (!arquivo) return;
+  erroIcone.value = null;
+  if (!arquivo.type.startsWith('image/') || arquivo.size > 5_000_000) {
+    erroIcone.value = 'Escolha uma imagem (PNG, JPG, WebP ou SVG) de até 5 MB.';
+    return;
+  }
+  const url = URL.createObjectURL(arquivo);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const lado = 64;
+    const tela = document.createElement('canvas');
+    tela.width = lado;
+    tela.height = lado;
+    const ctx = tela.getContext('2d');
+    if (!ctx) throw new Error('canvas');
+    const w = img.naturalWidth || lado;
+    const h = img.naturalHeight || lado;
+    const escala = Math.min(lado / w, lado / h);
+    ctx.drawImage(img, (lado - w * escala) / 2, (lado - h * escala) / 2, w * escala, h * escala);
+    form.value.icone = tela.toDataURL('image/png');
+  } catch {
+    erroIcone.value = 'Não consegui ler essa imagem.';
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+function tirarIcone() {
+  const { icone: _tirado, ...resto } = form.value;
+  form.value = resto;
 }
 function gerarNaEdicao() {
   form.value.senha = gerarSenha();
@@ -780,9 +818,9 @@ async function confirmarTrocaSenha() {
         />
 
         <ul v-else class="space-y-2">
-          <li v-for="item in visiveis" :key="item.id" class="cursor-pointer overflow-hidden rounded-celula bg-surface p-4 transition-colors hover:bg-fill-2" @click="abrirItem($event, item)">
+          <li v-for="item in visiveis" :key="item.id" class="item-cofre cursor-pointer overflow-hidden rounded-celula bg-surface p-4" @click="abrirItem($event, item)">
             <div class="flex items-start gap-3">
-              <CofreItemIcone :titulo="item.titulo" :url="item.url" :apps="logosDosApps" />
+              <CofreItemIcone :titulo="item.titulo" :url="item.url" :apps="logosDosApps" :icone="item.icone" />
               <div class="min-w-0 flex-1 space-y-1">
                 <p class="flex flex-wrap items-center gap-2 text-headline font-semibold">
                   <span class="truncate">{{ item.titulo }}</span>
@@ -850,6 +888,20 @@ async function confirmarTrocaSenha() {
         <!-- Trocar o cofre de um item que já existe move o item: ele é recifrado com a chave do cofre novo. -->
         <UiSelect v-if="cofresComEscrita.length > 1" v-model="editando.cofreId" rotulo="Cofre" :opcoes="cofresComEscrita.map((c) => ({ valor: c.id, rotulo: papelDoCofre(c.id) === 'dono' ? c.nome : `${c.nome} (compartilhado)` }))" />
         <UiTextField v-model="form.titulo" rotulo="Título" placeholder="Ex.: GitHub, Cloudflare, awlsrv sudo" required />
+        <div class="flex items-center gap-3">
+          <CofreItemIcone :titulo="form.titulo" :url="form.url" :apps="logosDosApps" :icone="form.icone" />
+          <div class="min-w-0 flex-1">
+            <p class="text-footnote text-label-2">Ícone: {{ form.icone ? 'imagem sua' : 'o do site (favicon) ou as iniciais' }}</p>
+            <div class="flex flex-wrap gap-2">
+              <label class="inline-flex cursor-pointer items-center rounded-lg px-2 py-1 text-footnote text-accent hover:bg-accent/10">
+                {{ form.icone ? 'Trocar imagem' : 'Escolher imagem' }}
+                <input type="file" accept="image/*" class="sr-only" @change="escolherIcone" />
+              </label>
+              <UiButton v-if="form.icone" variante="plain" tamanho="small" @click="tirarIcone">Usar o do site</UiButton>
+            </div>
+            <p v-if="erroIcone" class="text-caption-1 text-danger">{{ erroIcone }}</p>
+          </div>
+        </div>
         <UiTextField v-if="temCampo('usuario')" v-model="form.usuario" rotulo="Usuário / e-mail" autocomplete="off" />
         <div v-if="temCampo('senha')" class="space-y-1">
           <UiTextField v-model="form.senha" rotulo="Senha" :type="verSenhaEdicao ? 'text' : 'password'" autocomplete="new-password" />

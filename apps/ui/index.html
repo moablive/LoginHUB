@@ -30,8 +30,9 @@
     <script>
       (function () {
         try {
-          var escuro = localStorage.getItem('theme') === 'dark' ||
-            (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var t = localStorage.getItem('theme');
+          var escuro = t === 'dark' || t === 'color' ||
+            (!t && window.matchMedia('(prefers-color-scheme: dark)').matches);
           if (escuro) document.documentElement.classList.add('dark');
         } catch (e) {}
       })();

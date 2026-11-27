@@ -82,6 +82,8 @@ export interface ItemCofre {
   /** Chave base32 ou URI otpauth:// do 2FA do site. */
   totp: string;
   notas: string;
+  /** Ícone escolhido pelo usuário (data:image/png reduzido a 64 px), vai cifrado junto do item; vence o favicon do site. */
+  icone?: string;
   /** Item que guarda a chave de entrada de uma conta de app (db/016). */
   entrada?: EntradaDoItem;
 }
