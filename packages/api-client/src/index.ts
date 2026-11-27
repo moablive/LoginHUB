@@ -603,8 +603,15 @@ export const twoFactorApi = {
    * o QR a partir dela no cliente (o servidor não manda imagem de propósito:
    * evita trafegar PNG em base64 e deixa o app escolher a biblioteca).
    */
-  setup: async (): Promise<TwoFactorSetupResponse> => {
-    const { data } = await api.post<TwoFactorSetupResponse>('/auth/2fa/setup', {});
+  setup: async (prova?: { challengeId: string; codigoEmail: string }): Promise<TwoFactorSetupResponse> => {
+    // Com a sessão aberta o hub exige antes o código novo do e-mail (`pedirCodigoEmail`); o passe do convite não.
+    const { data } = await api.post<TwoFactorSetupResponse>('/auth/2fa/setup', prova ?? {});
+    return data;
+  },
+
+  /** Manda um código novo ao e-mail da conta para ativar ou desativar o app autenticador. */
+  pedirCodigoEmail: async (): Promise<{ challengeId: string; expiresIn: number }> => {
+    const { data } = await api.post<{ challengeId: string; expiresIn: number }>('/auth/2fa/email-code', {});
     return data;
   },
 
@@ -640,7 +647,7 @@ export const twoFactorApi = {
   },
 
   /** Desativa o 2FA. Exige código do autenticador OU de recuperação. */
-  disable: async (prova: { codigo?: string; backupCode?: string }): Promise<{ ativo: false }> => {
+  disable: async (prova: { codigo?: string; backupCode?: string } | { challengeId: string; codigoEmail: string }): Promise<{ ativo: false }> => {
     const { data } = await api.post<{ ativo: false }>('/auth/2fa/disable', prova);
     return data;
   },

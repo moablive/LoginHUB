@@ -26,7 +26,7 @@ interface HubLike {
   twoFactor: {
     status(): Promise<{
       ativo: boolean;
-      obrigatorio: boolean;
+      obrigatorio?: boolean;
       backupCodesRestantes: number;
       podeDesativar?: boolean;
       contaDeCpf?: boolean;
@@ -45,7 +45,7 @@ const emit = defineEmits<{ (e: 'mudou'): void }>();
 type Etapa = 'carregando' | 'inicio' | 'email' | 'qr' | 'codigos' | 'desativar' | 'novosCodigos';
 
 const etapa = ref<Etapa>('carregando');
-const status = ref<{ ativo: boolean; obrigatorio: boolean; backupCodesRestantes: number; podeDesativar?: boolean; contaDeCpf?: boolean } | null>(null);
+const status = ref<{ ativo: boolean; obrigatorio?: boolean; backupCodesRestantes: number; podeDesativar?: boolean; contaDeCpf?: boolean } | null>(null);
 const erro = ref('');
 const ocupado = ref(false);
 const challengeId = ref('');

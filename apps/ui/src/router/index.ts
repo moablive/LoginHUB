@@ -22,6 +22,8 @@ export const router = createRouter({
     // Entrada pelo cofre (db/016): o app manda para cá com o passe; a página cuida da sessão do hub e do cofre.
     { path: '/cofre/entrada', name: 'cofre-entrada', component: () => import('@/pages/CofreEntradaPage.vue') },
     { path: '/enrolar-2fa', name: 'enrolar-2fa', component: () => import('@/pages/Enroll2FAPage.vue') },
+    // Segurança da própria conta (27/11/2026): ativar o app autenticador. Qualquer sessão do hub; a página manda ao login sem ela.
+    { path: '/seguranca', name: 'seguranca', component: () => import('@/pages/SegurancaPage.vue') },
 
     // A home `/` (carga nova) é a página de venda, servida pelo nginx (lp/); aqui só a navegação interna.
     { path: '/', redirect: '/dashboard' },

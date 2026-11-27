@@ -260,6 +260,10 @@ const seta =
           <UiButton v-if="master" variante="plain" icone aria-label="Digital do master" title="Entrar no painel com a digital (Touch ID, Face ID)" @click="mostrarDigitalMaster = true">
             <FingerPrintIcon class="h-6 w-6" />
           </UiButton>
+          <UiButton v-if="!master" variante="gray" tamanho="small" to="/seguranca" title="Ativar o aplicativo autenticador na sua conta">
+            <FingerPrintIcon class="h-4 w-4" />
+            Segurança
+          </UiButton>
           <UiButton v-if="master" variante="gray" tamanho="small" to="/cofre" title="Cofre de senhas e códigos 2FA, cifrado no navegador">
             <LockClosedIcon class="h-4 w-4" />
             Cofre

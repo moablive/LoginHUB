@@ -80,6 +80,7 @@ projects/Astral_Wave/astralwavelabel/apps/artist/src/components/SegurancaConta.v
 projects/Astral_Wave/astralwavelabel/apps/cloudshell/web/src/components/SegurancaConta.vue|seguranca
 projects/moabinhoia/apps/web/src/components/SegurancaConta.vue|seguranca
 projects/Moving/MovingUP/apps/web/src/components/SegurancaConta.vue|seguranca
+server/LoginHUB/apps/ui/src/components/seguranca/SegurancaConta.vue|seguranca
 LISTA
 )
 
