@@ -77,7 +77,7 @@ function mensagem(e: unknown, padrao: string): string {
   if (axios.isAxiosError(e)) {
     const d = e.response?.data as { error?: string; message?: string } | undefined;
     if (d?.error === 'COFRE_NAO_LIBERADO') return d.message || 'O cofre não está liberado para o seu aplicativo.';
-    if (e.response?.status === 401) return 'CPF/e-mail ou senha incorretos. Quem entra com o CPF usa o próprio CPF como senha (só os números).';
+    if (e.response?.status === 401) return 'E-mail ou senha incorretos.';
     if (d?.message) return d.message;
   }
   return padrao;
@@ -154,11 +154,11 @@ function sair() {
   <AuthShell
     v-else-if="etapa === 'login'"
     titulo="LoginHub"
-    texto="Entre com o CPF ou o e-mail da conta do seu aplicativo. Funcionário da Sul Alimentos entra com CPF + CPF; num aparelho novo, o código do Google Authenticator é pedido uma vez."
+    texto="Entre com o e-mail e a senha da sua conta. Num aparelho novo, o código do Google Authenticator é pedido uma vez."
   >
     <UiSegmented v-model="aba" :opcoes="ABAS" rotulo="Tipo de acesso" class="mb-5" @update:model-value="trocarAba" />
     <form class="space-y-4" @submit.prevent="entrar()">
-      <UiTextField v-model="email" rotulo="CPF ou e-mail" type="text" placeholder="CPF (só números) ou e-mail" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+      <UiTextField v-model="email" rotulo="E-mail" type="text" inputmode="email" placeholder="voce@email.com" autocomplete="username" autocapitalize="none" spellcheck="false" required>
         <template #icone><UserIcon /></template>
       </UiTextField>
       <UiTextField v-model="senha" rotulo="Senha" type="password" revelar autocomplete="current-password" required />

@@ -83,7 +83,7 @@ async function copiar(valor: string, chave: string) {
           <span v-if="copiado === 't'" class="text-caption-1 text-success">copiado</span>
         </div>
 
-        <p class="text-footnote text-label-2">Entre no aplicativo com o seu CPF + CPF. Num aparelho novo, ele pede este código uma vez.</p>
+        <p class="text-footnote text-label-2">Num aparelho novo, o aplicativo pede este código uma vez.</p>
         <p v-if="erro" role="alert" class="text-footnote text-danger">{{ erro }}</p>
       </div>
     </div>
