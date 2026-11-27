@@ -954,11 +954,11 @@ async function confirmarTrocaSenha() {
         <UiButton v-if="selecionado" class="mb-3 lg:hidden" variante="plain" tamanho="small" @click="selecionadoId = null"><ChevronLeftIcon class="h-4 w-4" />Voltar</UiButton>
         <template v-for="item in selecionado ? [selecionado] : []" :key="item.id">
           <!-- Cabeçalho: ícone, título, cofre e as ações (molde do Proton Pass). -->
-          <div class="mb-3 flex items-start gap-3">
+          <div class="mb-3 flex flex-wrap items-start gap-x-3 gap-y-2">
             <CofreItemIcone :titulo="item.titulo" :url="item.url" :apps="logosDosApps" :icone="item.icone" />
-            <div class="min-w-0 flex-1">
+            <div class="min-w-0 flex-1 basis-48">
               <h2 class="flex flex-wrap items-center gap-2 text-title-3 font-semibold">
-                <span class="break-words">{{ item.titulo }}</span>
+                <span class="min-w-0 [overflow-wrap:anywhere]">{{ item.titulo }}</span>
                 <UiBadge v-if="papelDoCofre(item.cofre_id) !== 'dono'" :tom="papelDoCofre(item.cofre_id) === 'escrita' ? 'accent' : 'neutro'" :title="`Cofre de ${donoDoCofreNome(item.cofre_id)}`">
                   {{ papelDoCofre(item.cofre_id) === 'escrita' ? 'compartilhado · escrita' : 'compartilhado · somente leitura' }}
                 </UiBadge>
@@ -966,7 +966,7 @@ async function confirmarTrocaSenha() {
               </h2>
               <p class="text-footnote text-label-2">{{ nomeDoCofre(item.cofre_id) }}</p>
             </div>
-            <div class="flex shrink-0 items-center gap-1">
+            <div class="ml-auto flex shrink-0 items-center gap-1">
               <UiButton variante="tinted" tamanho="small" :disabled="offline || !podeEscrever(item.cofre_id)" :title="podeEscrever(item.cofre_id) ? undefined : 'Somente leitura'" :aria-label="`Editar ${item.titulo}`" @click="editarItem(item)"><PencilSquareIcon class="h-4 w-4" />Editar</UiButton>
               <UiButton variante="plain" icone :disabled="offline || !podeEscrever(item.cofre_id) || cofresComEscrita.length < 2" :title="cofresComEscrita.length < 2 ? 'Precisa de outro cofre' : 'Mover para outro cofre (ou arraste o item até o cofre)'" :aria-label="`Mover ${item.titulo} para outro cofre`" @click="itemParaMover = item"><FolderArrowDownIcon class="h-5 w-5" /></UiButton>
               <UiButton variante="plain" icone :disabled="offline || !podeEscrever(item.cofre_id)" :title="podeEscrever(item.cofre_id) ? undefined : 'Somente leitura'" class="!text-danger hover:!bg-danger/10" :aria-label="`Apagar ${item.titulo}`" @click="pedirApagar(item)"><TrashIcon class="h-5 w-5" /></UiButton>
@@ -980,7 +980,7 @@ async function confirmarTrocaSenha() {
                 <EnvelopeIcon class="h-5 w-5 shrink-0 text-label-2" aria-hidden="true" />
                 <div class="min-w-0 flex-1">
                   <p class="text-footnote text-label-2">Usuário / e-mail</p>
-                  <p class="truncate font-mono text-body">{{ item.usuario }}</p>
+                  <p class="truncate font-mono text-body" :title="item.usuario">{{ item.usuario }}</p>
                 </div>
                 <span v-if="copiado === item.id + ':u'" class="text-caption-1 text-success">copiado</span>
                 <button type="button" class="text-accent" title="Copiar usuário" aria-label="Copiar usuário" @click="copiar(item.usuario, item.id + ':u')"><ClipboardDocumentIcon class="h-5 w-5" /></button>
