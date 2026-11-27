@@ -18,6 +18,11 @@ import {
   LockOpenIcon,
   PencilSquareIcon,
   ChevronLeftIcon,
+  ClockIcon,
+  DocumentTextIcon,
+  EnvelopeIcon,
+  GlobeAltIcon,
+  TagIcon,
   FolderArrowDownIcon,
   PhotoIcon,
   XMarkIcon,
@@ -575,6 +580,14 @@ function arrastarItem(e: DragEvent, item: ItemAberto) {
   e.dataTransfer.setData('text/x-loginhub-item', item.id);
   e.dataTransfer.effectAllowed = 'move';
 }
+// Indicativo da força da senha (27/11/2026): tamanho e variedade de caracteres, só uma estimativa para o olho.
+function forcaDaSenha(senha: string): { rotulo: string; cor: string } {
+  const classes = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter((r) => r.test(senha)).length;
+  const pontos = senha.length + classes * 3;
+  if (senha.length >= 16 || pontos >= 24) return { rotulo: 'Forte', cor: 'text-success' };
+  if (senha.length >= 10 && pontos >= 16) return { rotulo: 'Média', cor: 'text-warning' };
+  return { rotulo: 'Fraca', cor: 'text-danger' };
+}
 const itemParaApagar = ref<ItemAberto | null>(null);
 // Apagar item pede a palavra-passe do cofre (27/11/2026). Mesma regra do login: 3 erradas e o cofre tranca.
 const MAX_ERROS_APAGAR = 3;
@@ -940,73 +953,105 @@ async function confirmarTrocaSenha() {
       >
         <UiButton v-if="selecionado" class="mb-3 lg:hidden" variante="plain" tamanho="small" @click="selecionadoId = null"><ChevronLeftIcon class="h-4 w-4" />Voltar</UiButton>
         <template v-for="item in selecionado ? [selecionado] : []" :key="item.id">
-          <div class="rounded-celula bg-surface p-5">
-            <div class="flex items-start gap-3">
-              <CofreItemIcone :titulo="item.titulo" :url="item.url" :apps="logosDosApps" :icone="item.icone" />
-              <div class="min-w-0 flex-1 space-y-1">
-                <p class="flex flex-wrap items-center gap-2 text-headline font-semibold">
-                  <span class="truncate">{{ item.titulo }}</span>
-                  <UiBadge v-if="busca || cofreAtual === null">{{ nomeDoCofre(item.cofre_id) }}</UiBadge>
-                  <UiBadge v-if="papelDoCofre(item.cofre_id) !== 'dono'" :tom="papelDoCofre(item.cofre_id) === 'escrita' ? 'accent' : 'neutro'" :title="`Cofre de ${donoDoCofreNome(item.cofre_id)}`">
-                    {{ papelDoCofre(item.cofre_id) === 'escrita' ? 'compartilhado · escrita' : 'compartilhado · somente leitura' }}
-                  </UiBadge>
-                  <UiBadge v-if="item.entrada" title="Chave de entrada pelo cofre (db/016): o app entra com ela">entrada pelo cofre</UiBadge>
-                </p>
-                <a v-if="item.url" :href="/^https?:\/\//i.test(item.url) ? item.url : undefined" target="_blank" rel="noopener noreferrer" class="block truncate text-footnote text-accent">{{ item.url }}</a>
+          <!-- Cabeçalho: ícone, título, cofre e as ações (molde do Proton Pass). -->
+          <div class="mb-3 flex items-start gap-3">
+            <CofreItemIcone :titulo="item.titulo" :url="item.url" :apps="logosDosApps" :icone="item.icone" />
+            <div class="min-w-0 flex-1">
+              <h2 class="flex flex-wrap items-center gap-2 text-title-3 font-semibold">
+                <span class="break-words">{{ item.titulo }}</span>
+                <UiBadge v-if="papelDoCofre(item.cofre_id) !== 'dono'" :tom="papelDoCofre(item.cofre_id) === 'escrita' ? 'accent' : 'neutro'" :title="`Cofre de ${donoDoCofreNome(item.cofre_id)}`">
+                  {{ papelDoCofre(item.cofre_id) === 'escrita' ? 'compartilhado · escrita' : 'compartilhado · somente leitura' }}
+                </UiBadge>
+                <UiBadge v-if="item.entrada" title="Chave de entrada pelo cofre (db/016): o app entra com ela">entrada pelo cofre</UiBadge>
+              </h2>
+              <p class="text-footnote text-label-2">{{ nomeDoCofre(item.cofre_id) }}</p>
+            </div>
+            <div class="flex shrink-0 items-center gap-1">
+              <UiButton variante="tinted" tamanho="small" :disabled="offline || !podeEscrever(item.cofre_id)" :title="podeEscrever(item.cofre_id) ? undefined : 'Somente leitura'" :aria-label="`Editar ${item.titulo}`" @click="editarItem(item)"><PencilSquareIcon class="h-4 w-4" />Editar</UiButton>
+              <UiButton variante="plain" icone :disabled="offline || !podeEscrever(item.cofre_id) || cofresComEscrita.length < 2" :title="cofresComEscrita.length < 2 ? 'Precisa de outro cofre' : 'Mover para outro cofre (ou arraste o item até o cofre)'" :aria-label="`Mover ${item.titulo} para outro cofre`" @click="itemParaMover = item"><FolderArrowDownIcon class="h-5 w-5" /></UiButton>
+              <UiButton variante="plain" icone :disabled="offline || !podeEscrever(item.cofre_id)" :title="podeEscrever(item.cofre_id) ? undefined : 'Somente leitura'" class="!text-danger hover:!bg-danger/10" :aria-label="`Apagar ${item.titulo}`" @click="pedirApagar(item)"><TrashIcon class="h-5 w-5" /></UiButton>
+            </div>
+          </div>
 
-                <div v-if="item.usuario" class="flex items-center gap-2 text-subhead">
-                  <span class="w-16 shrink-0 text-label-2">Usuário</span>
-                  <span class="min-w-0 truncate font-mono">{{ item.usuario }}</span>
-                  <button type="button" class="text-accent" :title="'Copiar usuário'" @click="copiar(item.usuario, item.id + ':u')">
-                    <ClipboardDocumentIcon class="h-4 w-4" />
-                  </button>
-                  <span v-if="copiado === item.id + ':u'" class="text-caption-1 text-success">copiado</span>
+          <div class="space-y-3">
+            <!-- Cada campo: ícone que indica o tipo, o nome pequeno em cima e o valor embaixo. -->
+            <div v-if="item.usuario || item.senha || codigoDe(item)" class="divide-y divide-separator overflow-hidden rounded-celula bg-surface">
+              <div v-if="item.usuario" class="flex items-center gap-3 px-4 py-3">
+                <EnvelopeIcon class="h-5 w-5 shrink-0 text-label-2" aria-hidden="true" />
+                <div class="min-w-0 flex-1">
+                  <p class="text-footnote text-label-2">Usuário / e-mail</p>
+                  <p class="truncate font-mono text-body">{{ item.usuario }}</p>
                 </div>
-
-                <div v-if="item.senha" class="flex items-center gap-2 text-subhead">
-                  <span class="w-16 shrink-0 text-label-2">Senha</span>
-                  <span class="min-w-0 truncate font-mono">{{ revelados.has(item.id) ? item.senha : '••••••••••' }}</span>
-                  <button type="button" class="text-label-2" :title="revelados.has(item.id) ? 'Esconder' : 'Mostrar'" @click="alternarRevelar(item.id)">
-                    <EyeSlashIcon v-if="revelados.has(item.id)" class="h-4 w-4" /><EyeIcon v-else class="h-4 w-4" />
-                  </button>
-                  <button type="button" class="text-accent" title="Copiar senha" @click="copiar(item.senha, item.id + ':s')">
-                    <ClipboardDocumentIcon class="h-4 w-4" />
-                  </button>
-                  <span v-if="copiado === item.id + ':s'" class="text-caption-1 text-success">copiada (some em 30 s)</span>
-                </div>
-
-                <div v-if="codigoDe(item)" class="flex items-center gap-2 text-subhead">
-                  <span class="w-16 shrink-0 text-label-2">2FA</span>
-                  <span class="font-mono text-title-3 tracking-widest text-accent">{{ codigoDe(item)!.codigo }}</span>
-                  <span class="text-caption-1 text-label-2">{{ codigoDe(item)!.resta }}s</span>
-                  <button type="button" class="text-accent" title="Copiar código" @click="copiar(codigoDe(item)!.codigo, item.id + ':t')">
-                    <ClipboardDocumentIcon class="h-4 w-4" />
-                  </button>
-                  <span v-if="copiado === item.id + ':t'" class="text-caption-1 text-success">copiado</span>
-                </div>
-
-                <div v-for="(c, i) in item.campos ?? []" :key="i" class="flex items-center gap-2 text-subhead">
-                  <span class="w-16 shrink-0 truncate text-label-2" :title="c.rotulo">{{ c.rotulo }}</span>
-                  <span class="min-w-0 truncate font-mono">{{ c.secreto && !revelados.has(item.id + ':c' + i) ? '••••••••••' : c.valor }}</span>
-                  <button v-if="c.secreto" type="button" class="text-label-2" :title="revelados.has(item.id + ':c' + i) ? 'Esconder' : 'Mostrar'" @click="alternarRevelar(item.id + ':c' + i)">
-                    <EyeSlashIcon v-if="revelados.has(item.id + ':c' + i)" class="h-4 w-4" /><EyeIcon v-else class="h-4 w-4" />
-                  </button>
-                  <button type="button" class="text-accent" title="Copiar" @click="copiar(c.valor, item.id + ':c' + i)">
-                    <ClipboardDocumentIcon class="h-4 w-4" />
-                  </button>
-                  <span v-if="copiado === item.id + ':c' + i" class="text-caption-1 text-success">copiado</span>
-                </div>
-
-                <p v-if="item.notas" class="whitespace-pre-wrap break-all text-footnote text-label-2">{{ item.notas }}</p>
+                <span v-if="copiado === item.id + ':u'" class="text-caption-1 text-success">copiado</span>
+                <button type="button" class="text-accent" title="Copiar usuário" aria-label="Copiar usuário" @click="copiar(item.usuario, item.id + ':u')"><ClipboardDocumentIcon class="h-5 w-5" /></button>
               </div>
-              <div class="flex shrink-0 flex-col gap-1">
-                <UiButton variante="plain" icone :disabled="offline || !podeEscrever(item.cofre_id) || cofresComEscrita.length < 2" :title="cofresComEscrita.length < 2 ? 'Precisa de outro cofre' : 'Mover para outro cofre (ou arraste o item até o cofre)'" :aria-label="`Mover ${item.titulo} para outro cofre`" @click="itemParaMover = item"><FolderArrowDownIcon class="h-5 w-5" /></UiButton>
-                <UiButton variante="plain" icone :disabled="offline || !podeEscrever(item.cofre_id)" :title="podeEscrever(item.cofre_id) ? undefined : 'Somente leitura'" :aria-label="`Editar ${item.titulo}`" @click="editarItem(item)"><PencilSquareIcon class="h-5 w-5" /></UiButton>
-                <UiButton variante="plain" icone :disabled="offline || !podeEscrever(item.cofre_id)" :title="podeEscrever(item.cofre_id) ? undefined : 'Somente leitura'" class="!text-danger hover:!bg-danger/10" :aria-label="`Apagar ${item.titulo}`" @click="pedirApagar(item)">
-                  <TrashIcon class="h-5 w-5" />
-                </UiButton>
+
+              <div v-if="item.senha" class="flex items-center gap-3 px-4 py-3">
+                <KeyIcon class="h-5 w-5 shrink-0 text-label-2" aria-hidden="true" />
+                <div class="min-w-0 flex-1">
+                  <p class="text-footnote text-label-2">Senha</p>
+                  <p class="truncate font-mono text-body">{{ revelados.has(item.id) ? item.senha : '••••••••••••' }}</p>
+                </div>
+                <span class="flex shrink-0 items-center gap-1 text-footnote font-semibold" :class="forcaDaSenha(item.senha).cor">
+                  <ShieldCheckIcon class="h-4 w-4" aria-hidden="true" />{{ forcaDaSenha(item.senha).rotulo }}
+                </span>
+                <span v-if="copiado === item.id + ':s'" class="text-caption-1 text-success">copiada (some em 30 s)</span>
+                <button type="button" class="text-label-2" :title="revelados.has(item.id) ? 'Esconder' : 'Mostrar'" :aria-label="revelados.has(item.id) ? 'Esconder a senha' : 'Mostrar a senha'" @click="alternarRevelar(item.id)">
+                  <EyeSlashIcon v-if="revelados.has(item.id)" class="h-5 w-5" /><EyeIcon v-else class="h-5 w-5" />
+                </button>
+                <button type="button" class="text-accent" title="Copiar senha" aria-label="Copiar senha" @click="copiar(item.senha, item.id + ':s')"><ClipboardDocumentIcon class="h-5 w-5" /></button>
+              </div>
+
+              <div v-if="codigoDe(item)" class="flex items-center gap-3 px-4 py-3">
+                <ClockIcon class="h-5 w-5 shrink-0 text-label-2" aria-hidden="true" />
+                <div class="min-w-0 flex-1">
+                  <p class="text-footnote text-label-2">Código 2FA</p>
+                  <p class="flex items-baseline gap-2">
+                    <span class="font-mono text-title-3 tracking-widest text-accent">{{ codigoDe(item)!.codigo }}</span>
+                    <span class="text-caption-1 text-label-2">{{ codigoDe(item)!.resta }}s</span>
+                  </p>
+                </div>
+                <span v-if="copiado === item.id + ':t'" class="text-caption-1 text-success">copiado</span>
+                <button type="button" class="text-accent" title="Copiar código" aria-label="Copiar código 2FA" @click="copiar(codigoDe(item)!.codigo, item.id + ':t')"><ClipboardDocumentIcon class="h-5 w-5" /></button>
               </div>
             </div>
+
+            <div v-if="item.url" class="flex items-center gap-3 rounded-celula bg-surface px-4 py-3">
+              <GlobeAltIcon class="h-5 w-5 shrink-0 text-label-2" aria-hidden="true" />
+              <div class="min-w-0 flex-1">
+                <p class="text-footnote text-label-2">Site</p>
+                <a :href="/^https?:\/\//i.test(item.url) ? item.url : undefined" target="_blank" rel="noopener noreferrer" class="block truncate text-body text-accent">{{ item.url }}</a>
+              </div>
+              <button type="button" class="text-accent" title="Copiar endereço" aria-label="Copiar endereço" @click="copiar(item.url, item.id + ':l')"><ClipboardDocumentIcon class="h-5 w-5" /></button>
+            </div>
+
+            <div v-if="(item.campos ?? []).length" class="divide-y divide-separator overflow-hidden rounded-celula bg-surface">
+              <div v-for="(c, i) in item.campos ?? []" :key="i" class="flex items-center gap-3 px-4 py-3">
+                <TagIcon class="h-5 w-5 shrink-0 text-label-2" aria-hidden="true" />
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-footnote text-label-2">{{ c.rotulo || 'Campo' }}</p>
+                  <p class="truncate font-mono text-body">{{ c.secreto && !revelados.has(item.id + ':c' + i) ? '••••••••••••' : c.valor }}</p>
+                </div>
+                <span v-if="copiado === item.id + ':c' + i" class="text-caption-1 text-success">copiado</span>
+                <button v-if="c.secreto" type="button" class="text-label-2" :title="revelados.has(item.id + ':c' + i) ? 'Esconder' : 'Mostrar'" :aria-label="revelados.has(item.id + ':c' + i) ? 'Esconder o valor' : 'Mostrar o valor'" @click="alternarRevelar(item.id + ':c' + i)">
+                  <EyeSlashIcon v-if="revelados.has(item.id + ':c' + i)" class="h-5 w-5" /><EyeIcon v-else class="h-5 w-5" />
+                </button>
+                <button type="button" class="text-accent" title="Copiar" aria-label="Copiar o valor" @click="copiar(c.valor, item.id + ':c' + i)"><ClipboardDocumentIcon class="h-5 w-5" /></button>
+              </div>
+            </div>
+
+            <div v-if="item.notas" class="flex items-start gap-3 rounded-celula bg-surface px-4 py-3">
+              <DocumentTextIcon class="mt-0.5 h-5 w-5 shrink-0 text-label-2" aria-hidden="true" />
+              <div class="min-w-0 flex-1">
+                <p class="text-footnote text-label-2">Notas</p>
+                <p class="whitespace-pre-wrap break-words text-body">{{ item.notas }}</p>
+              </div>
+              <button type="button" class="text-accent" title="Copiar notas" aria-label="Copiar notas" @click="copiar(item.notas, item.id + ':n')"><ClipboardDocumentIcon class="h-5 w-5" /></button>
+            </div>
+
+            <p v-if="item.atualizado_em" class="flex items-center gap-2 px-1 text-footnote text-label-2">
+              <ClockIcon class="h-4 w-4" aria-hidden="true" />Última alteração: {{ new Date(item.atualizado_em).toLocaleString('pt-BR', { dateStyle: 'medium', timeStyle: 'short' }) }}
+            </p>
           </div>
         </template>
         <p v-if="!selecionado" class="hidden rounded-celula bg-surface p-6 text-center text-subhead text-label-2 lg:block">Escolha um item na lista para ver os dados.</p>
