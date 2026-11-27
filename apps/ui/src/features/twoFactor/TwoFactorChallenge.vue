@@ -19,6 +19,18 @@ const props = defineProps<{
 const emit = defineEmits<{ autenticado: []; cancelar: [] }>();
 
 const codigo = ref('');
+/**
+ * Desafio do código de e-mail (27/11/2026): o token traz `met: 'email'` e o hub
+ * mandou 6 dígitos para a caixa da pessoa — sem autenticador, sem código de
+ * recuperação. Só lê a claim para escolher o texto; quem confere é o servidor.
+ */
+const porEmail = (() => {
+  try {
+    return JSON.parse(atob(props.challengeToken.split('.')[1]!.replace(/-/g, '+').replace(/_/g, '/'))).met === 'email';
+  } catch {
+    return false;
+  }
+})();
 const usarBackup = ref(false);
 const erro = ref<string | null>(null);
 const enviando = ref(false);
@@ -58,13 +70,15 @@ function alternarModo() {
   <form class="w-full space-y-4" @submit.prevent="enviar">
     <p class="text-center text-subhead text-label-2">
       {{
-        usarBackup
-          ? 'Digite um dos códigos de recuperação que você guardou.'
-          : 'Digite o código de 6 dígitos do seu aplicativo autenticador.'
+        porEmail
+          ? 'Enviamos um código de 6 dígitos para o seu e-mail. Ele vale por 5 minutos.'
+          : usarBackup
+            ? 'Digite um dos códigos de recuperação que você guardou.'
+            : 'Digite o código de 6 dígitos do seu aplicativo autenticador.'
       }}
     </p>
 
-    <DigiteDoGoogleAuth v-if="!usarBackup" />
+    <DigiteDoGoogleAuth v-if="!usarBackup && !porEmail" />
 
     <CodigoInput v-model="codigo" :backup="usarBackup" :rotulo="usarBackup ? 'Código de recuperação' : 'Código de 6 dígitos'" />
 
@@ -75,7 +89,7 @@ function alternarModo() {
     </UiButton>
 
     <div class="flex items-center justify-between gap-2">
-      <UiButton variante="plain" tamanho="small" @click="alternarModo">
+      <UiButton v-if="!porEmail" variante="plain" tamanho="small" @click="alternarModo">
         {{ usarBackup ? 'Usar o aplicativo autenticador' : 'Perdi o acesso ao autenticador' }}
       </UiButton>
       <UiButton v-if="podeCancelar" variante="plain" tamanho="small" class="!text-label-2" @click="emit('cancelar')">Cancelar</UiButton>

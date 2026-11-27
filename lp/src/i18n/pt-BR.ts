@@ -3,13 +3,13 @@
 //
 // O produto é o LOGINHUB, vendido por assinatura mensal (R$ 24,99). Desde
 // 26/11/2026 a página não vende mais consultoria de segurança: quem assina entra
-// no LoginHUB (cofre de senhas cifrado de ponta a ponta + Google Authenticator
+// no LoginHUB (cofre de senhas cifrado de ponta a ponta + código por e-mail
 // obrigatório). Promessa nova só entra aqui se o LoginHUB já fizer — ver README.
 const ptBR = {
   meta: {
     title: 'LoginHUB — Technology Astrał wave',
     description:
-      'O cofre de senhas e a identidade central da Astrał wave, agora para você: senhas cifradas de ponta a ponta, Google Authenticator obrigatório, abertura pela digital e app no celular. R$ 24,99 por mês.',
+      'O cofre de senhas e a identidade central da Astrał wave, agora para você: senhas cifradas de ponta a ponta, entrada por código no seu e-mail (sem app extra), abertura pela digital e app no celular. R$ 24,99 por mês.',
     ogLocale: 'pt_BR',
   },
 
@@ -35,7 +35,7 @@ const ptBR = {
     here: 'você está aqui',
     label: { name: 'Astrał wave Label', desc: 'A gravadora: artistas, lançamentos e demos.' },
     track: { name: 'Astrał wave Track', desc: 'Loja de faixas em WAV, pagas no Pix, direto de quem faz.' },
-    security: { name: 'LoginHUB', desc: 'Cofre de senhas e login seguro, com Google Authenticator obrigatório.' },
+    security: { name: 'LoginHUB', desc: 'Cofre de senhas e login seguro, com código de acesso enviado ao seu e-mail.' },
     artist: { name: 'Painel do artista', desc: 'Onde o DJ acompanha lançamentos, contratos e vendas.' },
   },
 
@@ -43,18 +43,18 @@ const ptBR = {
     badge: 'Cofre de senhas e identidade · R$ 24,99 por mês',
     title: 'Todas as suas senhas em um cofre que nem a gente consegue abrir',
     subtitle:
-      'O LoginHUB é a tecnologia de login e cofre que a Astrał wave usa nos próprios sistemas, agora na sua mão. As senhas são cifradas no seu aparelho, a entrada exige o Google Authenticator e o app se instala no celular.',
+      'O LoginHUB é a tecnologia de login e cofre que a Astrał wave usa nos próprios sistemas, agora na sua mão. As senhas são cifradas no seu aparelho, a entrada é por um código enviado ao seu e-mail, sem aplicativo extra, e o app se instala no celular.',
     ctaPrimary: 'Assinar por R$ 24,99/mês',
     ctaLogin: 'Entrar',
     ctaSecondary: 'Ver o app',
     stats: [
       { value: 'Ponta a ponta', label: 'cifrado no seu aparelho' },
-      { value: '2FA', label: 'Google Authenticator obrigatório' },
+      { value: 'E-mail', label: 'Código de acesso, sem app extra' },
       { value: 'R$ 24,99', label: 'por mês, no cartão' },
     ],
     vault: {
       label: 'Meu cofre',
-      status: '2FA ativo · cifrado no aparelho',
+      status: 'Código por e-mail · cifrado no aparelho',
       entries: [
         'Instagram @suamarca',
         'Meta Business Suite',
@@ -95,8 +95,8 @@ const ptBR = {
         body: 'Criptografia Argon2id e XChaCha20-Poly1305 no navegador. Cada item é cifrado antes de sair do seu aparelho.',
       },
       {
-        title: 'Google Authenticator obrigatório',
-        body: 'Segundo fator em todo acesso, com códigos de recuperação para o dia em que o celular sumir.',
+        title: 'Código de acesso por e-mail',
+        body: 'Em cada acesso enviamos 6 dígitos para o seu e-mail. Nada de instalar aplicativo de verificação: se você lê o e-mail, você entra.',
       },
       {
         title: 'Digital do aparelho',
@@ -115,8 +115,8 @@ const ptBR = {
         body: 'Uma conta só para entrar nos sistemas que usam o LoginHUB, com o mesmo segundo fator.',
       },
       {
-        title: 'Redefinição do 2FA pelo suporte',
-        body: 'Perdeu o celular e os códigos? A gente redefine o seu autenticador e você cadastra o novo no próximo acesso. O cofre segue trancado pela sua palavra-passe.',
+        title: 'Trocou de celular? Sem drama',
+        body: 'Como o código chega ao seu e-mail, um aparelho novo entra normalmente. O cofre segue trancado pela sua palavra-passe.',
       },
       {
         title: 'Tecnologia em produção',
@@ -133,14 +133,14 @@ const ptBR = {
     lead:
       'O LoginHUB abre no navegador e se instala como app. Sem loja, sem download pesado: é um toque para ter o cofre na tela inicial.',
     screens: [
-      { caption: 'Entrada com Google Authenticator' },
+      { caption: 'Entrada com código por e-mail' },
       { caption: 'Meu cofre, só seu' },
       { caption: 'Código 2FA ao vivo' },
     ],
     login: {
       title: 'Entrar',
-      field: 'Código do Google Authenticator',
-      hint: 'Abra o app autenticador e digite os 6 dígitos.',
+      field: 'Código recebido por e-mail',
+      hint: 'Abra o e-mail que enviamos e digite os 6 dígitos.',
       button: 'Confirmar',
     },
     vault: {
@@ -193,9 +193,9 @@ const ptBR = {
     {
       id: 'totp',
       kicker: 'Segundo fator',
-      title: 'Google Authenticator em todo acesso, sem exceção',
-      body: 'Senha sozinha não entra. O LoginHUB exige o código do autenticador e ainda guarda os códigos 2FA dos seus outros serviços ao lado da senha.',
-      points: ['Códigos de recuperação para o dia em que o celular sumir', 'Código ao vivo dentro do cofre', 'Redefinição pelo suporte se perder o aparelho'],
+      title: 'Código no e-mail em todo acesso, sem app extra',
+      body: 'Senha sozinha não entra: toda entrada confirma um código de 6 dígitos enviado ao seu e-mail (uso único, vale 5 minutos). E o cofre ainda guarda os códigos 2FA dos seus outros serviços ao lado da senha.',
+      points: ['Sem Google Authenticator nem outro aplicativo', 'Código ao vivo dentro do cofre', 'Quer mais segurança? Ative o autenticador por conta própria'],
     },
     {
       id: 'share',
@@ -226,8 +226,8 @@ const ptBR = {
         a: 'Você usa o kit de recuperação que recebe ao criar o cofre. Sem a palavra-passe e sem o kit ninguém consegue abrir o cofre, nem a gente: é o preço de ninguém mais poder entrar.',
       },
       {
-        q: 'Perdi o celular com o Google Authenticator. E agora?',
-        a: 'Use um código de recuperação ou fale com o suporte: o 2FA é redefinido e você cadastra o autenticador de novo no próximo acesso. O cofre continua trancado pela sua palavra-passe.',
+        q: 'Perdi o celular. E agora?',
+        a: 'Entre normalmente em outro aparelho: o código de acesso chega ao seu e-mail. O cofre continua trancado pela sua palavra-passe, que só você sabe.',
       },
       {
         q: 'Como funciona o pagamento?',
@@ -253,8 +253,8 @@ const ptBR = {
         body: 'Preencha nome, e-mail e telefone e pague no cartão pelo Mercado Pago. A cobrança de R$ 24,99 é mensal e automática.',
       },
       {
-        title: 'Ative o Google Authenticator',
-        body: 'Pelo link que chega no seu e-mail você define a senha e cadastra o autenticador. Sem esse passo a conta não entra.',
+        title: 'Defina a senha e entre',
+        body: 'Pelo link que chega no seu e-mail você define a senha. Nos acessos seguintes, um código de 6 dígitos enviado ao e-mail confirma que é você.',
       },
       {
         title: 'Abra o cofre e instale o app',
@@ -273,12 +273,12 @@ const ptBR = {
         body: 'A cifra acontece no seu navegador, com uma chave que não enviamos. Para a Astrał wave, o conteúdo do cofre é ilegível.',
       },
       {
-        title: '2FA que ninguém desliga',
-        body: 'O segundo fator é exigido de todas as contas. Nem o usuário nem o suporte desativam a exigência, só redefinem o autenticador.',
+        title: 'Segundo fator em toda conta',
+        body: 'Todo acesso confirma um código enviado ao e-mail da conta. O código vale 5 minutos, 5 tentativas e uso único.',
       },
       {
-        title: 'Redefinição só pelo master',
-        body: 'Perdeu o celular? O 2FA é redefinido pela administração do LoginHUB, e a conta volta a exigir um novo cadastro no acesso seguinte.',
+        title: 'Sem celular de reserva',
+        body: 'Como o código vai para o e-mail, perder o celular não tranca a conta: basta abrir o e-mail em outro aparelho.',
       },
       {
         title: 'Sessões e aparelhos registrados',
@@ -303,11 +303,11 @@ const ptBR = {
         badge: 'Tudo incluído',
         features: [
           'Cofre de senhas cifrado de ponta a ponta',
-          'Google Authenticator obrigatório em todo acesso',
+          'Código de acesso por e-mail em todo acesso, sem app extra',
           'Abertura pela digital (Touch ID e Face ID)',
           'Códigos 2FA guardados no cofre',
           'App instalável no Android e no iPhone',
-          'Redefinição do 2FA pelo suporte se perder o celular',
+          'Perdeu o celular? Entre por outro aparelho com o código do e-mail',
         ],
         cta: 'Assinar agora',
       },
@@ -319,7 +319,7 @@ const ptBR = {
   form: {
     title: 'Seus dados',
     subtitle:
-      'Três campos. É com eles que criamos o seu acesso e enviamos o link para cadastrar a senha e o Google Authenticator.',
+      'Três campos. É com eles que criamos o seu acesso e enviamos o link para cadastrar a senha.',
     fields: {
       nome: {
         label: 'Nome completo',
@@ -352,7 +352,7 @@ const ptBR = {
   payment: {
     approved: {
       title: 'Assinatura ativa',
-      body: 'Pagamento confirmado. Enviamos o link de acesso para o seu e-mail: com ele você define a senha e cadastra o Google Authenticator.',
+      body: 'Pagamento confirmado. Enviamos o link de acesso para o seu e-mail: com ele você define a senha e já pode entrar.',
     },
     pending: {
       title: 'Confirmando o pagamento',
@@ -368,14 +368,14 @@ const ptBR = {
 
   finalCta: {
     title: 'Pare de guardar a sua vida digital em lugares que qualquer um abre',
-    body: 'Por R$ 24,99 por mês você tem um cofre que só você abre, protegido pelo Google Authenticator, no computador e no celular.',
+    body: 'Por R$ 24,99 por mês você tem um cofre que só você abre, protegido por código enviado ao seu e-mail, no computador e no celular.',
     buy: 'Assinar agora',
     contact: 'Falar com a gente',
   },
 
   footer: {
     tagline:
-      'LoginHUB — Technology Astrał wave. Cofre de senhas e login seguro, com Google Authenticator obrigatório.',
+      'LoginHUB — Technology Astrał wave. Cofre de senhas e login seguro, com código de acesso enviado ao seu e-mail.',
     product: 'LoginHUB',
     company: 'Astrał wave',
     legal: 'Legal',

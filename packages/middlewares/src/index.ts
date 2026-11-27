@@ -64,11 +64,13 @@ const ESCOPO_MASTER: EscopoAdmin = { master: true, categorias: [] };
 
 /**
  * Sessão de um admin de organização: conta comum do app do painel
- * (`painel_do_hub`), ativa, com 2FA ATIVO, sem cair no piso de sessão e com ao
+ * (`painel_do_hub`), ativa, sem cair no piso de sessão e com ao
  * menos uma organização. Qualquer coisa fora disso → null (403 lá fora).
  *
  * Confere tudo no banco a cada pedido, de propósito: tirar a pessoa de uma
  * organização, desativá-la ou reiniciar o 2FA dela vale no pedido seguinte,
+ * (27/11/2026: o TOTP deixou de ser exigido; todo caminho que abre sessão já passou
+ * por um segundo fator, o autenticador ou o código do e-mail),
  * sem esperar o JWT de 24h vencer.
  */
 async function escopoDoAdminDeOrganizacao(decoded: JWTPayload & { action?: string }): Promise<EscopoAdmin | null> {
@@ -84,7 +86,6 @@ async function escopoDoAdminDeOrganizacao(decoded: JWTPayload & { action?: strin
             status: usuarios.status,
             appStatus: aplicativos.status,
             painel: aplicativos.painelDoHub,
-            doisFatoresAtivo: usuarios2fa.ativo,
             piso: usuarios2fa.sessoesValidasDesde,
         })
         .from(usuarios)
@@ -93,7 +94,7 @@ async function escopoDoAdminDeOrganizacao(decoded: JWTPayload & { action?: strin
         .where(and(eq(usuarios.id, usuarioId), eq(usuarios.appId, appId)))
         .limit(1);
     const u = linhas[0];
-    if (!u || !u.painel || u.appStatus !== 'ativo' || u.status !== 'ativo' || !u.doisFatoresAtivo) return null;
+    if (!u || !u.painel || u.appStatus !== 'ativo' || u.status !== 'ativo') return null;
     if (u.piso && decoded.iat && decoded.iat < Math.floor(u.piso.getTime() / 1000)) return null;
 
     const orgs = await db

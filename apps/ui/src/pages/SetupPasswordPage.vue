@@ -106,7 +106,7 @@ async function salvar() {
   <AuthShell
     v-else-if="desafio"
     titulo="Senha definida. Confirme quem é você."
-    texto="Esta conta já tem verificação em duas etapas. Informe o código do Google Authenticator."
+    texto="Esta conta tem verificação em duas etapas. Informe o código de verificação (do e-mail ou do seu autenticador)."
   >
     <TwoFactorChallenge :challenge-token="desafio" @autenticado="concluir" />
   </AuthShell>
@@ -124,7 +124,7 @@ async function salvar() {
     titulo="Tudo pronto!"
     tom="success"
     :icone="CheckCircleIcon"
-    texto="Senha e verificação em duas etapas configuradas. Volte ao aplicativo e entre com o seu e-mail, a senha nova e o código do Google Authenticator."
+    texto="Senha definida. Volte ao aplicativo e entre com o seu e-mail e a senha nova; enviaremos um código de verificação para o seu e-mail."
   />
 
   <AuthShell

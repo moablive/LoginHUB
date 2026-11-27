@@ -51,7 +51,7 @@ export interface HubSessionData {
     aparelho_confianca?: string;
 }
 
-export type MetodoSegundoFator = 'totp' | 'backup';
+export type MetodoSegundoFator = 'totp' | 'backup' | 'email';
 
 /** Desfecho do `/auth/login`. Trate os três — o compilador cobra. */
 export type LoginResult =

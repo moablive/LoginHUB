@@ -559,7 +559,7 @@ const seta =
       @confirmar="sair"
     >
       <template v-if="master">Você terá que inserir a <strong>Master Key</strong> novamente para acessar o painel administrativo da Astral Wave.</template>
-      <template v-else>Para voltar, entre de novo com e-mail, senha e o código do Google Authenticator.</template>
+      <template v-else>Para voltar, entre de novo com e-mail e senha (ou só com o código enviado ao e-mail), confirmando o código de verificação.</template>
     </UiAlert>
 
     <UiAlert

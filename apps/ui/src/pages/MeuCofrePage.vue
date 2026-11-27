@@ -17,7 +17,7 @@ import ContaDoAppCartao from '@/components/cofre/ContaDoAppCartao.vue';
 /**
  * /meu-cofre (19/11/2026, db/014): o cofre de senhas de quem é usuário de um
  * app com o cofre liberado (um DJ da Astral Wave, por exemplo). Entra com a
- * MESMA conta do app (CPF ou e-mail + senha + Google Authenticator); depois o cofre
+ * MESMA conta do app (CPF ou e-mail + senha + código; ou só o código enviado ao e-mail); depois o cofre
  * pede a palavra-passe dele, que só ele sabe. Cada pessoa tem o seu.
  *
  * 21/11/2026: é a aba "Meu cofre" da tela de login (mesmo controle segmentado
@@ -105,7 +105,7 @@ async function entrar(appId?: string) {
     const r = await authApi.login(identificador(email.value), senhaNormalizada(senha.value), appId, { aparelho: aparelhoAtual() });
     apps.value = [];
     if (r.require2FASetup) {
-      erro.value = 'Esta conta ainda não tem o Google Authenticator configurado. Configure primeiro no seu aplicativo (ou pelo convite) e volte aqui.';
+      erro.value = 'Esta conta ainda não terminou a configuração do Google Authenticator (conta de CPF). Configure primeiro no seu aplicativo e volte aqui.';
       return;
     }
     if (r.requires2FA && r.challengeToken) {
@@ -124,6 +124,54 @@ async function entrar(appId?: string) {
   } finally {
     enviando.value = false;
   }
+}
+
+// Entrada só com o código enviado ao e-mail (27/11/2026): sem senha e sem app de terceiros.
+const usarCodigo = ref(false);
+const codigoChallenge = ref<string | null>(null);
+const codigo = ref('');
+async function pedirCodigo() {
+  erro.value = null;
+  enviando.value = true;
+  try {
+    codigoChallenge.value = (await authApi.emailStart(email.value)).challengeId;
+    codigo.value = '';
+  } catch (e) {
+    erro.value = mensagem(e, 'Não foi possível enviar o código.');
+  } finally {
+    enviando.value = false;
+  }
+}
+async function confirmarCodigo(appId?: string) {
+  if (!codigoChallenge.value) return;
+  erro.value = null;
+  enviando.value = true;
+  try {
+    const r = await authApi.emailVerify(codigoChallenge.value, codigo.value, appId ? { appId } : {});
+    apps.value = [];
+    if (r.requires2FA && r.challengeToken) {
+      desafio.value = r.challengeToken;
+      etapa.value = 'desafio';
+      return;
+    }
+    await aposLogin();
+  } catch (e) {
+    if (axios.isAxiosError(e) && e.response?.data?.error === 'AMBIGUOUS_EMAIL') {
+      apps.value = e.response.data.availableApps ?? [];
+      erro.value = 'Este e-mail existe em mais de um aplicativo. Escolha qual:';
+      return;
+    }
+    erro.value = mensagem(e, 'Código inválido ou expirado. Peça um novo.');
+  } finally {
+    enviando.value = false;
+  }
+}
+function alternarCodigo() {
+  usarCodigo.value = !usarCodigo.value;
+  codigoChallenge.value = null;
+  codigo.value = '';
+  erro.value = null;
+  apps.value = [];
 }
 
 async function aposLogin() {
@@ -147,17 +195,32 @@ function sair() {
 <template>
   <div v-if="etapa === 'carregando'" class="min-h-screen bg-canvas" />
 
-  <AuthShell v-else-if="etapa === 'desafio' && desafio" titulo="Verificação em duas etapas" texto="Informe o código do Google Authenticator.">
+  <AuthShell v-else-if="etapa === 'desafio' && desafio" titulo="Verificação em duas etapas" texto="Informe o código de verificação.">
     <TwoFactorChallenge :challenge-token="desafio" pode-cancelar @autenticado="aposLogin" @cancelar="(etapa = 'login'), (desafio = null)" />
   </AuthShell>
 
   <AuthShell
     v-else-if="etapa === 'login'"
     titulo="LoginHub"
-    texto="Entre com o e-mail e a senha da sua conta. Num aparelho novo, o código do Google Authenticator é pedido uma vez."
+    texto="Entre com o e-mail e a senha, ou só com o código que enviamos ao seu e-mail. Um código de verificação confirma o acesso."
   >
     <UiSegmented v-model="aba" :opcoes="ABAS" rotulo="Tipo de acesso" class="mb-5" @update:model-value="trocarAba" />
-    <form class="space-y-4" @submit.prevent="entrar()">
+    <form v-if="usarCodigo" class="space-y-4" @submit.prevent="codigoChallenge ? confirmarCodigo() : pedirCodigo()">
+      <UiTextField v-model="email" rotulo="E-mail" type="email" inputmode="email" placeholder="voce@email.com" autocomplete="username" :disabled="!!codigoChallenge" required>
+        <template #icone><UserIcon /></template>
+      </UiTextField>
+      <UiTextField v-if="codigoChallenge" v-model="codigo" rotulo="Código recebido por e-mail" placeholder="000000" autocomplete="one-time-code" inputmode="numeric" maxlength="7" required />
+      <p v-if="codigoChallenge" class="text-center text-footnote text-label-2">Enviamos um código de 6 dígitos para o seu e-mail. Vale por 5 minutos.</p>
+      <p v-if="erro" role="alert" class="rounded-celula bg-danger/10 p-3 text-subhead text-danger">{{ erro }}</p>
+      <div v-if="apps.length" class="space-y-2">
+        <UiButton v-for="a in apps" :key="a.id" variante="tinted" bloco :carregando="enviando" @click="confirmarCodigo(a.id)">{{ a.nome }}</UiButton>
+      </div>
+      <UiButton v-else type="submit" tamanho="large" bloco :carregando="enviando" :disabled="!email || (!!codigoChallenge && codigo.replace(/\s/g, '').length !== 6)">
+        {{ codigoChallenge ? 'Entrar' : 'Enviar código' }}
+      </UiButton>
+      <button type="button" class="block w-full text-center text-footnote font-semibold text-accent" @click="alternarCodigo">Entrar com senha</button>
+    </form>
+    <form v-else class="space-y-4" @submit.prevent="entrar()">
       <UiTextField v-model="email" rotulo="E-mail" type="text" inputmode="email" placeholder="voce@email.com" autocomplete="username" autocapitalize="none" spellcheck="false" required>
         <template #icone><UserIcon /></template>
       </UiTextField>
@@ -167,6 +230,7 @@ function sair() {
         <UiButton v-for="a in apps" :key="a.id" variante="tinted" bloco :carregando="enviando" @click="entrar(a.id)">{{ a.nome }}</UiButton>
       </div>
       <UiButton v-else type="submit" tamanho="large" bloco :carregando="enviando" :disabled="!email || !senha">Entrar</UiButton>
+      <button type="button" class="block w-full text-center text-footnote font-semibold text-accent" @click="alternarCodigo">Entrar com código por e-mail</button>
     </form>
     <div class="mt-5 border-t border-separator pt-4">
       <button type="button" class="w-full text-center text-footnote font-semibold text-accent" :aria-expanded="mostrarMaster" @click="mostrarMaster = !mostrarMaster">

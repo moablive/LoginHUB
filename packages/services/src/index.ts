@@ -10,6 +10,7 @@ import { emailService } from './EmailService';
 import { twoFactorService } from './TwoFactorService';
 import { aparelhoService, ehContaDeCpf } from './AparelhoService';
 import { passkeyService } from './PasskeyService';
+import { codigoEmailService } from './CodigoEmailService';
 
 export { TwoFactorService, twoFactorService } from './TwoFactorService';
 export { BloqueioService, bloqueioService, LIMITE_POR_IP, LIMITE_POR_CONTA } from './BloqueioService';
@@ -223,6 +224,7 @@ export class AuthService {
         data: { aparelho_id?: string | undefined; aparelho_nome?: string | undefined; aparelho_confianca?: string | undefined },
         ip: string | null,
         navegador?: { userAgent?: string; mobile?: string; telegram?: boolean; cofre?: boolean },
+        via: 'senha' | 'codigo' = 'senha',
     ): Promise<LoginResponseDTO | TwoFactorChallengeResponse | TwoFactorSetupRequiredResponse> {
         // Um aparelho por conta de CPF (04/11/2026): outro aparelho é recusado já
         // aqui, antes do 2FA — mas só o login completo prende (ver AparelhoService).
@@ -255,6 +257,16 @@ export class AuthService {
         // convite no meio). Devolvemos uma sessão curta só para concluir o
         // enrolamento, em vez de barrar sem saída.
         if (estado === 'enrolar') return this.emitirTokenDeEnrolamento(user.id.toString(), user.email, appId, user.role_nome);
+
+        // Segundo fator por código de e-mail (27/11/2026): conta de e-mail sem
+        // autenticador ativo prova a caixa de entrada depois da senha, sem app de
+        // terceiros. Viaja no MESMO desafio `requires2FA` (methods ['email']), então
+        // quem já trata o desafio do TOTP continua funcionando. Conta de CPF não tem
+        // e-mail e segue como era; quem chegou pelo código já provou a caixa.
+        if (via === 'senha' && !ehContaDeCpf(user.email)) {
+            const codigoId = await codigoEmailService.emitirParaConta(user.id, ip);
+            return this.emitirChallenge(user.id.toString(), appId, aparelho, codigoId);
+        }
 
         return this.emitirSessao(user, 86400, await aparelhoService.prender(user, aparelho));
     }
@@ -294,7 +306,7 @@ export class AuthService {
         if (user.status !== 'ativo') throw new Error('USUARIO_BLOQUEADO');
         if (user.app_usa_login_hub === false) throw new Error('APP_NAO_AUTENTICA_NO_HUB');
         if (ehContaDeCpf(user.email)) throw new Error('CODIGO_INVALIDO');
-        return this.concluirLogin(user, data, ip, navegador);
+        return this.concluirLogin(user, data, ip, navegador, 'codigo');
     }
 
     /**
@@ -383,7 +395,7 @@ export class AuthService {
     }
 
     /** Passe de etapa única para a verificação de 2FA. Não abre nenhuma rota. */
-    private emitirChallenge(usuarioId: string, appId: string, aparelho?: AparelhoDoLogin): TwoFactorChallengeResponse {
+    private emitirChallenge(usuarioId: string, appId: string, aparelho?: AparelhoDoLogin, codigoId?: string): TwoFactorChallengeResponse {
         const jwtSecret = process.env.JWT_SECRET;
         if (!jwtSecret) {
             console.error("JWT_SECRET missing in .env");
@@ -393,7 +405,7 @@ export class AuthService {
         const challengeToken = jwt.sign(
             // O aparelho viaja assinado no desafio: quem conclui o 2FA é o mesmo
             // que passou da senha, e é ele que fica preso à conta.
-            { sub: usuarioId, app_id: appId, action: '2fa-challenge', apa: aparelho?.id ?? undefined, apn: aparelho?.nome ?? undefined, apt: aparelho?.tipo },
+            { sub: usuarioId, app_id: appId, action: '2fa-challenge', apa: aparelho?.id ?? undefined, apn: aparelho?.nome ?? undefined, apt: aparelho?.tipo, ...(codigoId ? { met: 'email', cid: codigoId } : {}) },
             jwtSecret,
             { expiresIn: CHALLENGE_TTL_SEGUNDOS },
         );
@@ -402,7 +414,7 @@ export class AuthService {
             requires2FA: true,
             challengeToken,
             expiresIn: CHALLENGE_TTL_SEGUNDOS,
-            methods: ['totp', 'backup'],
+            methods: codigoId ? ['email'] : ['totp', 'backup'],
         };
     }
 
@@ -514,7 +526,7 @@ export class AuthService {
             throw new Error('ERRO_INTERNO');
         }
 
-        let decoded: { sub?: string; action?: string; apa?: string; apn?: string; apt?: string };
+        let decoded: { sub?: string; action?: string; apa?: string; apn?: string; apt?: string; met?: string; cid?: string };
         try {
             decoded = jwt.verify(challengeToken, jwtSecret) as typeof decoded;
         } catch {
@@ -522,7 +534,12 @@ export class AuthService {
         }
         if (decoded.action !== '2fa-challenge' || !decoded.sub) throw new Error('CHALLENGE_INVALIDO');
 
-        if (entrada.backupCode) {
+        if (decoded.met === 'email') {
+            // Desafio de código de e-mail: só vale o código, e tem de ser o desta conta.
+            if (!decoded.cid || !entrada.codigo) throw new Error('CODIGO_AUSENTE');
+            const v = await codigoEmailService.verificar(decoded.cid, entrada.codigo.trim());
+            if (v.usuarioId !== Number(decoded.sub)) throw new Error('CODIGO_INVALIDO');
+        } else if (entrada.backupCode) {
             await twoFactorService.consumirBackupCode(decoded.sub, entrada.backupCode);
         } else if (entrada.codigo) {
             await twoFactorService.verificarCodigo(decoded.sub, entrada.codigo);
@@ -929,12 +946,13 @@ export class AppService {
                         telefone: data.admin_telefone || null
                     }).returning({ id: usuarios.id });
 
-                    // Mesma regra das demais contas: 2FA exigido desde o início.
+                    // Conta de e-mail: o segundo fator é o código do e-mail (27/11/2026),
+                    // então o TOTP não nasce obrigatório. A linha segue criada.
                     await tx.insert(usuarios2fa).values({
                         usuarioId: adminRes[0].id,
                         secretCifrado: null,
                         ativo: false,
-                        obrigatorio: true,
+                        obrigatorio: ehContaDeCpf(data.admin_email),
                     });
 
                     if (data.emailHtml) {
@@ -1352,7 +1370,10 @@ export class UserService {
                 .where(eq(aplicativos.id, Number(data.app_id)))
                 .limit(1);
 
-            if (appDoUsuario[0]?.usaLoginHub !== false) {
+            // Desde 27/11/2026 o segundo fator da conta de e-mail é o código enviado ao
+            // e-mail (sem Google Authenticator): o TOTP só é exigido da conta de CPF,
+            // que não tem caixa de entrada.
+            if (appDoUsuario[0]?.usaLoginHub !== false && ehContaDeCpf(data.email)) {
                 await twoFactorService.marcarObrigatorio(String(newUserId));
             }
 
@@ -1664,7 +1685,7 @@ export class UserService {
         // nunca resolve. Sem esta guarda, reenviar o convite de um usuário do
         // Cofre desfaz a limpeza feita pela db/004_apps_sem_login_hub.sql — e o
         // reset é justamente o caminho mais provável de acontecer de novo.
-        if (userRes[0].app_usa_login_hub !== false) {
+        if (userRes[0].app_usa_login_hub !== false && ehContaDeCpf(userRes[0].email)) {
             await twoFactorService.marcarObrigatorio(id);
         }
 

@@ -95,6 +95,8 @@ export class AuthController {
                     if (novos.length) return responderBloqueado(res);
                     return res.status(401).json({ error: 'Acesso Negado', message: 'E-mail ou senha incorretos.' });
                 }
+                case 'CODIGO_LIMITE':
+                    return res.status(429).json({ error: 'MUITAS_TENTATIVAS', message: 'Muitos códigos pedidos. Tente novamente em alguns minutos.' });
                 case 'APP_BLOQUEADO':
                     return res.status(403).json({ error: 'Acesso Suspenso', message: 'Sua app está inativa. Contate o suporte.' });
                 case 'USUARIO_BLOQUEADO':

@@ -150,6 +150,36 @@ export class CodigoEmailService {
     }
 
     /**
+     * Código como SEGUNDO fator de quem acabou de provar a senha: o desafio já
+     * nasce amarrado à conta (sem busca por e-mail) e o envio é aguardado, porque
+     * quem pede é um login em andamento. Devolve o id do desafio. Limite por hora
+     * vale; o intervalo de 1 min não (o login em si já tem rate limit).
+     */
+    public async emitirParaConta(usuarioId: number, ip: string | null): Promise<string> {
+        const [conta] = await this.contasPorIds([usuarioId]);
+        if (!conta) throw new Error('CODIGO_INVALIDO');
+        const emailHash = hashDoEmail(conta.email);
+        const recentes = await db.select({ id: loginCodigosEmail.id })
+            .from(loginCodigosEmail)
+            .where(and(eq(loginCodigosEmail.emailHash, emailHash), gt(loginCodigosEmail.criadoEm, new Date(Date.now() - 3600_000))));
+        if (recentes.length >= MAX_POR_HORA * 2) throw new Error('CODIGO_LIMITE');
+        const id = crypto.randomUUID();
+        const codigo = crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
+        await db.transaction(async (tx: any) => {
+            await tx.update(loginCodigosEmail).set({ consumidoEm: new Date() })
+                .where(and(eq(loginCodigosEmail.emailHash, emailHash), isNull(loginCodigosEmail.consumidoEm)));
+            await tx.insert(loginCodigosEmail).values({
+                id, emailHash, usuarioIds: [conta.id], codigoHash: hashDoCodigo(id, codigo), maxTentativas: MAX_TENTATIVAS,
+                expiraEm: new Date(Date.now() + CODIGO_TTL_SEGUNDOS * 1000), ipHash: ip ? hmac(`ip:${ip}`) : null,
+            });
+        });
+        const html = buildCodigoLoginEmail({ appName: conta.appNome, appLogo: conta.appLogo, nome: conta.nome, codigo, minutos: CODIGO_TTL_SEGUNDOS / 60 });
+        const ok = await emailService.sendEmail(conta.email, 'Seu código de acesso', html, { appId: conta.appId, appNome: conta.appNome });
+        if (!ok) console.error(`[CodigoEmail] e-mail do código (2º fator) não saiu para a conta ${conta.id}.`);
+        return id;
+    }
+
+    /**
      * Confere o código. Lança `CODIGO_INVALIDO` para QUALQUER falha (desafio
      * desconhecido, vencido, usado, esgotado ou código errado) e `AMBIGUOUS_EMAIL`
      * quando o código está certo mas o e-mail existe em mais de um app e nenhum

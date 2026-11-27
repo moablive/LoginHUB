@@ -13,7 +13,7 @@ import TwoFactorChallenge from '@/features/twoFactor/TwoFactorChallenge.vue';
 /**
  * Duas portas para o painel (19/11/2026, admins de organização, db/012):
  *
- *   Organização   → e-mail + senha + Google Authenticator. É a conta de quem
+ *   Organização   → e-mail + senha + código enviado ao e-mail (ou só o código). É a conta de quem
  *                   foi convidado para cuidar de uma organização (LBS, Sul…).
  *   Cofre         → /meu-cofre; a Master Key e a digital do master moram lá (MasterEntrada, 27/11/2026).
  */
@@ -73,7 +73,7 @@ async function entrarAdmin() {
 }
 
 // Código por e-mail (db/024): entrada sem senha e sem app de terceiros. Quem tem o
-// Google Authenticator ativo continua passando por ele depois do código.
+// Google Authenticator ativo (opcional) continua passando por ele depois do código.
 const usarCodigo = ref(false);
 const codigoChallenge = ref<string | null>(null);
 const codigo = ref('');
@@ -148,7 +148,7 @@ function cancelarDesafio() {
   <AuthShell
     v-if="desafio"
     titulo="Verificação em duas etapas"
-    texto="Informe o código do Google Authenticator para entrar no painel."
+    texto="Informe o código de verificação para entrar no painel."
   >
     <TwoFactorChallenge :challenge-token="desafio" pode-cancelar @autenticado="aposSegundoFator" @cancelar="cancelarDesafio" />
   </AuthShell>
@@ -205,7 +205,7 @@ function cancelarDesafio() {
       </UiButton>
       <button type="button" class="block w-full text-center text-footnote font-semibold text-accent" @click="alternarCodigo">Entrar com código por e-mail</button>
       <p class="text-center text-footnote text-label-2">
-        Recebeu um convite? Abra o link do e-mail para criar a senha e ativar o Google Authenticator.
+        Recebeu um convite? Abra o link do e-mail para criar a senha. Em cada acesso enviamos um código para o seu e-mail.
       </p>
     </form>
 

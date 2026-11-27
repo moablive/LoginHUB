@@ -6,7 +6,7 @@ const en = {
   meta: {
     title: 'LoginHUB — Technology Astrał wave',
     description:
-      'The password vault and identity platform behind Astrał wave, now for you: end-to-end encrypted passwords, mandatory Google Authenticator, fingerprint unlock and a phone app. R$ 24.99 per month.',
+      'The password vault and identity platform behind Astrał wave, now for you: end-to-end encrypted passwords, sign-in by a code sent to your e-mail (no extra app), fingerprint unlock and a phone app. R$ 24.99 per month.',
     ogLocale: 'en_US',
   },
 
@@ -30,7 +30,7 @@ const en = {
     here: 'you are here',
     label: { name: 'Astrał wave Label', desc: 'The label: artists, releases and demos.' },
     track: { name: 'Astrał wave Track', desc: 'WAV track store, paid by Pix, straight from the makers.' },
-    security: { name: 'LoginHUB', desc: 'Password vault and secure login, with Google Authenticator required.' },
+    security: { name: 'LoginHUB', desc: 'Password vault and secure login, with an access code sent to your e-mail.' },
     artist: { name: 'Artist panel', desc: 'Where the DJ follows releases, contracts and sales.' },
   },
 
@@ -38,13 +38,13 @@ const en = {
     badge: 'Password vault and identity · R$ 24.99 per month',
     title: 'All your passwords in a vault even we cannot open',
     subtitle:
-      'LoginHUB is the login and vault technology Astrał wave runs its own systems on, now in your hands. Passwords are encrypted on your device, sign-in requires Google Authenticator, and the app installs on your phone.',
+      'LoginHUB is the login and vault technology Astrał wave runs its own systems on, now in your hands. Passwords are encrypted on your device, sign-in is by a code sent to your e-mail, with no extra app, and the app installs on your phone.',
     ctaPrimary: 'Subscribe for R$ 24.99/month',
     ctaLogin: 'Sign in',
     ctaSecondary: 'See the app',
     stats: [
       { value: 'End to end', label: 'encrypted on your device' },
-      { value: '2FA', label: 'Google Authenticator required' },
+      { value: 'E-mail', label: 'Access code, no extra app' },
       { value: 'R$ 24.99', label: 'per month, by card' },
     ],
     vault: {
@@ -90,8 +90,8 @@ const en = {
         body: 'Argon2id and XChaCha20-Poly1305 encryption in the browser. Every item is encrypted before it leaves your device.',
       },
       {
-        title: 'Google Authenticator required',
-        body: 'A second factor on every sign-in, with recovery codes for the day the phone disappears.',
+        title: 'Access code by e-mail',
+        body: 'Every sign-in sends 6 digits to your e-mail. No verification app to install: if you can read the e-mail, you get in.',
       },
       {
         title: 'Device fingerprint',
@@ -110,8 +110,8 @@ const en = {
         body: 'One account to enter the systems that use LoginHUB, with the same second factor.',
       },
       {
-        title: '2FA reset by support',
-        body: 'Lost your phone and your codes? We reset your authenticator and you register a new one on the next sign-in. The vault stays locked by your passphrase.',
+        title: 'New phone? No drama',
+        body: 'Since the code arrives in your e-mail, a new device signs in normally. The vault stays locked by your passphrase.',
       },
       {
         title: 'Technology in production',
@@ -126,14 +126,14 @@ const en = {
     lead:
       'LoginHUB opens in the browser and installs as an app. No store, no heavy download: one tap puts the vault on your home screen.',
     screens: [
-      { caption: 'Sign-in with Google Authenticator' },
+      { caption: 'Sign-in with an e-mail code' },
       { caption: 'My vault, only yours' },
       { caption: 'Live 2FA code' },
     ],
     login: {
       title: 'Sign in',
-      field: 'Google Authenticator code',
-      hint: 'Open the authenticator app and type the 6 digits.',
+      field: 'Code received by e-mail',
+      hint: 'Open the e-mail we sent and type the 6 digits.',
       button: 'Confirm',
     },
     vault: {
@@ -186,9 +186,9 @@ const en = {
     {
       id: 'totp',
       kicker: 'Second factor',
-      title: 'Google Authenticator on every sign-in, no exceptions',
-      body: 'A password alone does not get in. LoginHUB requires the authenticator code and also keeps the 2FA codes of your other services next to the password.',
-      points: ['Recovery codes for the day the phone disappears', 'Live code inside the vault', '2FA reset by support if you lose the device'],
+      title: 'An e-mail code on every sign-in, no extra app',
+      body: 'A password alone does not get in: every sign-in confirms a 6-digit code sent to your e-mail (single use, valid for 5 minutes). The vault also keeps the 2FA codes of your other services next to the password.',
+      points: ['No Google Authenticator or other app', 'Live code inside the vault', 'Want more security? Turn on the authenticator yourself'],
     },
     {
       id: 'share',
@@ -219,8 +219,8 @@ const en = {
         a: 'Use the recovery kit you receive when creating the vault. Without the passphrase and the kit nobody can open the vault, not even us: that is the price of no one else being able to get in.',
       },
       {
-        q: 'I lost the phone with Google Authenticator. Now what?',
-        a: 'Use a recovery code or talk to support: the 2FA is reset and you register the authenticator again on the next sign-in. The vault stays locked by your passphrase.',
+        q: 'I lost my phone. Now what?',
+        a: 'Just sign in on another device: the access code arrives in your e-mail. The vault stays locked by your passphrase, which only you know.',
       },
       {
         q: 'How does payment work?',
@@ -246,8 +246,8 @@ const en = {
         body: 'Fill in name, e-mail and phone and pay by card through Mercado Pago. The R$ 24.99 charge is monthly and automatic.',
       },
       {
-        title: 'Turn on Google Authenticator',
-        body: 'The link in your e-mail lets you set the password and register the authenticator. Without that step the account cannot sign in.',
+        title: 'Set your password and sign in',
+        body: 'The link in your e-mail lets you set the password. On later sign-ins, a 6-digit code sent to your e-mail confirms it is you.',
       },
       {
         title: 'Open the vault and install the app',
@@ -266,12 +266,12 @@ const en = {
         body: 'Encryption happens in your browser, with a key we never receive. To Astrał wave, the vault contents are unreadable.',
       },
       {
-        title: '2FA nobody turns off',
-        body: 'The second factor is required on every account. Neither the user nor support can remove the requirement, only reset the authenticator.',
+        title: 'Second factor on every account',
+        body: 'Every sign-in confirms a code sent to the account e-mail. The code is valid for 5 minutes, 5 attempts and a single use.',
       },
       {
-        title: 'Reset only by the master',
-        body: 'Lost your phone? The 2FA is reset by LoginHUB administration, and the account asks for a new registration on the next sign-in.',
+        title: 'No backup phone needed',
+        body: 'Because the code goes to your e-mail, losing your phone does not lock the account: just open the e-mail on another device.',
       },
       {
         title: 'Sessions and devices recorded',
@@ -296,11 +296,11 @@ const en = {
         badge: 'All included',
         features: [
           'End-to-end encrypted password vault',
-          'Google Authenticator required on every sign-in',
+          'E-mail access code on every sign-in, no extra app',
           'Fingerprint unlock (Touch ID and Face ID)',
           '2FA codes stored in the vault',
           'Installable app on Android and iPhone',
-          '2FA reset by support if you lose your phone',
+          'Lost your phone? Sign in on another device with the e-mail code',
         ],
         cta: 'Subscribe now',
       },
@@ -312,7 +312,7 @@ const en = {
   form: {
     title: 'Your details',
     subtitle:
-      'Three fields. We use them to create your access and send the link to set your password and Google Authenticator.',
+      'Three fields. We use them to create your access and send the link to set your password.',
     fields: {
       nome: {
         label: 'Full name',
@@ -345,7 +345,7 @@ const en = {
   payment: {
     approved: {
       title: 'Subscription active',
-      body: 'Payment confirmed. We sent the access link to your e-mail: with it you set the password and register Google Authenticator.',
+      body: 'Payment confirmed. We sent the access link to your e-mail: with it you set the password and can sign in.',
     },
     pending: {
       title: 'Confirming payment',
@@ -361,14 +361,14 @@ const en = {
 
   finalCta: {
     title: 'Stop keeping your digital life where anyone can open it',
-    body: 'For R$ 24.99 a month you get a vault only you can open, protected by Google Authenticator, on computer and phone.',
+    body: 'For R$ 24.99 a month you get a vault only you can open, protected by a code sent to your e-mail, on computer and phone.',
     buy: 'Subscribe now',
     contact: 'Talk to us',
   },
 
   footer: {
     tagline:
-      'LoginHUB — Technology Astrał wave. Password vault and secure login, with Google Authenticator required.',
+      'LoginHUB — Technology Astrał wave. Password vault and secure login, with an access code sent to your e-mail.',
     product: 'LoginHUB',
     company: 'Astrał wave',
     legal: 'Legal',

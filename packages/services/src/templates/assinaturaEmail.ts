@@ -77,7 +77,7 @@ export const buildAssinaturaEmail = (input: AssinaturaEmailInput): string => {
     const passos = [
         input.reativada
             ? passo(1, 'Entre com o seu e-mail', `Seu login é <strong>${escapeHtml(input.email)}</strong>. Esqueceu a senha? Responda este e-mail que enviamos um link novo.`)
-            : passo(1, 'Defina a senha', `Seu login é <strong>${escapeHtml(input.email)}</strong>. O botão acima abre a página da senha; em seguida ela mostra um QR Code para o Google Authenticator (verificação em duas etapas).`),
+            : passo(1, 'Defina a senha', `Seu login é <strong>${escapeHtml(input.email)}</strong>. O botão acima abre a página da senha. Em cada acesso enviamos um código de 6 dígitos para este e-mail: é a sua verificação em duas etapas, sem aplicativo extra.`),
         passo(
             2,
             'Instale o aplicativo',
@@ -98,10 +98,7 @@ export const buildAssinaturaEmail = (input: AssinaturaEmailInput): string => {
         ? ''
         : `
                 <p style="margin:0 0 16px;padding:12px 16px;background:#eff6ff;border-left:3px solid #2563eb;color:#1e3a5f;font-size:13px;line-height:1.5;">
-                  <strong>Instale o Google Authenticator antes de começar.</strong><br />
-                  <a href="https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2" style="color:#2563eb;font-weight:bold;">Baixar para Android</a>
-                  &nbsp;·&nbsp;
-                  <a href="https://apps.apple.com/app/google-authenticator/id388497605" style="color:#2563eb;font-weight:bold;">Baixar para iPhone</a>
+                  <strong>Sem aplicativo extra.</strong> Para entrar, enviamos um código de 6 dígitos para este e-mail; é só digitá-lo.
                 </p>`;
 
     const rodape = input.reativada

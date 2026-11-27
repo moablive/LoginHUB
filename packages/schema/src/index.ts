@@ -223,7 +223,7 @@ export interface SetupPasswordResponse {
      */
     requires2FA?: true;
     challengeToken?: string;
-    methods?: Array<'totp' | 'backup'>;
+    methods?: Array<'totp' | 'backup' | 'email'>;
 }
 
 // ==========================================
@@ -246,7 +246,7 @@ export interface TwoFactorChallengeResponse {
     /** Segundos de validade do `challengeToken`. */
     expiresIn: number;
     /** Métodos aceitos nesta etapa. */
-    methods: Array<'totp' | 'backup'>;
+    methods: Array<'totp' | 'backup' | 'email'>;
 }
 
 /**
@@ -466,7 +466,7 @@ export interface AuthResult {
   challengeToken?: string;
   /** Segundos de validade do `challengeToken`. */
   challengeExpiresIn?: number;
-  methods?: Array<'totp' | 'backup'>;
+  methods?: Array<'totp' | 'backup' | 'email'>;
   /** Enrolamento de 2FA pendente e obrigatório: conclua antes de seguir. */
   require2FASetup?: boolean;
 }
