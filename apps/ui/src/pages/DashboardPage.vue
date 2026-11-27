@@ -233,9 +233,12 @@ const dataCadastro = (d?: string | Date | null) =>
   d ? new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
 
 // Colunas da lista no desktop; no celular cada linha empilha.
-const GRADE = 'md:grid md:grid-cols-[minmax(0,1fr)_10.5rem_7.5rem_7rem_6rem_21.5rem] md:items-center md:gap-4';
+// Abaixo de xl a coluna Documento sai da grade (o CNPJ desce para baixo do e-mail do app): sem isso a coluna do
+// aplicativo ficava estreita e os selos passavam por cima do documento.
+const GRADE =
+  'md:grid md:grid-cols-[minmax(0,1fr)_7.5rem_7rem_6.5rem_21rem] md:items-center md:gap-4 xl:grid-cols-[minmax(0,1fr)_10.5rem_7.5rem_7rem_6.5rem_21rem]';
 const seta =
-  'flex h-toque w-9 items-center justify-center rounded-lg text-label-2 hover:bg-accent/10 hover:text-accent disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-label-2';
+  'flex h-toque w-8 items-center justify-center rounded-lg text-label-2 hover:bg-accent/10 hover:text-accent disabled:opacity-25 disabled:hover:bg-transparent disabled:hover:text-label-2';
 </script>
 
 <template>
@@ -326,7 +329,7 @@ const seta =
         <!-- cabeçalho das colunas, só no desktop -->
         <div :class="GRADE" class="hidden px-4 text-caption-1 font-semibold uppercase tracking-wide text-label-2 md:grid">
           <span>Aplicativo</span>
-          <span>Documento</span>
+          <span class="hidden xl:inline">Documento</span>
           <span class="text-center">Usuários · Admins</span>
           <span class="text-center">Status</span>
           <span>Cadastro</span>
@@ -378,13 +381,14 @@ const seta =
               >
                 {{ app.nome.substring(0, 2).toUpperCase() }}
               </div>
-              <div class="min-w-0">
-                <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-headline font-semibold">
+              <div class="min-w-0 flex-1">
+                <p class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-headline font-semibold">
                   <span class="truncate">{{ app.nome }}</span>
                   <IntegrationBadge :app-id="app.id" />
                   <AppLinkBadge :app-id="app.id" />
                 </p>
-                <p class="truncate text-subhead text-label-2">{{ app.email }}</p>
+                <p class="truncate text-subhead text-label-2" :title="app.email">{{ app.email }}</p>
+                <p class="hidden truncate font-mono text-caption-1 text-label-2 md:block xl:hidden">{{ masks.cnpj(app.documento) }}</p>
                 <!-- Quem cuida do app no hub (admins da organização, db/012). Toque abre a gaveta. -->
                 <button
                   v-if="app.categoria_id !== null && app.categoria_id !== undefined"
@@ -402,7 +406,7 @@ const seta =
 
             <!-- metadados: uma linha no celular, colunas no desktop -->
             <div class="flex flex-wrap items-center gap-x-3 gap-y-2 md:contents">
-              <span class="font-mono text-footnote text-label-2 md:text-subhead">{{ masks.cnpj(app.documento) }}</span>
+              <span class="font-mono text-footnote text-label-2 md:hidden md:text-subhead xl:inline">{{ masks.cnpj(app.documento) }}</span>
               <span class="md:flex md:justify-center">
                 <span class="inline-flex items-center gap-1.5">
                   <UiBadge :tom="(app.total_usuarios || 0) > 0 ? 'accent' : 'neutro'" :title="`${app.total_usuarios || 0} usuários`">

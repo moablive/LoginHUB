@@ -44,10 +44,10 @@ function tooltip(view: AppLinkView) {
     v-for="view in vistas"
     :key="`${view.link.providerId}-${view.link.consumerId}`"
     :title="tooltip(view)"
-    class="inline-flex cursor-help items-center gap-1.5 whitespace-nowrap rounded-full bg-warning/15 px-2 py-0.5 text-caption-2 font-semibold uppercase tracking-wide text-warning"
+    class="inline-flex min-w-0 max-w-full cursor-help items-center gap-1.5 whitespace-nowrap rounded-full bg-warning/15 px-2 py-0.5 text-caption-2 font-semibold uppercase tracking-wide text-warning"
   >
-    <span class="inline-flex h-1.5 w-1.5 rounded-full bg-warning" />
-    <component :is="view.side === 'provider' ? ArrowLongRightIcon : ArrowLongLeftIcon" class="h-3 w-3" />
-    {{ linkBadgeLabel(view) }}
+    <span class="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-warning" />
+    <component :is="view.side === 'provider' ? ArrowLongRightIcon : ArrowLongLeftIcon" class="h-3 w-3 shrink-0" />
+    <span class="min-w-0 truncate">{{ linkBadgeLabel(view) }}</span>
   </span>
 </template>
