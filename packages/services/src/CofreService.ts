@@ -161,7 +161,7 @@ export class CofreService {
             .where(eq(cofreCofres.dono, dono));
         const ids = cofresSemGeracao.map((c: { id: string }) => c.id);
         const geracoes = await this.geracoes(ids);
-        const cofres = cofresSemGeracao.map((c: { id: string }) => (geracoes.has(c.id) ? { ...c, geracao: geracoes.get(c.id) as number } : c));
+        const cofres = cofresSemGeracao.map((c: { id: string; dados: string; atualizado_em: Date }) => (geracoes.has(c.id) ? { ...c, geracao: geracoes.get(c.id) as number } : c));
         const itens = ids.length
             ? await db
                   .select({ id: cofreItens.id, cofre_id: cofreItens.cofreId, dados: cofreItens.dados, atualizado_em: cofreItens.atualizadoEm })

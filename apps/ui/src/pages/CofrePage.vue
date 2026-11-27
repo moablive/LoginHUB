@@ -6,6 +6,7 @@ import { appApi } from '@loginhub/api-client';
 import type { CofreDigital } from '@loginhub/schema';
 import {
   ArrowPathIcon,
+  ArrowRightOnRectangleIcon,
   ChevronDownIcon,
   ClipboardDocumentIcon,
   CommandLineIcon,
@@ -53,6 +54,7 @@ import type { AparenciaCofre } from '@/features/cofre/aparencia';
 import { TEMPOS_TRANCA_MIN, useCofre, type ItemAberto, type ItemCofre } from '@/features/cofre/useCofre';
 import { codigoTotp, gerarSenha, lerTotp, segundosRestantes } from '@/features/cofre/cripto';
 import { digitalSuportada, ErroDigital } from '@/features/cofre/digital';
+import { logarNoApp, podeLogarNoApp } from '@/features/cofre/logarNoApp';
 
 /**
  * Cofre de senhas (19/11/2026, db/013). Duas portas: a Master Key abre o painel
@@ -467,6 +469,32 @@ function novoItem() {
   camposAdicionados.value = new Set<CampoExtra>(['usuario', 'senha']);
   form.value = { ...VAZIO };
   editando.value = { cofreId };
+}
+// "Logar no app" (27/11/2026): o app do item é o da chave de entrada ou o que tem o mesmo host do endereço.
+const logandoApp = ref(false);
+function appDoItem(item: ItemAberto): number | null {
+  if (item.entrada) return item.entrada.app_id;
+  try {
+    const host = new URL(/^https?:\/\//i.test(item.url) ? item.url : `https://${item.url}`).hostname.toLowerCase();
+    const id = logosDosApps.value.find((a) => a.host === host)?.id;
+    return id === undefined ? null : Number(id);
+  } catch {
+    return null;
+  }
+}
+const podeLogarNoAppDoItem = (item: ItemAberto): boolean => appDoItem(item) !== null && podeLogarNoApp(item);
+async function logarNoAppDoItem(item: ItemAberto) {
+  const appId = appDoItem(item);
+  if (appId === null || logandoApp.value) return;
+  erro.value = null;
+  logandoApp.value = true;
+  try {
+    await logarNoApp(cofre, item, appId);
+  } catch (e) {
+    erro.value = e instanceof Error && e.name === 'ErroEntradaPorItem' ? e.message : mensagemDe(e, 'Não deu para logar no app com este item.');
+  } finally {
+    logandoApp.value = false;
+  }
 }
 function editarItem(item: ItemAberto) {
   verSenhaEdicao.value = false;
@@ -967,6 +995,7 @@ async function confirmarTrocaSenha() {
               <p class="text-footnote text-label-2">{{ nomeDoCofre(item.cofre_id) }}</p>
             </div>
             <div class="ml-auto flex shrink-0 items-center gap-1">
+              <UiButton v-if="podeLogarNoAppDoItem(item)" tamanho="small" :disabled="offline" :carregando="logandoApp" title="Entrar no aplicativo com este login" :aria-label="`Logar no app ${item.titulo}`" @click="logarNoAppDoItem(item)"><ArrowRightOnRectangleIcon class="h-4 w-4" />Logar no app</UiButton>
               <UiButton variante="tinted" tamanho="small" :disabled="offline || !podeEscrever(item.cofre_id)" :title="podeEscrever(item.cofre_id) ? undefined : 'Somente leitura'" :aria-label="`Editar ${item.titulo}`" @click="editarItem(item)"><PencilSquareIcon class="h-4 w-4" />Editar</UiButton>
               <UiButton variante="plain" icone :disabled="offline || !podeEscrever(item.cofre_id) || cofresComEscrita.length < 2" :title="cofresComEscrita.length < 2 ? 'Precisa de outro cofre' : 'Mover para outro cofre (ou arraste o item até o cofre)'" :aria-label="`Mover ${item.titulo} para outro cofre`" @click="itemParaMover = item"><FolderArrowDownIcon class="h-5 w-5" /></UiButton>
               <UiButton variante="plain" icone :disabled="offline || !podeEscrever(item.cofre_id)" :title="podeEscrever(item.cofre_id) ? undefined : 'Somente leitura'" class="!text-danger hover:!bg-danger/10" :aria-label="`Apagar ${item.titulo}`" @click="pedirApagar(item)"><TrashIcon class="h-5 w-5" /></UiButton>
