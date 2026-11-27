@@ -425,6 +425,10 @@ const responder2FA = (res: Response, erro: Error) => {
             });
         case 'CODIGO_AUSENTE':
             return res.status(400).json({ error: 'Dados incompletos', message: 'Informe o código.' });
+        case 'CODIGO_EMAIL_AUSENTE':
+            return res.status(428).json({ error: 'CODIGO_EMAIL_AUSENTE', message: 'Confirme o código que enviamos ao seu e-mail para continuar.' });
+        case 'CODIGO_LIMITE':
+            return res.status(429).json({ error: 'MUITAS_TENTATIVAS', message: 'Muitos códigos pedidos. Tente novamente em alguns minutos.' });
         case 'CHALLENGE_INVALIDO':
             return res.status(401).json({ error: 'CHALLENGE_INVALIDO', message: 'Desafio inválido ou expirado. Faça login novamente.' });
         case 'CODIGO_INVALIDO':
@@ -445,11 +449,45 @@ const responder2FA = (res: Response, erro: Error) => {
 
 const usuarioDaSessao = (req: Request): string => String((req as any).user?.sub ?? '');
 
+/**
+ * Prova recente da caixa de e-mail, para ações sensíveis da conta (27/11/2026). Vale quando a requisição
+ * vem de uma sessão (não do passe de enrolamento) e a conta tem e-mail de verdade; o código foi pedido
+ * por `POST /auth/2fa/email-code`. Lança CODIGO_INVALIDO / CODIGO_EMAIL_AUSENTE.
+ */
+const exigirCodigoDoEmail = async (req: Request, usuarioId: string): Promise<void> => {
+    const user = (req as any).user as { action?: string; email?: string } | undefined;
+    if (user?.action) return; // passe de enrolamento do convite
+    const status = await twoFactorService.status(usuarioId);
+    if (status.contaDeCpf) return;
+    const { challengeId, codigoEmail } = req.body ?? {};
+    if (typeof challengeId !== 'string' || typeof codigoEmail !== 'string') throw new Error('CODIGO_EMAIL_AUSENTE');
+    const v = await codigoEmailService.verificar(challengeId, codigoEmail);
+    if (String(v.usuarioId) !== usuarioId) throw new Error('CODIGO_INVALIDO');
+};
+
 export class TwoFactorController {
     /** POST /auth/2fa/setup — gera secret e a URI otpauth (cliente desenha o QR). */
     static async setup(req: Request, res: Response) {
         try {
-            return res.status(200).json(await twoFactorService.iniciarSetup(usuarioDaSessao(req)));
+            const usuarioId = usuarioDaSessao(req);
+            // 27/11/2026: ativar o app por uma SESSÃO aberta (botão nas configurações) exige antes um código
+            // novo do e-mail — sessão roubada não troca o fator da conta. O passe de enrolamento do convite
+            // (`2fa-setup`) e a conta de CPF (sem e-mail) seguem como eram.
+            await exigirCodigoDoEmail(req, usuarioId);
+            return res.status(200).json(await twoFactorService.iniciarSetup(usuarioId));
+        } catch (err) {
+            return responder2FA(res, err as Error);
+        }
+    }
+
+    /** POST /auth/2fa/email-code — manda um código novo ao e-mail da conta, para ativar ou desativar o app. */
+    static async emailCode(req: Request, res: Response) {
+        try {
+            const usuarioId = usuarioDaSessao(req);
+            const status = await twoFactorService.status(usuarioId);
+            if (status.contaDeCpf) return res.status(400).json({ error: 'SEM_EMAIL', message: 'Esta conta não tem e-mail.' });
+            const challengeId = await codigoEmailService.emitirParaConta(Number(usuarioId), ipDoCliente(req));
+            return res.status(200).json({ challengeId, expiresIn: 300 });
         } catch (err) {
             return responder2FA(res, err as Error);
         }
@@ -467,6 +505,7 @@ export class TwoFactorController {
             // nesta requisição. Emitir a nova sessão aqui evita deixar o cliente
             // sem credencial no meio do fluxo de convite.
             const sessao = await authService.emitirSessaoParaUsuario(usuarioId);
+            void twoFactorService.avisar(usuarioId, 'ativado');
 
             return res.status(200).json({
                 ...resultado,
@@ -509,17 +548,22 @@ export class TwoFactorController {
     static async disable(req: Request, res: Response) {
         try {
             const usuarioId = usuarioDaSessao(req);
-            const { codigo, backupCode } = req.body ?? {};
+            const { codigo, backupCode, challengeId, codigoEmail } = req.body ?? {};
 
             if (backupCode) {
                 await twoFactorService.consumirBackupCode(usuarioId, String(backupCode));
             } else if (codigo) {
                 await twoFactorService.verificarCodigo(usuarioId, String(codigo));
+            } else if (typeof challengeId === 'string' && typeof codigoEmail === 'string') {
+                // Perdeu o celular e os códigos: a sessão aberta (senha) + o código novo do e-mail bastam.
+                const v = await codigoEmailService.verificar(challengeId, codigoEmail);
+                if (String(v.usuarioId) !== usuarioId) throw new Error('CODIGO_INVALIDO');
             } else {
                 throw new Error('CODIGO_AUSENTE');
             }
 
             await twoFactorService.desativar(usuarioId);
+            void twoFactorService.avisar(usuarioId, 'desativado');
             return res.status(200).json({ ativo: false, message: '2FA desativado.' });
         } catch (err) {
             return responder2FA(res, err as Error);

@@ -91,6 +91,7 @@ twoFactorRouter.post('/setup', ...enrolamento, TwoFactorController.setup as any)
 twoFactorRouter.post('/verify-setup', ...enrolamento, TwoFactorController.verifySetup as any);
 
 const gestao = [authMiddleware as any, rateLimitGestao2FA as any];
+twoFactorRouter.post('/email-code', ...gestao, TwoFactorController.emailCode as any);
 twoFactorRouter.post('/disable', ...gestao, TwoFactorController.disable as any);
 // GET foi o especificado; o POST evita o código na query string. Mesmo handler.
 twoFactorRouter.get('/backup-codes', ...gestao, TwoFactorController.backupCodes as any);

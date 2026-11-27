@@ -2,6 +2,11 @@ import crypto from 'crypto';
 import { db } from '@loginhub/database';
 import { usuarios, aplicativos, usuarios2fa, usuarios2faBackupCodes, usuariosAparelho } from '@loginhub/schema';
 import { eq, and, isNull } from 'drizzle-orm';
+import { emailService } from './EmailService';
+
+/** Conta de CPF (sem e-mail): mesma regra do AparelhoService, aqui sem importá-lo (evita ciclo). */
+const ehContaDeCpf = (email: string | null | undefined): boolean => /^\d{11}$/.test(String(email ?? ''));
+const escaparHtml = (v: string): string => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 import type {
     TwoFactorSetupResponse,
     TwoFactorActivationResponse,
@@ -409,13 +414,37 @@ export class TwoFactorService {
 
     public async status(usuarioId: string): Promise<TwoFactorStatus> {
         const config = await this.carregarConfig(usuarioId);
-        if (!config) return { ativo: false, obrigatorio: false, backupCodesRestantes: 0 };
+        const conta = await this.carregarConta(usuarioId).catch(() => null);
+        const contaDeCpf = ehContaDeCpf(conta?.email);
+        if (!config) return { ativo: false, obrigatorio: false, backupCodesRestantes: 0, podeDesativar: false, metodo: 'email', contaDeCpf };
         return {
             ativo: config.ativo,
             obrigatorio: config.obrigatorio,
             confirmadoEm: config.confirmadoEm ? config.confirmadoEm.toISOString() : null,
             backupCodesRestantes: config.ativo ? await this.contarBackupCodes(usuarioId) : 0,
+            podeDesativar: config.ativo && !config.obrigatorio,
+            metodo: config.ativo ? 'app' : 'email',
+            contaDeCpf,
         };
+    }
+
+    /**
+     * Aviso por e-mail quando o app autenticador é ativado ou desativado (27/11/2026):
+     * quem não fez isso percebe na hora. Sem await de quem chama: o aviso não segura a resposta.
+     */
+    public async avisar(usuarioId: string, evento: 'ativado' | 'desativado'): Promise<void> {
+        try {
+            const conta = await this.carregarConta(usuarioId);
+            if (ehContaDeCpf(conta.email)) return;
+            const app = escaparHtml(conta.appNome?.trim() || ISSUER_PADRAO);
+            const texto = evento === 'ativado'
+                ? 'A verificação em duas etapas por <strong>aplicativo autenticador</strong> foi <strong>ativada</strong> na sua conta.'
+                : 'A verificação em duas etapas por <strong>aplicativo autenticador</strong> foi <strong>desativada</strong> na sua conta. Os acessos voltam a pedir o código enviado ao seu e-mail.';
+            const html = `<!doctype html><html lang="pt-BR"><body style="margin:0;padding:24px;background:#f5f5f5;font-family:Arial,Helvetica,sans-serif;"><div style="max-width:520px;margin:0 auto;background:#fff;border-radius:12px;padding:28px;color:#334155;font-size:15px;line-height:1.6;"><h1 style="margin:0 0 16px;color:#0f172a;font-size:20px;">${app}</h1><p style="margin:0 0 16px;">${texto}</p><p style="margin:0;padding:12px 16px;background:#fef2f2;border-left:3px solid #dc2626;color:#7f1d1d;font-size:13px;">Não foi você? Responda este e-mail agora para bloquearmos o acesso.</p></div></body></html>`;
+            await emailService.sendEmail(conta.email, `Verificação em duas etapas ${evento}`, html, { appId: conta.appId, appNome: conta.appNome });
+        } catch (e) {
+            console.error('[2FA] aviso por e-mail falhou:', (e as Error).message);
+        }
     }
 
     /**

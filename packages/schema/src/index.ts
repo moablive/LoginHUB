@@ -307,6 +307,12 @@ export interface TwoFactorStatus {
     confirmadoEm?: string | null;
     /** Quantos códigos de recuperação ainda não foram usados. */
     backupCodesRestantes: number;
+    /** 27/11/2026: o app autenticador está ativo e a própria pessoa pode desligá-lo (não é exigência do convite). */
+    podeDesativar?: boolean;
+    /** Segundo fator em uso: o código enviado ao e-mail ('email') ou o app autenticador ('app'). */
+    metodo?: 'email' | 'app';
+    /** Conta de CPF (sem e-mail): o código do e-mail não existe, o app é o único caminho. */
+    contaDeCpf?: boolean;
 }
 
 // ==========================================
