@@ -1735,6 +1735,16 @@ outros documentos. Plano e prévia: `docs/plano-cartoes-documentos-cofre.md`.
   com permissão 600. Criar cartão pelo CLI ficou de fora de propósito (o número iria na linha de comando).
 - **Testes**: `scripts/teste-cofre-anexos.ts` (Postgres descartável; papéis, cota, faxina, mover, cascade) e
   `scripts/teste-cofre-tipos.ts` (validações, cifra dos anexos, nada em claro no que vai ao servidor).
+- **Revisão de segurança (28/11/2026)** e o que ela mudou: o acesso ao cofre é conferido ANTES de ler o corpo do upload
+  (`preEnviarAnexo`, 413 acima de 10 MiB); o blob só é lido do banco depois do acesso; o `item_id` tem de estar no mesmo
+  cofre do anexo; o DELETE avulso só apaga blob ainda não ligado; a faxina de 24 h vale para todos os cofres do dono; o
+  `AnexoRef` que vem do item é validado (uuid, mime, sha, chave) e o conteúdo é conferido pelos primeiros bytes antes de
+  abrir; a versão do blob entra no dado associado (`anexo:v1:…`); a limpeza da área de transferência fica pendente e
+  repete quando a aba volta ao foco; o CLI grava com `wx` (ou temporário + rename com `--force`).
+- **Limites conhecidos**: a confirmação por digital/palavra-passe é da interface; o `hub-pass` entrega número, CVV, PIN e
+  arquivos a qualquer máquina aprovada, sem pedir presença (aprove só máquinas suas, e por cofre). A cota de 500 MiB é do
+  DONO do cofre: quem tem escrita num cofre compartilhado gasta a cota dele. A cota é conferida sem trava (envios paralelos
+  podem passar um pouco do teto). O tamanho do arquivo é visível ao servidor (sem preenchimento).
 - **O que não protege**: dispositivo comprometido, extensão maliciosa e phishing veem o dado depois de aberto; o navegador não
   deixa bloquear captura de tela. Cofre compartilhado mostra o item a todos os membros (a tela avisa).
 

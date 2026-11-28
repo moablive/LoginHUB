@@ -24,6 +24,8 @@ const reveladosAte = ref<Record<string, number>>({});
 const agora = ref(Date.now());
 let relogio: ReturnType<typeof setInterval> | undefined;
 let limpeza: ReturnType<typeof setTimeout> | undefined;
+/** Há algo copiado que ainda não conseguimos apagar (o navegador recusa escrever sem foco na aba). */
+const limpezaPendente = ref(false);
 
 const temPresenca = (): boolean => Date.now() < presencaAte.value;
 
@@ -71,6 +73,7 @@ export function esconderTudo(): void {
   presencaAte.value = 0;
   reveladosAte.value = {};
   presencaCancelada();
+  void limparAreaDeTransferencia();
 }
 
 /** Esconde o que estava à mostra mas mantém a presença (trocar de item não pede a digital de novo dentro dos 60 s). */
@@ -105,9 +108,29 @@ export async function copiarSensivel(valor: string): Promise<boolean> {
   if (!(await exigirPresenca())) return false;
   await navigator.clipboard.writeText(valor);
   clearTimeout(limpeza);
-  limpeza = setTimeout(() => void navigator.clipboard.writeText('').catch(() => undefined), AREA_DE_TRANSFERENCIA_MS);
+  limpezaPendente.value = true;
+  limpeza = setTimeout(() => void limparAreaDeTransferencia(), AREA_DE_TRANSFERENCIA_MS);
   return true;
 }
+
+/**
+ * Apaga o que foi copiado. Com a aba sem foco o navegador recusa a escrita: a limpeza fica PENDENTE e se repete quando a aba
+ * volta a ficar visível ou ganha foco (e ao trancar o cofre). `true` = a área de transferência foi limpa.
+ */
+export async function limparAreaDeTransferencia(): Promise<boolean> {
+  if (!limpezaPendente.value) return true;
+  try {
+    await navigator.clipboard.writeText('');
+    limpezaPendente.value = false;
+    clearTimeout(limpeza);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Ainda há cópia sensível na área de transferência (a limpeza não pôde rodar)? A tela avisa. */
+export const copiaPendente = limpezaPendente;
 
 /**
  * Liga as defesas de tempo desta tela: esconde tudo quando o cofre tranca, quando a aba vai para segundo plano e quando a
@@ -117,13 +140,19 @@ export function protegerRevelacao(): void {
   const { aberto } = useCofre();
   const aoEsconderAba = (): void => {
     if (document.hidden) esconderTudo();
+    else void limparAreaDeTransferencia();
   };
+  const aoFocar = (): void => void limparAreaDeTransferencia();
   const parar = watch(aberto, (v) => {
     if (!v) esconderTudo();
   });
-  onMounted(() => document.addEventListener('visibilitychange', aoEsconderAba));
+  onMounted(() => {
+    document.addEventListener('visibilitychange', aoEsconderAba);
+    window.addEventListener('focus', aoFocar);
+  });
   onBeforeUnmount(() => {
     document.removeEventListener('visibilitychange', aoEsconderAba);
+    window.removeEventListener('focus', aoFocar);
     parar();
     esconderRevelados();
   });

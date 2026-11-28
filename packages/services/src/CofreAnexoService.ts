@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { db } from '@loginhub/database';
-import { cofreAnexos, cofreCofres, cofreMembros } from '@loginhub/schema';
-import { and, eq, isNull, lt, sql } from 'drizzle-orm';
+import { cofreAnexos, cofreCofres, cofreItens, cofreMembros } from '@loginhub/schema';
+import { and, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
 
 /**
  * Anexos cifrados do cofre (db/026, 27/11/2026). Mesmo princípio do CofreService: um ARMÁRIO. O navegador cifra o arquivo
@@ -58,6 +58,17 @@ export class CofreAnexoService {
         throw erro('Cofre não encontrado.', 'NOT_FOUND');
     }
 
+    /**
+     * Confere, ANTES de ler o corpo de até 10 MiB, que `quem` pode gravar neste cofre (a rota roda isto antes do express.raw).
+     * Sem isso, uma conta autenticada mandaria uploads grandes para cofre alheio e só receberia o 404 depois de o servidor ler
+     * tudo.
+     */
+    public async podeEnviar(quem: string, cofreIdBruto: unknown, op: OpcoesDeAnexo = {}): Promise<void> {
+        const cofreId = uuid(cofreIdBruto, 'cofre_id');
+        const alvo = await this.alvo(quem, cofreId, op);
+        if (alvo.papel === 'leitura') throw erro('Você só pode ler este cofre.', 'SEM_PERMISSAO');
+    }
+
     /** Guarda um blob cifrado. Repetir o mesmo envio (mesmo id, mesmo sha256) é aceito: o navegador pode ter perdido a resposta. */
     public async enviar(quem: string, idBruto: unknown, cofreIdBruto: unknown, itemIdBruto: unknown, shaBruto: unknown, corpo: unknown, op: OpcoesDeAnexo = {}): Promise<void> {
         const id = uuid(idBruto, 'id');
@@ -74,14 +85,19 @@ export class CofreAnexoService {
         const alvo = await this.alvo(quem, cofreId, op);
         if (alvo.papel === 'leitura') throw erro('Você só pode ler este cofre.', 'SEM_PERMISSAO');
 
+        // O item, se já existe, tem de estar NESTE cofre: senão alguém com escrita num cofre encheria o limite (ou arrastaria
+        // blobs para a cota) de um item de outro cofre cujo uuid conheça.
+        const doCofre = await db.select({ cofreId: cofreItens.cofreId }).from(cofreItens).where(eq(cofreItens.id, itemId)).limit(1);
+        if (doCofre[0] && doCofre[0].cofreId !== cofreId) throw erro('Este item não está neste cofre.', 'VALIDATION');
         const existente = await db.select({ cofreId: cofreAnexos.cofreId, sha256: cofreAnexos.sha256 }).from(cofreAnexos).where(eq(cofreAnexos.id, id)).limit(1);
         if (existente[0]) {
             if (existente[0].cofreId === cofreId && existente[0].sha256 === sha) return;
             throw erro('Este anexo já existe.', 'DUPLICATE_ENTRY');
         }
-        // Faxina: blob que nenhum item gravado citou em 24 h (upload abandonado) sai daqui, do cofre que está recebendo.
-        await db.delete(cofreAnexos).where(and(eq(cofreAnexos.cofreId, cofreId), isNull(cofreAnexos.ligadoEm), lt(cofreAnexos.criadoEm, new Date(Date.now() - LIXO_APOS_MS))));
-        const doItem = await db.select({ n: sql<number>`count(*)` }).from(cofreAnexos).where(eq(cofreAnexos.itemId, itemId));
+        // Faxina: blob que nenhum item gravado citou em 24 h (upload abandonado) sai daqui, de TODOS os cofres do dono.
+        const doDono = db.select({ id: cofreCofres.id }).from(cofreCofres).where(eq(cofreCofres.dono, alvo.dono));
+        await db.delete(cofreAnexos).where(and(inArray(cofreAnexos.cofreId, doDono), isNull(cofreAnexos.ligadoEm), lt(cofreAnexos.criadoEm, new Date(Date.now() - LIXO_APOS_MS))));
+        const doItem = await db.select({ n: sql<number>`count(*)` }).from(cofreAnexos).where(and(eq(cofreAnexos.itemId, itemId), eq(cofreAnexos.cofreId, cofreId)));
         if (Number(doItem[0]?.n ?? 0) >= MAX_ANEXOS_POR_ITEM) throw erro(`Um item aceita até ${MAX_ANEXOS_POR_ITEM} arquivos.`, 'VALIDATION');
         const usado = await db
             .select({ total: sql<number>`coalesce(sum(${cofreAnexos.tamanho}), 0)` })
@@ -89,18 +105,27 @@ export class CofreAnexoService {
             .innerJoin(cofreCofres, eq(cofreCofres.id, cofreAnexos.cofreId))
             .where(eq(cofreCofres.dono, alvo.dono));
         if (Number(usado[0]?.total ?? 0) + corpo.length > COTA_POR_DONO) throw erro('Espaço de arquivos do cofre cheio (500 MiB). Apague anexos antigos.', 'VALIDATION');
-        await db.insert(cofreAnexos).values({ id, cofreId, itemId, tamanho: corpo.length, sha256: sha, blob: corpo });
+        // Dois envios do mesmo id ao mesmo tempo: o segundo bate na chave primária. Não é erro do servidor (e o erro do driver
+        // traz o blob de 10 MiB na mensagem, que não vai para o log): confere se é o mesmo conteúdo e segue.
+        const gravado = await db.insert(cofreAnexos).values({ id, cofreId, itemId, tamanho: corpo.length, sha256: sha, blob: corpo }).onConflictDoNothing().returning({ id: cofreAnexos.id });
+        if (!gravado[0]) {
+            const r = await db.select({ cofreId: cofreAnexos.cofreId, sha256: cofreAnexos.sha256 }).from(cofreAnexos).where(eq(cofreAnexos.id, id)).limit(1);
+            if (!(r[0] && r[0].cofreId === cofreId && r[0].sha256 === sha)) throw erro('Este anexo já existe.', 'DUPLICATE_ENTRY');
+        }
     }
 
     /** Devolve o blob cifrado. Qualquer membro do cofre lê; quem não tem acesso recebe o mesmo "não encontrado" de id inexistente. */
     public async baixar(quem: string, idBruto: unknown, op: OpcoesDeAnexo = {}): Promise<{ blob: Buffer; sha256: string }> {
         const id = uuid(idBruto, 'id');
-        const r = await db.select({ cofreId: cofreAnexos.cofreId, blob: cofreAnexos.blob, sha256: cofreAnexos.sha256 }).from(cofreAnexos).where(eq(cofreAnexos.id, id)).limit(1);
+        // Primeiro só o cofre (leve), depois o acesso, e só então os até 10 MiB do blob.
+        const r = await db.select({ cofreId: cofreAnexos.cofreId }).from(cofreAnexos).where(eq(cofreAnexos.id, id)).limit(1);
         if (!r[0]) throw erro('Anexo não encontrado.', 'NOT_FOUND');
         await this.alvo(quem, r[0].cofreId, op).catch(() => {
             throw erro('Anexo não encontrado.', 'NOT_FOUND');
         });
-        return { blob: r[0].blob, sha256: r[0].sha256 };
+        const b = await db.select({ blob: cofreAnexos.blob, sha256: cofreAnexos.sha256 }).from(cofreAnexos).where(eq(cofreAnexos.id, id)).limit(1);
+        if (!b[0]) throw erro('Anexo não encontrado.', 'NOT_FOUND');
+        return { blob: b[0].blob, sha256: b[0].sha256 };
     }
 
     /** Apaga um blob (o navegador desfaz um upload cujo item não chegou a ser gravado). Exige escrita. */
@@ -112,7 +137,8 @@ export class CofreAnexoService {
             throw erro('Anexo não encontrado.', 'NOT_FOUND');
         });
         if (alvo.papel === 'leitura') throw erro('Você só pode ler este cofre.', 'SEM_PERMISSAO');
-        await db.delete(cofreAnexos).where(eq(cofreAnexos.id, id));
+        // Só o blob que nenhum item citou: o que já está ligado sai com o item (apagarItem) ou pela lista `anexos`.
+        await db.delete(cofreAnexos).where(and(eq(cofreAnexos.id, id), isNull(cofreAnexos.ligadoEm)));
     }
 }
 

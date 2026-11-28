@@ -10,7 +10,7 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { cofreApi } from '@loginhub/api-client';
 import { novoId } from './cripto';
-import { cifrarBytes, decifrarBytes, ErroAnexo } from './anexosCripto';
+import { cifrarBytes, conferirRef, decifrarBytes, ErroAnexo, tipoConfere } from './anexosCripto';
 import { MAX_ANEXO_BYTES, MIMES_ANEXO, type AnexoRef } from './tipos';
 
 const LADO_MAX = 2000;
@@ -100,9 +100,12 @@ export async function descartarAnexos(ids: string[]): Promise<void> {
 
 /** Baixa, confere a integridade e decifra um anexo. Devolve os bytes em claro: quem chama os apaga quando fechar. */
 export async function abrirAnexo(ref: AnexoRef, itemId: string): Promise<Uint8Array> {
+  conferirRef(ref);
   const cifrado = await cofreApi.baixarAnexo(ref.id);
   if (hex(sha256(cifrado)) !== ref.sha256) throw new ErroAnexo('INTEGRIDADE', 'O arquivo guardado foi alterado. Não vou abrir.');
-  return decifrarBytes(cifrado, ref.chave, itemId, ref.id);
+  const claro = decifrarBytes(cifrado, ref.chave, itemId, ref.id);
+  if (!tipoConfere(claro, ref.mime)) throw new ErroAnexo('ABRIR', 'O conteúdo do arquivo não é do tipo que o item informa. Não vou abrir.');
+  return claro;
 }
 
 /** URL temporária só desta aba. Revogue com `URL.revokeObjectURL` ao fechar. */

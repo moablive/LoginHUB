@@ -845,7 +845,7 @@ export class CofreService {
                 }
                 await tx.update(cofreItens).set({ cofreId, dados, atualizadoEm: new Date() }).where(eq(cofreItens.id, id));
                 // db/026: o item mudou de cofre, os anexos vão junto (o blob não depende da chave do cofre).
-                if (existente[0].cofreId !== cofreId) await tx.update(cofreAnexos).set({ cofreId }).where(eq(cofreAnexos.itemId, id));
+                if (existente[0].cofreId !== cofreId) await tx.update(cofreAnexos).set({ cofreId }).where(and(eq(cofreAnexos.itemId, id), eq(cofreAnexos.cofreId, existente[0].cofreId)));
                 await this.ligarAnexos(tx, id, cofreId, anexos);
                 return;
             }

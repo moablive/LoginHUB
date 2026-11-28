@@ -269,7 +269,7 @@ cofreRouter.delete('/cofres/:id', CofreController.apagarCofre as any);
 cofreRouter.put('/itens/:id', CofreController.salvarItem as any);
 cofreRouter.delete('/itens/:id', CofreController.apagarItem as any);
 // Anexos cifrados (db/026): corpo binário só nestas rotas (o json global é de 5 MB). 10 MiB + a sobrecarga da cifra.
-cofreRouter.put('/anexos/:id', rateLimitCofreAnexoEnvio as any, express.raw({ type: 'application/octet-stream', limit: 10 * 1024 * 1024 + 128 }) as any, CofreController.enviarAnexo as any);
+cofreRouter.put('/anexos/:id', rateLimitCofreAnexoEnvio as any, CofreController.preEnviarAnexo as any, express.raw({ type: 'application/octet-stream', limit: 10 * 1024 * 1024 + 128 }) as any, CofreController.enviarAnexo as any);
 cofreRouter.get('/anexos/:id', rateLimitCofreAnexoBaixa as any, CofreController.baixarAnexo as any);
 cofreRouter.delete('/anexos/:id', rateLimitCofreAnexoEnvio as any, CofreController.apagarAnexo as any);
 cofreRouter.get('/aparelhos', CofreController.listarAparelhos as any);

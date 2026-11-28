@@ -5,7 +5,7 @@ import {
   agruparNumero, bandeiraDe, cartaoValido, cartaoVencido, cpfValido, documentoValido, finalDe, formatarCpf, formatarValidade,
   luhnOk, mascaraCartao, mascaraDocumento, situacaoDaValidade, validadeCartaoOk,
 } from '../apps/ui/src/features/cofre/tipos';
-import { cifrarBytes, decifrarBytes } from '../apps/ui/src/features/cofre/anexosCripto';
+import { adAnexo, cifrarBytes, conferirRef, decifrarBytes, tipoConfere } from '../apps/ui/src/features/cofre/anexosCripto';
 import { cifrarJson, decifrarJson, novaChave, novoId } from '../apps/ui/src/features/cofre/cripto';
 import type { ItemCofre } from '../apps/ui/src/features/cofre/useCofre';
 
@@ -56,6 +56,14 @@ const mexido = new Uint8Array(cifrado);
 mexido[100] ^= 1;
 ok('anexo: um bit alterado no blob falha', lanca(() => decifrarBytes(mexido, chave, item, anexo)) === 'INTEGRIDADE');
 ok('anexo: blob truncado e versão desconhecida falham', lanca(() => decifrarBytes(cifrado.subarray(0, 30), chave, item, anexo)) === 'ABRIR' && lanca(() => decifrarBytes(Uint8Array.of(9, ...cifrado.subarray(1)), chave, item, anexo)) === 'ABRIR');
+
+// ---- referência de anexo vinda do item (pode ter sido gravada por outro membro) e tipo do arquivo
+const refBoa = { id: novoId(), mime: 'application/pdf', sha256: 'a'.repeat(64), chave, tamanho: 10 };
+ok('ref: referência bem formada passa', lanca(() => conferirRef(refBoa)) === null);
+ok('ref: id com ../, mime estranho, sha curto, chave curta e tamanho texto são recusados', ['id', 'mime', 'sha256', 'chave', 'tamanho'].every((k) => lanca(() => conferirRef({ ...refBoa, [k]: k === 'id' ? '../aparelhos' : k === 'mime' ? 'text/html' : k === 'sha256' ? 'abc' : k === 'chave' ? 'AAAA' : '10' })) === 'ABRIR'));
+ok('tipo: magic bytes de PDF, JPEG, PNG e WebP', tipoConfere(Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d]), 'application/pdf') && tipoConfere(Uint8Array.from([0xff, 0xd8, 0xff, 0xe0]), 'image/jpeg') && tipoConfere(Uint8Array.from([0x89, 0x50, 0x4e, 0x47]), 'image/png') && tipoConfere(Uint8Array.from([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]), 'image/webp'));
+ok('tipo: HTML disfarçado de PDF ou imagem é recusado', !tipoConfere(new TextEncoder().encode('<html><script>x</script>'), 'application/pdf') && !tipoConfere(new TextEncoder().encode('<svg onload=x>'), 'image/jpeg') && !tipoConfere(Uint8Array.from([0x25, 0x50, 0x44, 0x46]), 'text/html'));
+ok('dado associado leva a versão do blob', adAnexo('i', 'a') === 'anexo:v1:i:a');
 
 // ---- o que vai ao servidor não tem o dado em claro (zero-knowledge)
 const NUMERO = '4111111111111111', CVV = '737', CPF = '12345678909', NOME = 'MOAB EXEMPLO';

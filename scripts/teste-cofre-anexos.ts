@@ -85,6 +85,13 @@ const contagem = async (where: string): Promise<number> => Number(((await db.exe
   ok('baixar: quem não participa recebe 404 (igual a anexo inexistente)', (await codigo(() => anexoSvc.baixar(D, a1))) === 'NOT_FOUND' && (await codigo(() => anexoSvc.baixar(D, uuid()))) === 'NOT_FOUND');
   ok('apagar: só leitura NÃO apaga; escrita apaga', (await codigo(() => anexoSvc.apagar(C, aB))) === 'SEM_PERMISSAO' && (await codigo(() => anexoSvc.apagar(B, aB))) === null && (await contagem(`id = '${aB}'`)) === 0);
 
+  // ---- pré-checagem (roda antes de ler o corpo de 10 MiB) e item de outro cofre
+  ok('pré-checagem: dono e membro com escrita passam; só leitura, estranho e cofre inexistente não', (await codigo(() => anexoSvc.podeEnviar(A, cofre))) === null && (await codigo(() => anexoSvc.podeEnviar(B, cofre))) === null && (await codigo(() => anexoSvc.podeEnviar(C, cofre))) === 'SEM_PERMISSAO' && (await codigo(() => anexoSvc.podeEnviar(D, cofre))) === 'NOT_FOUND' && (await codigo(() => anexoSvc.podeEnviar(A, uuid()))) === 'NOT_FOUND' && (await codigo(() => anexoSvc.podeEnviar(A, 'x'))) === 'VALIDATION');
+  ok('pré-checagem: a máquina do CLI de um membro não passa no cofre do outro', (await codigo(() => anexoSvc.podeEnviar(B, cofre, { aparelho: true }))) === 'NOT_FOUND');
+  const cOutro = uuid();
+  await cofreSvc.salvarCofre(B, cOutro, envelope());
+  ok('item de OUTRO cofre: enviar com item_id que existe em outro cofre é recusado (não enche o limite alheio)', (await codigo(() => anexoSvc.enviar(B, uuid(), cOutro, item, undefined, blob()))) === 'VALIDATION');
+
   // ---- máquina do CLI
   const aCli = uuid(), bCli = blob();
   ok('CLI: a máquina do dono envia e baixa', (await codigo(() => anexoSvc.enviar(A, aCli, cofre, item, undefined, bCli, { aparelho: true }))) === null && (await anexoSvc.baixar(A, aCli, { aparelho: true })).blob.equals(bCli));
@@ -108,6 +115,7 @@ const contagem = async (where: string): Promise<number> => Number(((await db.exe
   ok('item novo: grava o item e marca os três anexos como ligados', (await contagem(`item_id = '${it2}' AND ligado_em IS NOT NULL`)) === 3);
   await cofreSvc.salvarItem(A, it2, cofre, envelope(), null, { ...g, anexos: [x1] });
   ok('edição com lista menor: apaga os anexos que saíram da lista', (await contagem(`item_id = '${it2}'`)) === 1 && (await contagem(`id = '${x1}'`)) === 1);
+  ok('apagar avulso: blob já ligado a um item NÃO é apagado (só o que ninguém citou)', (await codigo(() => anexoSvc.apagar(A, x1))) === null && (await contagem(`id = '${x1}'`)) === 1);
   await cofreSvc.salvarItem(A, it2, cofre, envelope(), null, g);
   ok('edição SEM lista (cliente antigo, CLI): não mexe nos anexos', (await contagem(`id = '${x1}'`)) === 1);
   await cofreSvc.salvarItem(A, it2, cofre, envelope(), null, { ...g, anexos: [] });
@@ -133,6 +141,12 @@ const contagem = async (where: string): Promise<number> => Number(((await db.exe
   await cofreSvc.apagarCofre(A, cy);
   ok('apagar cofre: apaga todos os anexos (cascade)', (await contagem(`cofre_id = '${cy}'`)) === 0);
 
+  // ---- envio simultâneo do mesmo id (corrida na chave primária) não vira erro
+  const cc = uuid(), cc1 = uuid(), ccb = blob();
+  await cofreSvc.salvarCofre(A, cc, envelope());
+  const par = await Promise.all([1, 2, 3].map(() => codigo(() => anexoSvc.enviar(A, cc1, cc, uuid(), sha(ccb), ccb))));
+  ok('corrida: três envios simultâneos do mesmo id e do mesmo conteúdo terminam sem erro e gravam uma linha', par.every((c) => c === null || c === 'VALIDATION') && (await contagem(`id = '${cc1}'`)) === 1);
+
   // ---- faxina de upload abandonado
   const cz = uuid(), velhoId = uuid(), ligadoVelho = uuid();
   await cofreSvc.salvarCofre(A, cz, envelope());
@@ -141,6 +155,11 @@ const contagem = async (where: string): Promise<number> => Number(((await db.exe
   await db.execute(sql.raw(`INSERT INTO cofre_anexos (id, cofre_id, item_id, tamanho, sha256, blob, criado_em, ligado_em) VALUES ('${ligadoVelho}', '${cz}', '${uuid()}', 100, '${'b'.repeat(64)}', '\\x01'::bytea, NOW() - INTERVAL '25 hours', NOW() - INTERVAL '25 hours')`));
   await anexoSvc.enviar(A, uuid(), cz, itz, undefined, blob());
   ok('faxina: blob sem item citado há mais de 24 h sai no próximo envio', (await contagem(`id = '${velhoId}'`)) === 0);
+  const cz2 = uuid(), velho2 = uuid();
+  await cofreSvc.salvarCofre(A, cz2, envelope());
+  await db.execute(sql.raw(`INSERT INTO cofre_anexos (id, cofre_id, item_id, tamanho, sha256, blob, criado_em) VALUES ('${velho2}', '${cz2}', '${uuid()}', 100, '${'d'.repeat(64)}', '\\x01'::bytea, NOW() - INTERVAL '25 hours')`));
+  await anexoSvc.enviar(A, uuid(), cz, itz, undefined, blob());
+  ok('faxina: roda por DONO — órfão de outro cofre do mesmo dono também sai', (await contagem(`id = '${velho2}'`)) === 0);
   ok('faxina: blob ligado a um item NÃO é tocado', (await contagem(`id = '${ligadoVelho}'`)) === 1);
 
   // ---- cota por dono (500 MiB): 50 linhas de 10 MiB fecham a conta do dono

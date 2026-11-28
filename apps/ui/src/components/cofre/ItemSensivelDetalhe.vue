@@ -7,7 +7,7 @@ import UiSheet from '@/components/ui/UiSheet.vue';
 import UiSpinner from '@/components/ui/UiSpinner.vue';
 import type { ItemAberto } from '@/features/cofre/useCofre';
 import { abrirAnexo, ErroAnexo, urlTemporaria } from '@/features/cofre/anexos';
-import { alternarRevelado, copiarSensivel, estaRevelado, exigirPresenca, protegerRevelacao, segundosParaEsconder, REVELADO_MS } from '@/features/cofre/revelar';
+import { alternarRevelado, copiaPendente, copiarSensivel, estaRevelado, exigirPresenca, protegerRevelacao, segundosParaEsconder, REVELADO_MS } from '@/features/cofre/revelar';
 import {
   agruparNumero,
   brData,
@@ -177,6 +177,7 @@ const tamanho = (b: number) => (b >= 1048576 ? `${(b / 1048576).toFixed(1).repla
     </template>
 
     <p v-if="erro" class="rounded-controle bg-danger/10 px-3 py-2 text-footnote text-danger" role="alert">{{ erro }}</p>
+    <p v-if="copiaPendente" class="rounded-controle bg-warning/10 px-3 py-2 text-footnote text-label-2" role="status">O que você copiou ainda está na área de transferência: o navegador só deixa apagar com esta aba em foco. Volte para esta aba que eu apago.</p>
     <p class="flex items-start gap-2 text-footnote text-label-2">
       <ShieldCheckIcon class="mt-0.5 h-4 w-4 shrink-0 text-success" aria-hidden="true" />
       Cifrado neste aparelho antes de sair. Mostrar e Copiar pedem a digital ou a palavra-passe de novo; o valor se esconde em 20 s e o que você copia some da área de transferência em 30 s.

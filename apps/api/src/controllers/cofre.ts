@@ -1,5 +1,5 @@
-import { Request, Response } from 'express';
-import { cofreService, cofreAnexoService, twoFactorService } from '@loginhub/services';
+import { NextFunction, Request, Response } from 'express';
+import { cofreService, cofreAnexoService, MAX_ANEXO_BYTES, twoFactorService } from '@loginhub/services';
 import { donoDaPessoa, donoDoCofre, ipDoCliente } from '@loginhub/middlewares';
 import { MASTER_LOGIN_EMAIL } from '@loginhub/schema';
 
@@ -23,7 +23,8 @@ function responder(res: Response, err: unknown, acao: string) {
     if (e.code === 'SEM_PERMISSAO') return res.status(403).json({ error: 'SEM_PERMISSAO', message: e.message });
     if (e.code === 'CHAVE_GIRADA') return res.status(409).json({ error: 'CHAVE_GIRADA', message: e.message });
     if (e.code === 'CONFLITO') return res.status(409).json({ error: 'CONFLITO', message: e.message });
-    console.error(`[CofreController] ${acao}:`, e.message);
+    // Erro do driver do Postgres traz os parâmetros na mensagem (inclusive um blob de 10 MiB): só o código vai para o log.
+    console.error(`[CofreController] ${acao}:`, (e as { code?: string }).code && /^\d{5}$/.test(String((e as { code?: string }).code)) ? `erro do banco ${e.code}` : e.message);
     return res.status(500).json({ error: 'Erro Interno' });
 }
 
@@ -120,6 +121,23 @@ export class CofreController {
     }
 
     // ------------------------------------------------------------ anexos cifrados (db/026)
+
+    /**
+     * Roda ANTES do `express.raw`: confere o acesso ao cofre e o Content-Length sem ler o corpo (db/026). Quem não pode gravar
+     * recebe 404/403 de imediato, e o servidor não engole 10 MiB por tentativa.
+     */
+    static async preEnviarAnexo(req: Request, res: Response, next: NextFunction) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SO_MASTER' });
+        const tamanho = Number(req.headers['content-length']);
+        if (Number.isFinite(tamanho) && tamanho > MAX_ANEXO_BYTES) return res.status(413).json({ error: 'ARQUIVO_GRANDE', message: 'Arquivo acima de 10 MiB.' });
+        try {
+            await cofreAnexoService.podeEnviar(dono, req.query.cofre_id, { aparelho: !!donoDoCofre(req)?.aparelhoId, permitidos: permitidosDe(req) });
+            return next();
+        } catch (err) {
+            return responder(res, err, 'preEnviarAnexo');
+        }
+    }
 
     /**
      * PUT /cofre/anexos/:id?cofre_id=&item_id=&sha256= — corpo `application/octet-stream`: o arquivo JÁ cifrado no navegador.

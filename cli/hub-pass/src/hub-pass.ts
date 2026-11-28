@@ -21,7 +21,7 @@
  */
 import { spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, hostname, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
@@ -45,7 +45,7 @@ import {
   segundosRestantes,
 } from '../../../apps/ui/src/features/cofre/cripto';
 import { abrirSelo, adSelo, codigoDoPedido, formatarCodigo, novoParDoAparelho } from '../../../apps/ui/src/features/cofre/pareamento';
-import { decifrarBytes } from '../../../apps/ui/src/features/cofre/anexosCripto';
+import { conferirRef, decifrarBytes, tipoConfere } from '../../../apps/ui/src/features/cofre/anexosCripto';
 import { finalDe, mascaraCartao, mascaraDocumento, nomeDoTipoDocumento, type DadosCartao, type DadosDocumento } from '../../../apps/ui/src/features/cofre/tipos';
 import type { CofreEstado } from '@loginhub/schema';
 
@@ -307,8 +307,8 @@ const CAMPOS_DOC: Record<string, keyof DadosDocumento> = { number: 'numero', num
 
 function campoSensivel(item: ItemAberto, nome: string): string | undefined {
   const n = nome.toLowerCase();
-  if (item.tipo === 'cartao' && item.cartao && n in CAMPOS_CARTAO) return String(item.cartao[CAMPOS_CARTAO[n]!] ?? '');
-  if (item.tipo === 'documento' && item.documento && n in CAMPOS_DOC) return String(item.documento[CAMPOS_DOC[n]!] ?? '');
+  if (item.tipo === 'cartao' && item.cartao && Object.hasOwn(CAMPOS_CARTAO, n)) return String(item.cartao[CAMPOS_CARTAO[n]!] ?? '');
+  if (item.tipo === 'documento' && item.documento && Object.hasOwn(CAMPOS_DOC, n)) return String(item.documento[CAMPOS_DOC[n]!] ?? '');
   return undefined;
 }
 
@@ -526,10 +526,10 @@ async function baixarAnexoDoItem(s: Sessao, alvo: ItemAberto, op: Record<string,
   if (!Number.isInteger(n) || !a) throw new ErroCli(`Escolha --n de 1 a ${anexos.length}.`);
   const saida = opcao(op, 'out', 'saida');
   if (!saida) throw new ErroCli('Informe --out <arquivo>: o arquivo em claro nunca vai para a tela.');
-  if (existsSync(saida) && !op.force) throw new ErroCli(`${saida} já existe. Use --force para sobrescrever.`);
+  conferirRef(a);
   let r: Response;
   try {
-    r = await fetch(`${s.api.replace(/\/+$/, '')}/cofre/anexos/${a.id}`, { headers: { 'User-Agent': `hub-pass/${VERSAO}`, 'x-cofre-aparelho': `${s.aparelho_id}.${s.token}` } });
+    r = await fetch(`${s.api.replace(/\/+$/, '')}/cofre/anexos/${encodeURIComponent(a.id)}`, { headers: { 'User-Agent': `hub-pass/${VERSAO}`, 'x-cofre-aparelho': `${s.aparelho_id}.${s.token}` } });
   } catch {
     throw new ErroCli(`Sem conexão com ${s.api}.`);
   }
@@ -537,7 +537,21 @@ async function baixarAnexoDoItem(s: Sessao, alvo: ItemAberto, op: Record<string,
   const cifrado = new Uint8Array(await r.arrayBuffer());
   if (createHash('sha256').update(cifrado).digest('hex') !== a.sha256) throw new ErroCli('O arquivo guardado foi alterado. Não vou abrir.');
   const claro = decifrarBytes(cifrado, a.chave, alvo.id, a.id);
-  writeFileSync(saida, claro, { mode: 0o600 });
+  if (!tipoConfere(claro, a.mime)) throw new ErroCli('O conteúdo do arquivo não é do tipo que o item informa. Não vou gravar.');
+  if (op.force) {
+    // Escreve num temporário 600 ao lado e troca: o claro nunca fica legível com a permissão do arquivo antigo.
+    const tmp = `${saida}.${process.pid}.tmp`;
+    writeFileSync(tmp, claro, { mode: 0o600, flag: 'wx' });
+    renameSync(tmp, saida);
+  } else {
+    // `wx` recusa arquivo existente e também link simbólico (mesmo pendente) no destino.
+    try {
+      writeFileSync(saida, claro, { mode: 0o600, flag: 'wx' });
+    } catch (e) {
+      if ((e as { code?: string }).code === 'EEXIST') throw new ErroCli(`${saida} já existe. Use --force para sobrescrever.`);
+      throw e;
+    }
+  }
   chmodSync(saida, 0o600);
   process.stderr.write(`Arquivo gravado em ${saida} (600). Apague quando terminar.\n`);
 }
