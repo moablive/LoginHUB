@@ -45,6 +45,8 @@ import {
   segundosRestantes,
 } from '../../../apps/ui/src/features/cofre/cripto';
 import { abrirSelo, adSelo, codigoDoPedido, formatarCodigo, novoParDoAparelho } from '../../../apps/ui/src/features/cofre/pareamento';
+import { decifrarBytes } from '../../../apps/ui/src/features/cofre/anexosCripto';
+import { finalDe, mascaraCartao, mascaraDocumento, nomeDoTipoDocumento, type DadosCartao, type DadosDocumento } from '../../../apps/ui/src/features/cofre/tipos';
 import type { CofreEstado } from '@loginhub/schema';
 
 const VERSAO = '1.1.0';
@@ -74,6 +76,10 @@ interface ItemCofre {
   url: string;
   totp: string;
   notas: string;
+  /** Cartão e documento (28/11/2026, db/026): ausente = login. Guardados cifrados dentro do item, como o resto. */
+  tipo?: 'login' | 'cartao' | 'documento';
+  cartao?: DadosCartao;
+  documento?: DadosDocumento;
 }
 
 interface CofreAberto {
@@ -284,7 +290,8 @@ function acharItem(itens: ItemAberto[], cofre: CofreAberto, titulo: string | und
 }
 
 // Nomes aceitos em --field (os do pass-cli e os em português) → campo do item.
-const CAMPOS = new Map<string, keyof ItemCofre | 'totp-code'>([
+type CampoTexto = 'titulo' | 'usuario' | 'senha' | 'url' | 'totp' | 'notas';
+const CAMPOS = new Map<string, CampoTexto | 'totp-code'>([
   ...(['title', 'titulo'] as const).map((n) => [n, 'titulo'] as const),
   ...(['username', 'usuario', 'user', 'email'] as const).map((n) => [n, 'usuario'] as const),
   ...(['pass' + 'word', 'senha'] as const).map((n) => [n, 'senha'] as const),
@@ -294,7 +301,20 @@ const CAMPOS = new Map<string, keyof ItemCofre | 'totp-code'>([
   ['totp-secret', 'totp'] as const,
 ]);
 
+// Campos de cartão e documento: só saem com --field explícito (nunca no `view` sem campo, nem no --json).
+const CAMPOS_CARTAO: Record<string, keyof DadosCartao> = { number: 'numero', numero: 'numero', cvv: 'cvv', pin: 'pin', expiry: 'validade', validade: 'validade', holder: 'titular', titular: 'titular', brand: 'bandeira', bandeira: 'bandeira', bank: 'banco', banco: 'banco' };
+const CAMPOS_DOC: Record<string, keyof DadosDocumento> = { number: 'numero', numero: 'numero', name: 'nome', nome: 'nome', expiry: 'validade', validade: 'validade', category: 'categoria', categoria: 'categoria', issuer: 'orgao', orgao: 'orgao', birth: 'nascimento', nascimento: 'nascimento' };
+
+function campoSensivel(item: ItemAberto, nome: string): string | undefined {
+  const n = nome.toLowerCase();
+  if (item.tipo === 'cartao' && item.cartao && n in CAMPOS_CARTAO) return String(item.cartao[CAMPOS_CARTAO[n]!] ?? '');
+  if (item.tipo === 'documento' && item.documento && n in CAMPOS_DOC) return String(item.documento[CAMPOS_DOC[n]!] ?? '');
+  return undefined;
+}
+
 function campo(item: ItemAberto, nome: string): string {
+  const sensivel = campoSensivel(item, nome);
+  if (sensivel !== undefined) return sensivel;
   const c = CAMPOS.get(nome.toLowerCase());
   if (!c) throw new ErroCli(`Campo "${nome}" desconhecido. Use: password, username, url, notes, totp, title, totp-secret.`);
   if (c === 'totp-code') {
@@ -497,6 +517,31 @@ async function vault(sub: string | undefined, pos: string[], op: Record<string, 
   throw new ErroCli('Uso: hub-pass vault list | create <nome>');
 }
 
+/** Baixa um arquivo cifrado de um documento, confere a integridade, decifra e grava num arquivo 600 (nunca na tela). */
+async function baixarAnexoDoItem(s: Sessao, alvo: ItemAberto, op: Record<string, string | true>): Promise<void> {
+  const anexos = alvo.documento?.anexos ?? [];
+  if (!anexos.length) throw new ErroCli(`O item "${alvo.titulo}" não tem arquivos.`);
+  const n = Number(opcao(op, 'n', 'arquivo') ?? '1');
+  const a = anexos[n - 1];
+  if (!Number.isInteger(n) || !a) throw new ErroCli(`Escolha --n de 1 a ${anexos.length}.`);
+  const saida = opcao(op, 'out', 'saida');
+  if (!saida) throw new ErroCli('Informe --out <arquivo>: o arquivo em claro nunca vai para a tela.');
+  if (existsSync(saida) && !op.force) throw new ErroCli(`${saida} já existe. Use --force para sobrescrever.`);
+  let r: Response;
+  try {
+    r = await fetch(`${s.api.replace(/\/+$/, '')}/cofre/anexos/${a.id}`, { headers: { 'User-Agent': `hub-pass/${VERSAO}`, 'x-cofre-aparelho': `${s.aparelho_id}.${s.token}` } });
+  } catch {
+    throw new ErroCli(`Sem conexão com ${s.api}.`);
+  }
+  if (!r.ok) throw new ErroCli(`Não consegui baixar o arquivo (HTTP ${r.status}).`);
+  const cifrado = new Uint8Array(await r.arrayBuffer());
+  if (createHash('sha256').update(cifrado).digest('hex') !== a.sha256) throw new ErroCli('O arquivo guardado foi alterado. Não vou abrir.');
+  const claro = decifrarBytes(cifrado, a.chave, alvo.id, a.id);
+  writeFileSync(saida, claro, { mode: 0o600 });
+  chmodSync(saida, 0o600);
+  process.stderr.write(`Arquivo gravado em ${saida} (600). Apague quando terminar.\n`);
+}
+
 async function item(sub: string | undefined, op: Record<string, string | true>): Promise<void> {
   const { s, cofres, itens } = await abrir();
   const nomeCofre = opcao(op, 'vault', 'vault-name', 'cofre');
@@ -505,8 +550,9 @@ async function item(sub: string | undefined, op: Record<string, string | true>):
   if (sub === 'list') {
     const lista = nomeCofre ? itens.filter((i) => i.cofre_id === acharCofre(cofres, nomeCofre).id) : itens;
     const cofreDe = (id: string) => cofres.find((c) => c.id === id)?.nome ?? '';
-    if (op.json) return void console.log(JSON.stringify(lista.map((i) => ({ id: i.id, cofre: cofreDe(i.cofre_id), titulo: i.titulo, usuario: i.usuario, url: i.url, tem_2fa: !!lerTotp(i.totp) }))));
-    for (const i of lista) console.log(`${cofreDe(i.cofre_id)}\t${i.titulo}\t${i.usuario}${lerTotp(i.totp) ? '\t[2FA]' : ''}`);
+    const marca = (i: ItemAberto): string => (i.tipo === 'cartao' ? '[cartão]' : i.tipo === 'documento' ? '[documento]' : lerTotp(i.totp) ? '[2FA]' : '');
+    if (op.json) return void console.log(JSON.stringify(lista.map((i) => ({ id: i.id, cofre: cofreDe(i.cofre_id), tipo: i.tipo ?? 'login', titulo: i.titulo, usuario: i.usuario, url: i.url, tem_2fa: !!lerTotp(i.totp) }))));
+    for (const i of lista) console.log(`${cofreDe(i.cofre_id)}\t${i.titulo}\t${i.usuario}${marca(i) ? `\t${marca(i)}` : ''}`);
     return;
   }
 
@@ -526,6 +572,24 @@ async function item(sub: string | undefined, op: Record<string, string | true>):
   if (sub === 'view') {
     const f = opcao(op, 'field', 'campo');
     if (f) return void process.stdout.write(campo(alvo, f) + (process.stdout.isTTY ? '\n' : ''));
+    // Cartão e documento (28/11/2026): sem --field o `view` mostra só o que a tela do cofre já mostra mascarado.
+    if (alvo.tipo === 'cartao' && alvo.cartao) {
+      const c = alvo.cartao;
+      if (op.json) return void console.log(JSON.stringify({ id: alvo.id, cofre: cofre.nome, tipo: 'cartao', titulo: alvo.titulo, bandeira: c.bandeira, final: finalDe(c.numero), validade: c.validade, titular: c.titular, tem_cvv: !!c.cvv, tem_pin: !!c.pin }));
+      console.log(`título:   ${alvo.titulo}\ntipo:     cartão ${c.bandeira}\nnúmero:   ${mascaraCartao(c.numero)}\nvalidade: ${c.validade}\ntitular:  ${c.titular}\ncvv/pin:  ${c.cvv || c.pin ? 'guardados' : 'não guardados'}`);
+      console.log('(número, CVV e PIN só com --field numero|cvv|pin)');
+      return;
+    }
+    if (alvo.tipo === 'documento' && alvo.documento) {
+      const d = alvo.documento;
+      if (op.json) return void console.log(JSON.stringify({ id: alvo.id, cofre: cofre.nome, tipo: 'documento', titulo: alvo.titulo, documento: d.tipo, validade: d.validade ?? null, arquivos: d.anexos.map((a, i) => ({ n: i + 1, nome: a.nome, mime: a.mime, tamanho: a.tamanho })) }));
+      console.log(`título:   ${alvo.titulo}\ntipo:     ${nomeDoTipoDocumento(d.tipo)}\nnúmero:   ${mascaraDocumento(d.tipo, d.numero)}`);
+      if (d.nome) console.log(`nome:     ${d.nome}`);
+      if (d.validade) console.log(`validade: ${d.validade}`);
+      for (const [i, a] of d.anexos.entries()) console.log(`arquivo ${i + 1}: ${a.nome} (${a.mime}, ${a.tamanho} bytes)`);
+      console.log('(número só com --field numero; arquivo com: hub-pass item anexo --vault V --item T --n 1 --out ARQUIVO)');
+      return;
+    }
     const t = lerTotp(alvo.totp);
     if (op.json) return void console.log(JSON.stringify({ id: alvo.id, cofre: cofre.nome, titulo: alvo.titulo, usuario: alvo.usuario, senha: alvo.senha, url: alvo.url, notas: alvo.notas, codigo_2fa: t ? codigoTotp(t) : null }));
     console.log(`título:   ${alvo.titulo}`);
@@ -537,6 +601,7 @@ async function item(sub: string | undefined, op: Record<string, string | true>):
     return;
   }
   if (sub === 'totp') return void console.log(campo(alvo, 'totp'));
+  if (sub === 'anexo') return void (await baixarAnexoDoItem(s, alvo, op));
   if (sub === 'update') {
     const { id, cofre_id: _c, ...base } = alvo;
     const dados = dadosDasOpcoes(op, base);
@@ -549,7 +614,7 @@ async function item(sub: string | undefined, op: Record<string, string | true>):
     await chamar(s.api, 'DELETE', `/cofre/itens/${alvo.id}`, { aparelho: `${s.aparelho_id}.${s.token}` });
     return void process.stderr.write(`Item "${alvo.titulo}" apagado.\n`);
   }
-  throw new ErroCli('Uso: hub-pass item list|view|totp|create|update|delete --vault <cofre> --item <título>');
+  throw new ErroCli('Uso: hub-pass item list|view|totp|anexo|create|update|delete --vault <cofre> --item <título>');
 }
 
 /**
@@ -585,6 +650,7 @@ const AJUDA = `hub-pass ${VERSAO} — cofre de senhas do LoginHUB (cifrado de po
   hub-pass item list [--vault V]
   hub-pass item view   --vault V --item T [--field password|username|url|notes|totp|title] [--json]
   hub-pass item totp   --vault V --item T
+  hub-pass item anexo  --vault V --item T [--n 1] --out ARQUIVO [--force]   (arquivo de um documento, gravado com 600)
   hub-pass item create --vault V --title T [--username U] [--password P | --generate[=24]] [--url U] [--totp CHAVE] [--note N]
   hub-pass item update --vault V --item T [os mesmos campos]
   hub-pass item delete --vault V --item T

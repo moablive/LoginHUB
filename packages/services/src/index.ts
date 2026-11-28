@@ -19,6 +19,7 @@ export { AssinaturaService, assinaturaService, iniciarConferenciaDeAssinaturas }
 export { PasskeyService, passkeyService } from './PasskeyService';
 export { MasterPasskeyService, masterPasskeyService } from './MasterPasskeyService';
 export { CofreService, cofreService } from './CofreService';
+export { CofreAnexoService, cofreAnexoService, MAX_ANEXO_BYTES } from './CofreAnexoService';
 export { OperadorService, operadorService, cpfValido } from './OperadorService';
 export { CodigoEmailService, codigoEmailService, CODIGO_TTL_SEGUNDOS, CODIGO_REENVIO_SEGUNDOS } from './CodigoEmailService';
 import {

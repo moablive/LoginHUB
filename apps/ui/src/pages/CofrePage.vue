@@ -52,7 +52,15 @@ import CofreLista from '@/components/cofre/CofreLista.vue';
 import CofreIcone from '@/components/cofre/CofreIcone.vue';
 import type { AparenciaCofre } from '@/features/cofre/aparencia';
 import { TEMPOS_TRANCA_MIN, useCofre, type ItemAberto, type ItemCofre } from '@/features/cofre/useCofre';
-import { codigoTotp, gerarSenha, lerTotp, segundosRestantes } from '@/features/cofre/cripto';
+import { codigoTotp, gerarSenha, lerTotp, novoId, segundosRestantes } from '@/features/cofre/cripto';
+import CartaoForm from '@/components/cofre/CartaoForm.vue';
+import DocumentoForm from '@/components/cofre/DocumentoForm.vue';
+import ItemSensivelDetalhe from '@/components/cofre/ItemSensivelDetalhe.vue';
+import CofreTipoIcone from '@/components/cofre/CofreTipoIcone.vue';
+import NovoItemMenu from '@/components/cofre/NovoItemMenu.vue';
+import PresencaSheet from '@/components/cofre/PresencaSheet.vue';
+import { descartarAnexos, enviarAnexos, type AnexoPendente } from '@/features/cofre/anexos';
+import { cartaoValido, cartaoVazio, documentoValido, documentoVazio, finalDe, mascaraDocumento, nomeDoTipoDocumento, type TipoItem } from '@/features/cofre/tipos';
 import { digitalSuportada, ErroDigital } from '@/features/cofre/digital';
 import { logarNoApp, podeLogarNoApp } from '@/features/cofre/logarNoApp';
 
@@ -347,12 +355,24 @@ watch([cofres, compartilhados], () => {
   if (cofreAtual.value && !todosCofres.value.find((c) => c.id === cofreAtual.value)) cofreAtual.value = null;
 });
 const busca = ref('');
+/**
+ * O que a lista mostra embaixo do título. Cartão e documento mostram só o que já aparece mascarado (bandeira e final, tipo e
+ * fim do número): a busca usa o mesmo texto, então o número inteiro nunca entra nela.
+ */
+function resumoDoItem(i: ItemCofre): string {
+  if (i.tipo === 'cartao' && i.cartao) return `${i.cartao.bandeira || 'Cartão'} •••• ${finalDe(i.cartao.numero)} · ${i.cartao.validade}`;
+  if (i.tipo === 'documento' && i.documento) {
+    const n = i.documento.anexos.length;
+    return `${nomeDoTipoDocumento(i.documento.tipo)} ${mascaraDocumento(i.documento.tipo, i.documento.numero)}${n ? ` · ${n} arquivo${n > 1 ? 's' : ''}` : ''}`;
+  }
+  return i.usuario || i.url || 'sem usuário';
+}
 const visiveis = computed(() => {
   const termo = busca.value.trim().toLowerCase();
   return itens.value.filter(
     (i) =>
       (termo || cofreAtual.value === null ? true : i.cofre_id === cofreAtual.value) &&
-      (!termo || i.titulo.toLowerCase().includes(termo) || i.usuario.toLowerCase().includes(termo) || i.url.toLowerCase().includes(termo)),
+      (!termo || i.titulo.toLowerCase().includes(termo) || i.usuario.toLowerCase().includes(termo) || i.url.toLowerCase().includes(termo) || resumoDoItem(i).toLowerCase().includes(termo)),
   );
 });
 // Cofres próprios + os de outras contas compartilhados com esta (db/022). Só os próprios se ordenam, editam e apagam.
@@ -460,14 +480,26 @@ function adicionarCampo(c: CampoExtra) {
 }
 const totpInvalido = computed(() => !!form.value.totp.trim() && !lerTotp(form.value.totp));
 
-function novoItem() {
-  // Em "Todos os itens" o item nasce no primeiro cofre; a folha deixa trocar.
-  const cofreId = cofreAtual.value ?? cofres.value[0]?.id;
+// Cartão e documento (28/11/2026). `novoIdItem` existe porque o arquivo sobe ANTES de o item ser gravado e o servidor
+// amarra o blob ao id do item; `pendentes` são os arquivos já cifrados que esperam o Salvar.
+const novoIdItem = ref(novoId());
+const pendentes = ref<AnexoPendente[]>([]);
+const ehSensivel = (t: TipoItem | undefined): boolean => t === 'cartao' || t === 'documento';
+
+function novoItem(tipo: TipoItem = 'login') {
+  // Em "Todos os itens" o item nasce no primeiro cofre; a folha deixa trocar. Cartão e documento preferem um cofre chamado
+  // "Documentos" (o que não é compartilhado), se existir e a pessoa puder escrever nele.
+  const doDocs = ehSensivel(tipo) ? cofresComEscrita.value.find((c) => /document/i.test(c.nome) && papelDoCofre(c.id) === 'dono') : undefined;
+  const cofreId = doDocs?.id ?? cofreAtual.value ?? cofres.value[0]?.id;
   if (!cofreId || !podeEscrever(cofreId)) return;
   verSenhaEdicao.value = false;
   menuCampos.value = false;
   camposAdicionados.value = new Set<CampoExtra>(['usuario', 'senha']);
-  form.value = { ...VAZIO };
+  pendentes.value = [];
+  novoIdItem.value = novoId();
+  if (tipo === 'cartao') form.value = { ...VAZIO, tipo, cartao: cartaoVazio() };
+  else if (tipo === 'documento') form.value = { ...VAZIO, titulo: nomeDoTipoDocumento('cnh'), tipo, documento: documentoVazio('cnh') };
+  else form.value = { ...VAZIO };
   editando.value = { cofreId };
 }
 // "Logar no app" (27/11/2026): o app do item é o da chave de entrada ou o que tem o mesmo host do endereço.
@@ -502,8 +534,19 @@ function editarItem(item: ItemAberto) {
   camposVistos.value = new Set();
   camposAdicionados.value = new Set();
   // `entrada` (chave de entrada pelo cofre, db/016) vai junto: o formulário não mostra, mas salvar não pode perdê-la.
-  const { titulo, usuario, senha, url, totp, notas, icone, campos, entrada } = item;
-  form.value = { titulo, usuario, senha, url, totp, notas, ...(icone ? { icone } : {}), ...(campos?.length ? { campos: campos.map((c) => ({ ...c })) } : {}), ...(entrada ? { entrada } : {}) };
+  const { titulo, usuario, senha, url, totp, notas, icone, campos, entrada, tipo, cartao, documento } = item;
+  pendentes.value = [];
+  novoIdItem.value = item.id;
+  form.value = {
+    titulo, usuario, senha, url, totp, notas,
+    ...(icone ? { icone } : {}),
+    ...(campos?.length ? { campos: campos.map((c) => ({ ...c })) } : {}),
+    ...(entrada ? { entrada } : {}),
+    // Cartão e documento (28/11/2026): sem estes campos, editar apagaria o cartão ou os arquivos do item.
+    ...(tipo ? { tipo } : {}),
+    ...(cartao ? { cartao: { ...cartao } } : {}),
+    ...(documento ? { documento: { ...documento, anexos: documento.anexos.map((a) => ({ ...a })) } } : {}),
+  };
   editando.value = { id: item.id, cofreId: item.cofre_id };
 }
 // Três colunas (27/11/2026, pedido do dono, no molde do Proton Pass): cofres | lista | detalhe do item escolhido.
@@ -563,13 +606,43 @@ function gerarNaEdicao() {
   form.value.senha = gerarSenha();
   verSenhaEdicao.value = true;
 }
+const sensivelInvalido = computed(() => {
+  if (form.value.tipo === 'cartao') return !cartaoValido(form.value.cartao ?? cartaoVazio());
+  if (form.value.tipo === 'documento') return !documentoValido(form.value.documento ?? documentoVazio());
+  return false;
+});
+/** Aviso na folha de cartão e documento quando o cofre escolhido tem mais gente com acesso. */
+const avisoDoCofre = computed(() => {
+  const e = editando.value;
+  if (!e || !ehSensivel(form.value.tipo)) return null;
+  if (papelDoCofre(e.cofreId) !== 'dono') return 'Este cofre é compartilhado com você: quem tem acesso a ele verá este item.';
+  if (cofre.membrosDe(e.cofreId).length > 0) return 'Este cofre é compartilhado: as pessoas com acesso verão este item. Prefira um cofre só seu.';
+  return null;
+});
 async function salvarItem() {
   const e = editando.value;
-  if (!e || !form.value.titulo.trim() || totpInvalido.value) return;
+  if (!e || !form.value.titulo.trim() || totpInvalido.value || sensivelInvalido.value) return;
   ocupado.value = true;
   erro.value = null;
   try {
-    await cofre.salvarItem(e.cofreId, { ...form.value, titulo: form.value.titulo.trim() }, e.id);
+    const titulo = form.value.titulo.trim();
+    if (form.value.tipo === 'documento') {
+      // Sobe os arquivos (já cifrados) e só então grava o item que os cita; se o item falhar, os blobs sobem de volta.
+      const itemId = e.id ?? novoIdItem.value;
+      const doc = form.value.documento ?? documentoVazio();
+      const novos = pendentes.value.map((p) => p.ref);
+      const dados: ItemCofre = { ...form.value, titulo, documento: { ...doc, anexos: [...doc.anexos, ...novos] } };
+      await enviarAnexos(pendentes.value, e.cofreId, itemId);
+      try {
+        await cofre.salvarItem(e.cofreId, dados, itemId, dados.documento?.anexos.map((a) => a.id) ?? []);
+      } catch (err) {
+        await descartarAnexos(novos.map((a) => a.id));
+        throw err;
+      }
+      pendentes.value = [];
+    } else {
+      await cofre.salvarItem(e.cofreId, { ...form.value, titulo }, e.id);
+    }
     editando.value = null;
   } catch (err) {
     erro.value = mensagemDe(err, 'Não foi possível salvar.');
@@ -943,7 +1016,7 @@ async function confirmarTrocaSenha() {
           <UiButton v-if="cofreAtual && papelDoCofre(cofreAtual) === 'dono'" tamanho="small" variante="gray" title="Compartilhar este cofre com outra conta" @click="compartilharCofre(cofreAtual)">
             <UserPlusIcon class="h-4 w-4" />Compartilhar
           </UiButton>
-          <UiButton tamanho="small" :disabled="cofres.length === 0 || offline || cofreAtualSoLeitura" :title="cofreAtualSoLeitura ? 'Você só tem acesso de leitura a este cofre' : undefined" @click="novoItem"><PlusIcon class="h-4 w-4" />Item</UiButton>
+          <NovoItemMenu :desativado="cofres.length === 0 || offline || cofreAtualSoLeitura" :dica="cofreAtualSoLeitura ? 'Você só tem acesso de leitura a este cofre' : undefined" @novo="novoItem" />
         </div>
 
         <UiEmpty
@@ -964,10 +1037,11 @@ async function confirmarTrocaSenha() {
             @dragstart="arrastarItem($event, it)"
             @click="selecionadoId = it.id"
           >
-            <CofreItemIcone :titulo="it.titulo" :url="it.url" :apps="logosDosApps" :icone="it.icone" />
+            <CofreTipoIcone v-if="ehSensivel(it.tipo)" :tipo="it.tipo!" />
+            <CofreItemIcone v-else :titulo="it.titulo" :url="it.url" :apps="logosDosApps" :icone="it.icone" />
             <span class="min-w-0 flex-1">
               <span class="block truncate text-headline font-semibold">{{ it.titulo }}</span>
-              <span class="block truncate text-footnote text-label-2">{{ it.usuario || it.url || 'sem usuário' }}{{ busca || cofreAtual === null ? ` · ${nomeDoCofre(it.cofre_id)}` : '' }}</span>
+              <span class="block truncate text-footnote text-label-2">{{ resumoDoItem(it) }}{{ busca || cofreAtual === null ? ` · ${nomeDoCofre(it.cofre_id)}` : '' }}</span>
             </span>
           </li>
         </ul>
@@ -983,7 +1057,8 @@ async function confirmarTrocaSenha() {
         <template v-for="item in selecionado ? [selecionado] : []" :key="item.id">
           <!-- Cabeçalho: ícone, título, cofre e as ações (molde do Proton Pass). -->
           <div class="mb-3 flex flex-wrap items-start gap-x-3 gap-y-2">
-            <CofreItemIcone :titulo="item.titulo" :url="item.url" :apps="logosDosApps" :icone="item.icone" />
+            <CofreTipoIcone v-if="ehSensivel(item.tipo)" :tipo="item.tipo!" grande />
+            <CofreItemIcone v-else :titulo="item.titulo" :url="item.url" :apps="logosDosApps" :icone="item.icone" />
             <div class="min-w-0 flex-1 basis-48">
               <h2 class="flex flex-wrap items-center gap-2 text-title-3 font-semibold">
                 <span class="min-w-0 [overflow-wrap:anywhere]">{{ item.titulo }}</span>
@@ -1003,6 +1078,7 @@ async function confirmarTrocaSenha() {
           </div>
 
           <div class="space-y-3">
+            <ItemSensivelDetalhe v-if="ehSensivel(item.tipo)" :item="item" />
             <!-- Cada campo: ícone que indica o tipo, o nome pequeno em cima e o valor embaixo. -->
             <div v-if="item.usuario || item.senha || codigoDe(item)" class="divide-y divide-separator overflow-hidden rounded-celula bg-surface">
               <div v-if="item.usuario" class="flex items-center gap-3 px-4 py-3">
@@ -1106,11 +1182,15 @@ async function confirmarTrocaSenha() {
     </UiSheet>
 
     <!-- FOLHA: item -->
-    <UiSheet :aberto="!!editando" :titulo="editando?.id ? 'Editar item' : 'Novo item'" :subtitulo="editando ? nomeDoCofre(editando.cofreId) : ''" :bloqueado="ocupado" @fechar="editando = null">
+    <UiSheet :aberto="!!editando" :titulo="`${editando?.id ? 'Editar' : 'Novo'} ${form.tipo === 'cartao' ? 'cartão' : form.tipo === 'documento' ? 'documento' : 'item'}`" :subtitulo="editando ? nomeDoCofre(editando.cofreId) : ''" :bloqueado="ocupado" @fechar="editando = null">
       <form v-if="editando" id="form-item" class="space-y-3" @submit.prevent="salvarItem">
         <!-- Trocar o cofre de um item que já existe move o item: ele é recifrado com a chave do cofre novo. -->
         <UiSelect v-if="cofresComEscrita.length > 1" v-model="editando.cofreId" rotulo="Cofre" :opcoes="cofresComEscrita.map((c) => ({ valor: c.id, rotulo: papelDoCofre(c.id) === 'dono' ? c.nome : `${c.nome} (compartilhado)` }))" />
-        <UiTextField v-model="form.titulo" rotulo="Título" placeholder="Ex.: GitHub, Cloudflare, awlsrv sudo" required />
+        <p v-if="avisoDoCofre" class="flex items-start gap-2 rounded-controle bg-warning/10 px-3 py-2 text-footnote text-label-2" role="alert">{{ avisoDoCofre }}</p>
+        <UiTextField v-model="form.titulo" rotulo="Título" :placeholder="form.tipo === 'cartao' ? 'Ex.: Roxinho, Visa Empresa' : form.tipo === 'documento' ? 'Ex.: CNH, RG do Moab' : 'Ex.: GitHub, Cloudflare, awlsrv sudo'" required />
+        <CartaoForm v-if="form.tipo === 'cartao'" v-model:form="form" />
+        <DocumentoForm v-else-if="form.tipo === 'documento'" v-model:form="form" v-model:pendentes="pendentes" :item-id="editando.id ?? novoIdItem" />
+        <template v-else>
         <div class="flex items-center gap-3">
           <CofreItemIcone :titulo="form.titulo" :url="form.url" :apps="logosDosApps" :icone="form.icone" />
           <label class="inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-accent hover:bg-accent/10" title="Escolher uma imagem para o ícone" aria-label="Escolher imagem do ícone">
@@ -1163,12 +1243,16 @@ async function confirmarTrocaSenha() {
             <UiButton variante="gray" tamanho="small" @click="novoCampoPersonalizado"><PlusIcon class="h-4 w-4" />Campo personalizado</UiButton>
           </div>
         </div>
+        </template>
       </form>
       <template #acoes>
         <UiButton variante="gray" @click="editando = null">Cancelar</UiButton>
-        <UiButton type="submit" form="form-item" :carregando="ocupado" :disabled="!form.titulo.trim() || totpInvalido">Salvar</UiButton>
+        <UiButton type="submit" form="form-item" :carregando="ocupado" :disabled="!form.titulo.trim() || totpInvalido || sensivelInvalido">Salvar</UiButton>
       </template>
     </UiSheet>
+
+    <!-- "Confirme que é você": digital ou palavra-passe antes de mostrar ou copiar cartão e documento -->
+    <PresencaSheet />
 
     <!-- FOLHA: compartilhar o cofre com outra conta (db/022) -->
     <CofreCompartilhar :cofre="compartilhando" @fechar="compartilhando = null" />

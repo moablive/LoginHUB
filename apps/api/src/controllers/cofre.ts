@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { cofreService, twoFactorService } from '@loginhub/services';
+import { cofreService, cofreAnexoService, twoFactorService } from '@loginhub/services';
 import { donoDaPessoa, donoDoCofre, ipDoCliente } from '@loginhub/middlewares';
 import { MASTER_LOGIN_EMAIL } from '@loginhub/schema';
 
@@ -112,10 +112,55 @@ export class CofreController {
         const dono = donoDe(req);
         if (!dono) return res.status(403).json({ error: 'SO_MASTER' });
         try {
-            await cofreService.salvarItem(dono, req.params.id, req.body?.cofre_id, req.body?.dados, permitidosDe(req), { aparelho: !!donoDoCofre(req)?.aparelhoId, selo: req.body?.selo, geracao: req.body?.geracao, origemSelo: req.body?.origem_selo, origemGeracao: req.body?.origem_geracao });
+            await cofreService.salvarItem(dono, req.params.id, req.body?.cofre_id, req.body?.dados, permitidosDe(req), { aparelho: !!donoDoCofre(req)?.aparelhoId, selo: req.body?.selo, geracao: req.body?.geracao, origemSelo: req.body?.origem_selo, origemGeracao: req.body?.origem_geracao, anexos: req.body?.anexos });
             return res.status(200).json({ ok: true });
         } catch (err) {
             return responder(res, err, 'salvarItem');
+        }
+    }
+
+    // ------------------------------------------------------------ anexos cifrados (db/026)
+
+    /**
+     * PUT /cofre/anexos/:id?cofre_id=&item_id=&sha256= — corpo `application/octet-stream`: o arquivo JÁ cifrado no navegador.
+     * O servidor confere tamanho, versão e sha256 e guarda sem abrir.
+     */
+    static async enviarAnexo(req: Request<{ id: string }>, res: Response) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SO_MASTER' });
+        try {
+            await cofreAnexoService.enviar(dono, req.params.id, req.query.cofre_id, req.query.item_id, req.query.sha256, req.body, { aparelho: !!donoDoCofre(req)?.aparelhoId, permitidos: permitidosDe(req) });
+            return res.status(200).json({ ok: true });
+        } catch (err) {
+            return responder(res, err, 'enviarAnexo');
+        }
+    }
+
+    /** GET /cofre/anexos/:id — os bytes cifrados. Nunca em cache, nunca interpretado pelo navegador. */
+    static async baixarAnexo(req: Request<{ id: string }>, res: Response) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SO_MASTER' });
+        try {
+            const { blob, sha256 } = await cofreAnexoService.baixar(dono, req.params.id, { aparelho: !!donoDoCofre(req)?.aparelhoId, permitidos: permitidosDe(req) });
+            res.setHeader('Cache-Control', 'no-store');
+            res.setHeader('X-Content-Type-Options', 'nosniff');
+            res.setHeader('Content-Disposition', 'attachment; filename="anexo.bin"');
+            res.setHeader('X-Anexo-Sha256', sha256);
+            return res.status(200).type('application/octet-stream').send(blob);
+        } catch (err) {
+            return responder(res, err, 'baixarAnexo');
+        }
+    }
+
+    /** DELETE /cofre/anexos/:id — o navegador desfaz um envio cujo item não chegou a ser gravado. */
+    static async apagarAnexo(req: Request<{ id: string }>, res: Response) {
+        const dono = donoDe(req);
+        if (!dono) return res.status(403).json({ error: 'SO_MASTER' });
+        try {
+            await cofreAnexoService.apagar(dono, req.params.id, { aparelho: !!donoDoCofre(req)?.aparelhoId, permitidos: permitidosDe(req) });
+            return res.status(200).json({ ok: true });
+        } catch (err) {
+            return responder(res, err, 'apagarAnexo');
         }
     }
 

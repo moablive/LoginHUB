@@ -187,6 +187,24 @@ acrescentam "Adicionar documento" com arquivos).
 | PCI DSS / LGPD | Uso pessoal, o dono é o titular dos dados e não processa pagamento de terceiros: PCI DSS de comerciante não se aplica. Mesmo assim: CVV off por padrão, nunca em log/área de transferência. Se o cofre guardar dado de **clientes/terceiros** (ex.: documento de artista da label), a LGPD passa a valer para o dono como controlador — consultar o ⚖️ Jurídico antes |
 | Mudança de formato | Envelope `v1` mantido; `tipo` é campo novo opcional; versão do item no JSON (`v: 1`) para migrar depois |
 
+## 5.1 Implementado em 28/11/2026 (o que mudou em relação ao plano)
+
+As cinco perguntas do item 6 ficaram sem resposta; foram usadas as recomendações do plano (cofre "Documentos" só do dono
+quando existir, número completo guardado, 10 MiB, tudo numa entrega só). Desvios:
+
+- **Dado associado do anexo** é `anexo:<item>:<anexo>` (sem dono nem cofre): o item pode mudar de cofre e o dono do cofre
+  difere do membro que lê. O sha256 vai no `AnexoRef`, dentro do item cifrado.
+- **`item_id` sem chave estrangeira** e coluna `ligado_em`: o blob sobe antes do item. O `PUT /cofre/itens/:id` leva a lista
+  `anexos`; sem ela os anexos não mudam. A faxina de 24 h roda no próprio upload (sem cron).
+- **Cota de 500 MiB por dono do cofre** (quem escreve em cofre compartilhado gasta a cota do dono) e até 10 arquivos por item.
+- **Cartão e documento via CLI**: só leitura mascarada, `--field` e `item anexo`; criar pelo CLI ficou de fora (o número
+  iria no argv). Fotos são redesenhadas no canvas (sem EXIF); PDF segue como veio.
+- **Cofre "Documentos"**: o app não cria o cofre sozinho; ele só é escolhido por padrão se já existir um cofre próprio cujo
+  nome contém "documento". O menu avisa quando o cofre escolhido tem mais gente com acesso.
+- Código: `apps/ui/src/features/cofre/{tipos,anexosCripto,anexos,revelar}.ts`, `components/cofre/{CartaoForm,DocumentoForm,
+  ItemSensivelDetalhe,PresencaSheet,NovoItemMenu,CofreTipoIcone}.vue`, `packages/services/src/CofreAnexoService.ts`,
+  `db/026_cofre_anexos.sql`, testes em `scripts/teste-cofre-{anexos,tipos}.ts`.
+
 ## 6. Perguntas para o dono antes de começar
 
 1. **Cofre**: cartões e documentos entram num cofre novo "Documentos" (recomendado, nunca compartilhado) ou no cofre
@@ -201,3 +219,4 @@ acrescentam "Adicionar documento" com arquivos).
 
 - 27/11/2026 — Plano criado a partir da pesquisa do buscaia (`awldocs.studies#270`) e da leitura do cofre atual
   (db/013–025, `cripto.ts`, `useCofre.ts`, `CofrePage.vue`, `controllers/cofre.ts`, `hub-pass`).
+- 28/11/2026 — Implementado (F0–F7, menos o deploy da UI e a instalação do CLI nas máquinas): ver 5.1.

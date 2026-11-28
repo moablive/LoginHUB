@@ -7,6 +7,7 @@ import { criarDigital, digitalLocal, esquecerDigitalLocal, lembrarDigitalLocal, 
 import { apagarSessao, codigoFixadoDoDono, fixarCodigoDoDono, guardarCopia, guardarSessao, lerCopia, lerSessao, pedirPersistencia, tocarSessao, ultimoDono } from './local';
 import { adSelo, codigoDoPedido, limparCodigo, provaDoAparelho, selar, type ParDoAparelho } from './pareamento';
 import { abrirCofreSelado, abrirPar, codigoDaChave, novoParDaPessoa, prepararGiro, protegerPar, provaDoMembro, selarCofre } from './compartilhar';
+import type { DadosCartao, DadosDocumento, TipoItem } from './tipos';
 import { assinarEntrada, desafioDoPasse, mensagemDaEntrada, novaChaveDeEntrada, type EntradaDoItem } from './entrada';
 import {
   adCofre,
@@ -94,6 +95,10 @@ export interface ItemCofre {
   campos?: CampoExtraItem[];
   /** Item que guarda a chave de entrada de uma conta de app (db/016). */
   entrada?: EntradaDoItem;
+  /** Cartão e documento (27/11/2026): ausente = login. Nos dois casos os campos de login ficam vazios. */
+  tipo?: TipoItem;
+  cartao?: DadosCartao;
+  documento?: DadosDocumento;
 }
 
 export interface ItemAberto extends ItemCofre {
@@ -337,6 +342,32 @@ async function conferirSenha(palavraPasse: string): Promise<void> {
     decifrar(mestra, conta.chave_por_senha, adContaSenha(dono())).fill(0);
   } finally {
     mestra.fill(0);
+  }
+}
+
+/**
+ * Prova que quem está na frente da tela é a pessoa (28/11/2026: revelar e copiar cartão/documento pedem de novo) lendo a
+ * digital SEM mexer no cofre aberto: o segredo PRF tem de abrir o embrulho da chave da conta, como na abertura.
+ */
+async function provarPresencaComDigital(): Promise<void> {
+  const lista = bruto.value?.digitais ?? [];
+  if (!chaveConta.value || !lista.length) throw new Error('SEM_DIGITAL');
+  const daqui = lista.find((x) => x.credencial_id === digitalLocal());
+  const candidatas = daqui ? [daqui] : lista;
+  const { credencialId, segredo } = await pedirSegredo(candidatas.map((d) => ({ credencial_id: d.credencial_id, prf_sal: deB64(d.prf_sal) })));
+  const d = lista.find((x) => x.credencial_id === credencialId);
+  if (!d) {
+    segredo.fill(0);
+    throw new Error('DIGITAL_NAO_ABRE');
+  }
+  const chave = chaveDoPrf(segredo);
+  segredo.fill(0);
+  try {
+    decifrar(chave, d.chave_por_digital, adContaPrf(dono(), d.credencial_id)).fill(0);
+  } catch {
+    throw new Error('DIGITAL_NAO_ABRE');
+  } finally {
+    chave.fill(0);
   }
 }
 
@@ -599,7 +630,11 @@ async function apagarCofre(id: string): Promise<void> {
   await abrirTudo();
 }
 
-async function salvarItem(cofreId: string, dados: ItemCofre, id?: string): Promise<void> {
+/**
+ * `anexos` (db/026): ids dos arquivos cifrados que o item cita. Quem anexa sobe os blobs ANTES e passa a lista aqui; os
+ * ids que já estavam no item e saíram da lista são apagados pelo servidor. Ausente = não mexe nos anexos.
+ */
+async function salvarItem(cofreId: string, dados: ItemCofre, id?: string, anexos?: string[]): Promise<void> {
   exigeRede();
   const cofre = acharCofre(cofreId);
   if (!cofre) throw new Error('COFRE_NAO_ENCONTRADO');
@@ -614,6 +649,7 @@ async function salvarItem(cofreId: string, dados: ItemCofre, id?: string): Promi
       selo: cofre.papel === 'escrita' ? cofre.selo : undefined,
       geracao: cofre.geracao,
       origem: origem ? { selo: origem.papel === 'escrita' ? origem.selo : undefined, geracao: origem.geracao } : undefined,
+      anexos,
     });
   } catch (e) {
     await aposChaveGirada(e);
@@ -919,6 +955,7 @@ export function useCofre() {
     criar,
     abrirComSenha,
     conferirSenha,
+    provarPresencaComDigital,
     abrirComKit,
     abrirComDigital,
     ativarDigital,

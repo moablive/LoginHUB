@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { db } from '@loginhub/database';
-import { cofreContas, cofreCofres, cofreItens, cofreAparelhos, cofreAparelhoPedidos, cofreDigitais, cofreChavesPessoa, cofreMembros, cofreGeracao, usuarios } from '@loginhub/schema';
+import { cofreContas, cofreCofres, cofreItens, cofreAparelhos, cofreAparelhoPedidos, cofreDigitais, cofreChavesPessoa, cofreMembros, cofreGeracao, cofreAnexos, usuarios } from '@loginhub/schema';
 import type { CofreAparelho, CofreAparelhoAcesso, CofreAparelhoPedido, CofreCompartilhado, CofreConta, CofreDigital, CofreDigitalEmbrulho, CofreEstado, CofreGiro, CofreKdf, CofreMembro, CofreMembroAjuste, CofreMembroNovo, CofrePapel, CofrePessoaPublica } from '@loginhub/schema';
 import { and, desc, eq, gt, inArray, isNull, lt, sql } from 'drizzle-orm';
 
@@ -58,6 +58,12 @@ export interface OpcoesDeEscrita extends ProvaDeEscrita {
     /** Mover item de outro cofre: o selo e a geração do cofre de ORIGEM. */
     origemSelo?: unknown;
     origemGeracao?: unknown;
+    /**
+     * db/026: ids dos anexos que o item cita (o navegador sabe; o JSON cifrado o servidor não lê). Ausente = não mexe nos
+     * anexos (cliente antigo, CLI). Presente: os da lista são marcados como ligados e os que o item já tinha e saíram da lista
+     * são apagados, na mesma transação do item.
+     */
+    anexos?: unknown;
 }
 const ALFABETO32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
@@ -821,6 +827,7 @@ export class CofreService {
         const dados = envelope(dadosBrutos, 'dados');
         if (permitidos && !permitidos.includes(cofreId)) throw erro('Cofre não encontrado.', 'NOT_FOUND');
         const aparelho = !!opcoes.aparelho;
+        const anexos = this.idsDeAnexos(opcoes.anexos);
         const comGeracao = await this.temGeracao();
         await db.transaction(async (tx: any) => {
             const alvo = await this.travarCofre(tx, dono, cofreId, aparelho, comGeracao);
@@ -837,6 +844,9 @@ export class CofreService {
                     await this.exigeEscrita(tx, origem, existente[0].cofreId, { selo: opcoes.origemSelo, geracao: opcoes.origemGeracao }, aparelho);
                 }
                 await tx.update(cofreItens).set({ cofreId, dados, atualizadoEm: new Date() }).where(eq(cofreItens.id, id));
+                // db/026: o item mudou de cofre, os anexos vão junto (o blob não depende da chave do cofre).
+                if (existente[0].cofreId !== cofreId) await tx.update(cofreAnexos).set({ cofreId }).where(eq(cofreAnexos.itemId, id));
+                await this.ligarAnexos(tx, id, cofreId, anexos);
                 return;
             }
             const total = await tx
@@ -852,7 +862,26 @@ export class CofreService {
                 if (Number(doCofre[0]?.n ?? 0) >= MAX_ITENS_COMPARTILHADO) throw erro(`Cofre compartilhado cheio (${MAX_ITENS_COMPARTILHADO} itens). Mova itens para outro cofre.`, 'VALIDATION');
             }
             await tx.insert(cofreItens).values({ id, cofreId, dados });
+            await this.ligarAnexos(tx, id, cofreId, anexos);
         });
+    }
+
+    /** db/026: a lista de anexos que o item cita (até 10 uuids, sem repetição), ou `null` quando o cliente não mandou. */
+    private idsDeAnexos(bruto: unknown): string[] | null {
+        if (bruto === undefined || bruto === null) return null;
+        if (!Array.isArray(bruto) || bruto.length > 10) throw erro('anexos inválido.', 'VALIDATION');
+        return [...new Set(bruto.map((v) => uuid(v, 'anexos')))];
+    }
+
+    /** Marca como ligados os anexos citados (só os que já estão neste item e cofre) e apaga os do item que saíram da lista. */
+    private async ligarAnexos(tx: any, itemId: string, cofreId: string, ids: string[] | null): Promise<void> {
+        if (ids === null) return;
+        const doItem: { id: string }[] = await tx.select({ id: cofreAnexos.id }).from(cofreAnexos).where(and(eq(cofreAnexos.itemId, itemId), eq(cofreAnexos.cofreId, cofreId)));
+        const existentes = new Set(doItem.map((a) => a.id));
+        if (ids.some((a) => !existentes.has(a))) throw erro('Anexo citado não foi enviado. Anexe o arquivo de novo.', 'VALIDATION');
+        const sobra = doItem.map((a) => a.id).filter((a) => !ids.includes(a));
+        if (sobra.length) await tx.delete(cofreAnexos).where(inArray(cofreAnexos.id, sobra));
+        if (ids.length) await tx.update(cofreAnexos).set({ ligadoEm: new Date() }).where(inArray(cofreAnexos.id, ids));
     }
 
     public async apagarItem(dono: string, idBruto: unknown, permitidos?: string[] | null, opcoes: { aparelho?: boolean } = {}): Promise<void> {
@@ -862,7 +891,10 @@ export class CofreService {
         if (!item[0] || !acesso) throw erro('Item não encontrado.', 'NOT_FOUND');
         if (permitidos && !permitidos.includes(item[0].cofreId)) throw erro('Item não encontrado.', 'NOT_FOUND');
         if (acesso.papel === 'leitura') throw erro('Você só pode ler este cofre.', 'SEM_PERMISSAO');
-        await db.delete(cofreItens).where(eq(cofreItens.id, id));
+        await db.transaction(async (tx: any) => {
+            await tx.delete(cofreAnexos).where(eq(cofreAnexos.itemId, id));
+            await tx.delete(cofreItens).where(eq(cofreItens.id, id));
+        });
     }
 }
 

@@ -1707,6 +1707,37 @@ Pedido do dono: compartilhar um cofre (senhas) com outra conta do LoginHUB **sem
 
 ---
 
+#### Cartões e documentos no cofre (28/11/2026, `db/026`)
+
+Pedido do dono: botões **Adicionar cartão** e **Adicionar documento** para guardar cartões bancários, CNH, RG, CPF e
+outros documentos. Plano e prévia: `docs/plano-cartoes-documentos-cofre.md`.
+
+- **Tipo dentro do item cifrado.** O `ItemCofre` ganhou `tipo` (`login` quando ausente), `cartao` e `documento`; o
+  servidor não sabe nem o tipo do item. O botão **+ Item** virou o menu Login · Cartão · Documento. Os campos de login
+  ficam vazios nos dois tipos novos (o `hub-pass` e a busca continuam enxergando título).
+- **Cartão**: número (Luhn), bandeira pelo BIN, titular, validade, banco. **CVV e PIN só se a pessoa desligar "Não
+  salvar CVV e PIN"** (ligado por padrão); a lista mostra `bandeira •••• final`.
+- **Documento**: CNH, RG, CPF (dígitos verificadores), passaporte e outro, com aviso local de vencimento (90 dias).
+- **Anexos** (foto ou PDF, até 10 MB, até 10 por item): cifrados no navegador com uma File Key por arquivo
+  (`anexosCripto.ts`: `[1][nonce 24][XChaCha20-Poly1305]`, dado associado `anexo:<item>:<anexo>`). A chave, o nome e o
+  tipo ficam no JSON cifrado do item; o servidor guarda só bytes em `cofre_anexos` (`CofreAnexoService`). Foto vai
+  redesenhada no canvas (sem EXIF/GPS). Rotas `PUT/GET/DELETE /cofre/anexos/:id` (corpo binário só nelas, `express.raw`),
+  com limite de taxa por dono, cota de 500 MiB por **dono do cofre** e `Cache-Control: no-store` + `nosniff`.
+- **Ordem de gravação**: o navegador sobe os blobs ANTES do item (`item_id` sem chave estrangeira) e o `PUT /cofre/itens/:id`
+  leva `anexos: [ids]`; o servidor liga, na mesma transação, os que o item cita e apaga os que saíram da lista. Sem
+  `anexos` no corpo (cliente antigo, CLI) os anexos não mudam. Blob que nenhum item citou em 24 h é apagado no próximo
+  upload daquele cofre. Mover o item de cofre leva os anexos; girar a chave do cofre não regrava blobs.
+- **Revelar e copiar** (`revelar.ts`, `PresencaSheet.vue`): pedem digital (passkey PRF) ou palavra-passe de novo; vale 60 s e
+  some ao trancar o cofre ou esconder a aba; o valor se esconde em 20 s; a cópia some da área de transferência em 30 s;
+  CVV e PIN nunca vão para a área de transferência. Arquivo abre em memória (Blob URL, fecha em 60 s).
+- **CLI**: `hub-pass item view` de cartão/documento mostra só o mascarado; número, CVV e PIN só com `--field`
+  (`numero|cvv|pin|validade|titular…`); `hub-pass item anexo --vault V --item T --n 1 --out ARQ` grava o arquivo em claro
+  com permissão 600. Criar cartão pelo CLI ficou de fora de propósito (o número iria na linha de comando).
+- **Testes**: `scripts/teste-cofre-anexos.ts` (Postgres descartável; papéis, cota, faxina, mover, cascade) e
+  `scripts/teste-cofre-tipos.ts` (validações, cifra dos anexos, nada em claro no que vai ao servidor).
+- **O que não protege**: dispositivo comprometido, extensão maliciosa e phishing veem o dado depois de aberto; o navegador não
+  deixa bloquear captura de tela. Cofre compartilhado mostra o item a todos os membros (a tela avisa).
+
 ## 🔑 Sessão master e a master key
 
 O painel do hub tem uma credencial só: a `MASTER_API_KEY`. Ela **não** muda de

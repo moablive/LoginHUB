@@ -1,4 +1,4 @@
-import { pgTable, varchar, text, timestamp, uuid, jsonb, integer, primaryKey } from 'drizzle-orm/pg-core';
+import { pgTable, varchar, text, timestamp, uuid, jsonb, integer, primaryKey, customType } from 'drizzle-orm/pg-core';
 
 
 // ==========================================
@@ -353,3 +353,26 @@ export interface CofreEstado {
     /** db/022: cofres de outras contas compartilhados com esta. */
     compartilhados?: CofreCompartilhado[];
 }
+
+/** bytea como Buffer (o blob cifrado dos anexos). */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+    dataType() {
+        return 'bytea';
+    },
+});
+
+/**
+ * Anexo cifrado de um item (db/026): foto ou PDF de documento, cifrado no navegador com uma chave só dele (que mora no
+ * JSON cifrado do item). O servidor guarda só os bytes: sem nome, sem tipo. `itemId` não tem chave estrangeira (o blob
+ * sobe antes de o item existir); `ligadoEm` marca que um item gravado o cita, e o que fica sem isso por 24 h é lixo.
+ */
+export const cofreAnexos = pgTable('cofre_anexos', {
+    id: uuid('id').primaryKey(),
+    cofreId: uuid('cofre_id').notNull().references(() => cofreCofres.id, { onDelete: 'cascade' }),
+    itemId: uuid('item_id').notNull(),
+    tamanho: integer('tamanho').notNull(),
+    sha256: varchar('sha256', { length: 64 }).notNull(),
+    blob: bytea('blob').notNull(),
+    criadoEm: timestamp('criado_em').notNull().defaultNow(),
+    ligadoEm: timestamp('ligado_em'),
+});

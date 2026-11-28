@@ -992,11 +992,13 @@ export const cofreApi = {
     id: string,
     cofreId: string,
     dados: string,
-    prova: { selo?: string | undefined; geracao?: number | undefined; origem?: { selo?: string | undefined; geracao?: number | undefined } | undefined } = {},
+    prova: { selo?: string | undefined; geracao?: number | undefined; origem?: { selo?: string | undefined; geracao?: number | undefined } | undefined; anexos?: string[] | undefined } = {},
   ): Promise<void> => {
     await api.put(`/cofre/itens/${id}`, {
       cofre_id: cofreId,
       dados,
+      // db/026: ids dos anexos que o item cita; ausente = não mexe nos anexos.
+      ...(prova.anexos ? { anexos: prova.anexos } : {}),
       ...(prova.selo ? { selo: prova.selo } : {}),
       ...(prova.geracao !== undefined ? { geracao: prova.geracao } : {}),
       ...(prova.origem?.selo ? { origem_selo: prova.origem.selo } : {}),
@@ -1005,6 +1007,22 @@ export const cofreApi = {
   },
   apagarItem: async (id: string): Promise<void> => {
     await api.delete(`/cofre/itens/${id}`);
+  },
+  // ---- anexos cifrados (db/026): o arquivo já chega cifrado do navegador; o servidor só guarda os bytes
+  enviarAnexo: async (id: string, cofreId: string, itemId: string, sha256: string, bytes: Uint8Array): Promise<void> => {
+    await api.put(`/cofre/anexos/${id}`, bytes, {
+      params: { cofre_id: cofreId, item_id: itemId, sha256 },
+      headers: { 'Content-Type': 'application/octet-stream' },
+      transformRequest: [(d: unknown) => d],
+      maxBodyLength: Infinity,
+    });
+  },
+  baixarAnexo: async (id: string): Promise<Uint8Array> => {
+    const { data } = await api.get<ArrayBuffer>(`/cofre/anexos/${id}`, { responseType: 'arraybuffer' });
+    return new Uint8Array(data);
+  },
+  apagarAnexo: async (id: string): Promise<void> => {
+    await api.delete(`/cofre/anexos/${id}`);
   },
   // ---- cofre compartilhado (db/022)
   /** Guarda o par X25519 da conta (a privada já cifrada com a chave da conta). */

@@ -752,6 +752,21 @@ export const rateLimitCofreConviteIp = criarRateLimit({
     chave: (req) => ipDoCliente(req as any),
 });
 
+/** Anexos cifrados do cofre (db/026): subir arquivo é caro (até 10 MiB), então limite por dono; baixar é mais folgado. */
+export const rateLimitCofreAnexoEnvio = criarRateLimit({
+    nome: 'cofre-anexo-envio',
+    janelaMs: 60 * 1000,
+    max: 20,
+    chave: (req) => donoDoCofre(req)?.dono ?? 'sem-dono',
+});
+
+export const rateLimitCofreAnexoBaixa = criarRateLimit({
+    nome: 'cofre-anexo-baixa',
+    janelaMs: 60 * 1000,
+    max: 60,
+    chave: (req) => donoDoCofre(req)?.dono ?? 'sem-dono',
+});
+
 // ==========================================
 // 4. CORS MIDDLEWARE
 // ==========================================
